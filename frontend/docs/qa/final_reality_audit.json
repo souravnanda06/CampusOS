@@ -1,0 +1,129 @@
+{
+  "audit_metadata": {
+    "project": "CampusOS",
+    "hackathon": "BPUT HACKATHON 2026 PS07",
+    "mode": "AUDIT FIRST, FIX SECOND",
+    "timestamp": "2026-09-29T22:58:00+05:30",
+    "auditor": "Antigravity Autonomous Engineering Agent",
+    "database": {
+      "dialect": "mysql",
+      "host": "localhost:3306",
+      "database_name": "attentify",
+      "total_tables": 27
+    }
+  },
+  "baseline_results": {
+    "git_status": "Non-git directory (no .git repository found in workspace)",
+    "flutter_analyze": {
+      "issues": 0,
+      "status": "PASS",
+      "duration": "13.1s"
+    },
+    "flutter_test": {
+      "total": 429,
+      "passed": 429,
+      "failed": 0,
+      "status": "PASS",
+      "duration": "34.0s"
+    },
+    "backend_tests": {
+      "total_suites": 18,
+      "passed_suites": 18,
+      "failed_suites": 0,
+      "status": "PASS",
+      "duration": "196.85s"
+    }
+  },
+  "metrics": {
+    "total_features": 106,
+    "working": 100,
+    "partial": 2,
+    "broken": 2,
+    "not_implemented": 0,
+    "unverified": 2,
+    "severities": {
+      "p0": 3,
+      "p1": 0,
+      "p2": 2,
+      "p3": 1
+    }
+  },
+  "critical_findings": [
+    {
+      "id": "FINDING-P0-01",
+      "severity": "P0",
+      "domain": "Authentication & Session Security",
+      "component": "backend/routes/auth.py & backend/middleware/auth.py",
+      "title": "Static Dummy-Token Authentication & Missing Cryptographic Signature Check",
+      "reproduction": "Call POST /login with valid credentials. Response returns token: 'dummy-token'. Call protected endpoints with arbitrary X-User-Id header or Bearer <user_id> and backend trusts actor_id without cryptographic signature verification.",
+      "expected": "Cryptographically signed JWT (HMAC-SHA256 or Ed25519) with expiration and tamper-proof claim verification.",
+      "actual": "Returns static string 'dummy-token' and parses raw user IDs from headers or query parameters.",
+      "recommended_fix": "Implement genuine PyJWT token issuance on login and enforce jwt.decode(..., algorithms=['HS256']) in auth middleware."
+    },
+    {
+      "id": "FINDING-P0-02",
+      "severity": "P0",
+      "domain": "Admin Authorization",
+      "component": "backend/middleware/auth.py:verify_admin_access()",
+      "title": "Unauthenticated Bypass in verify_admin_access()",
+      "reproduction": "Execute GET http://127.0.0.1:5000/admin/dashboard/summary with zero authentication headers or query params.",
+      "expected": "HTTP 401 Unauthorized.",
+      "actual": "HTTP 200 OK. Missing requester_id causes verify_admin_access() to return (True, None).",
+      "recommended_fix": "Add mandatory check in verify_admin_access(): if not requester_id: return False, (jsonify({'message': 'Authentication required'}), 401)."
+    },
+    {
+      "id": "FINDING-P0-03",
+      "severity": "P0",
+      "domain": "Mess Staff Verification",
+      "component": "backend/routes/mess.py:verify_meal_entry()",
+      "title": "Bypass of Cryptographic Proof on POST /mess/entries/verify",
+      "reproduction": "POST http://127.0.0.1:5000/mess/entries/verify with JSON body {'studentId': '<student_uuid>', 'mealType': 'LUNCH'} using Mess Staff headers.",
+      "expected": "HTTP 400 Bad Request requiring valid cryptographic passport presentation payload and Ed25519 signature.",
+      "actual": "HTTP 201 Created / VERIFIED with MealEntry record created without any presentation signature verification.",
+      "recommended_fix": "Make qr_payload and cryptographic presentation verification strictly mandatory in verify_meal_entry()."
+    },
+    {
+      "id": "FINDING-P2-01",
+      "severity": "P2",
+      "domain": "Passport Key Enclave",
+      "component": "flutter_frontent/lib/student/services/passport_crypto_service.dart",
+      "title": "Ed25519 Private Key Generated in Software Space rather than Hardware Secure Enclave",
+      "reproduction": "Inspect PassportCryptoService.getOrCreatePublicKey(). Keypair is generated via Dart Ed25519 algorithm and written to FlutterSecureStorage.",
+      "expected": "Hardware-backed non-exportable key generation inside Android Keystore / iOS Secure Enclave.",
+      "actual": "Software-generated 32-byte seed stored in EncryptedSharedPreferences via FlutterSecureStorage.",
+      "recommended_fix": "Clarify architectural documentation that key security relies on EncryptedSharedPreferences rather than hardware-enclave non-exportable TPM keys."
+    },
+    {
+      "id": "FINDING-P2-02",
+      "severity": "P2",
+      "domain": "Timetable UI",
+      "component": "flutter_frontent/lib/student/screens/timetable_screen.dart",
+      "title": "Hardcoded Mock Subjects and Empty onTap Callback in Legacy Timetable",
+      "reproduction": "Open TimetableScreen and tap any class card. onTap callback is an empty closure () {}.",
+      "expected": "Navigates to class detail or displays real scheduled curriculum from backend.",
+      "actual": "Displays hardcoded static mock list and card taps perform no action.",
+      "recommended_fix": "Connect timetable screen to /academic/updates or class schedule API and wire up card navigation."
+    },
+    {
+      "id": "FINDING-P3-01",
+      "severity": "P3",
+      "domain": "Teacher Home UI",
+      "component": "flutter_frontent/lib/teacher/widgets/teacher_home_content.dart",
+      "title": "Hardcoded Fallback Classes when Teacher Has No Active Schedule",
+      "reproduction": "Log in as teacher with no classes. TeacherHomeContent displays default hardcoded cards ('Data Structures', 'Computer Networks') instead of empty state illustration.",
+      "expected": "Clean empty state illustration with 'No classes assigned today'.",
+      "actual": "Fallback mock list rendered.",
+      "recommended_fix": "Render dedicated empty state widget when assigned classes list is empty."
+    }
+  ],
+  "unverified_claims": [
+    {
+      "claim": "Real-time BLE Teacher-Student Attendance Broadcast & Proximity Handshake",
+      "reason": "Physical Bluetooth Low Energy broadcasting and advertising cannot be executed inside headless test runners or emulators; requires two physical mobile devices in proximity."
+    },
+    {
+      "claim": "Cold Device Reboot Keystore Survival",
+      "reason": "Cold physical phone reboot cannot be executed in automated headless terminal environments; verified via simulated process destruction and app cold start."
+    }
+  ]
+}

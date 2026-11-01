@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CampusOS — Backend Deployment Runbook</title>
+    <style>
+    
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+        size: A4 portrait;
+        margin: 18mm 14mm 18mm 14mm;
+        @bottom-right {
+            content: "Page " counter(page) " of " counter(pages);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 8pt;
+            color: #64748B;
+        }
+        @bottom-left {
+            content: "CampusOS — Backend Deployment Runbook (LAN & Production)";
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 8pt;
+            color: #64748B;
+        }
+    }
+
+    body {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 9.5pt;
+        line-height: 1.55;
+        color: #1E293B;
+        background-color: #FFFFFF;
+        margin: 0;
+        padding: 0;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        color: #0F172A;
+        font-weight: 700;
+        margin-top: 1.3em;
+        margin-bottom: 0.4em;
+        page-break-after: avoid;
+    }
+
+    h1 {
+        font-size: 22pt;
+        letter-spacing: -0.5px;
+        line-height: 1.2;
+        border-bottom: 2.5px solid #0284C7;
+        padding-bottom: 8px;
+        margin-top: 0;
+        color: #0F172A;
+    }
+
+    h2 {
+        font-size: 14pt;
+        letter-spacing: -0.3px;
+        border-bottom: 1.5px solid #E2E8F0;
+        padding-bottom: 4px;
+        margin-top: 1.6em;
+        color: #0369A1;
+    }
+
+    h3 {
+        font-size: 11.5pt;
+        color: #0F172A;
+        margin-top: 1.2em;
+    }
+
+    h4 {
+        font-size: 10pt;
+        color: #334155;
+    }
+
+    p {
+        margin: 0.5em 0;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1em 0;
+        font-size: 8.5pt;
+        page-break-inside: avoid;
+        background: #FFFFFF;
+    }
+
+    th, td {
+        border: 1px solid #CBD5E1;
+        padding: 6px 9px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    th {
+        background-color: #F1F5F9;
+        color: #0F172A;
+        font-weight: 700;
+    }
+
+    tr:nth-child(even) td {
+        background-color: #F8FAFC;
+    }
+
+    code {
+        font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 8.5pt;
+        background-color: #F1F5F9;
+        color: #0284C7;
+        padding: 1.5px 4.5px;
+        border-radius: 4px;
+        border: 1px solid #E2E8F0;
+    }
+
+    pre {
+        background-color: #0F172A;
+        color: #F8FAFC;
+        padding: 10px 14px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 8pt;
+        line-height: 1.45;
+        margin: 0.8em 0;
+        page-break-inside: avoid;
+    }
+
+    pre code {
+        background-color: transparent;
+        color: inherit;
+        padding: 0;
+        border: none;
+        font-size: inherit;
+    }
+
+    hr {
+        border: 0;
+        border-top: 1px solid #E2E8F0;
+        margin: 1.6em 0;
+    }
+
+    ul, ol {
+        margin: 0.5em 0;
+        padding-left: 20px;
+    }
+
+    li {
+        margin: 0.25em 0;
+    }
+
+    .callout {
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin: 1em 0;
+        page-break-inside: avoid;
+    }
+
+    .callout-title {
+        font-weight: 700;
+        font-size: 9pt;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .callout-body {
+        font-size: 8.5pt;
+        line-height: 1.5;
+    }
+
+    .callout-note {
+        background-color: #EFF6FF;
+        border-left: 4px solid #3B82F6;
+        color: #1E3A8A;
+    }
+    .callout-note .callout-title { color: #1D4ED8; }
+
+    .callout-important {
+        background-color: #EEF2FF;
+        border-left: 4px solid #6366F1;
+        color: #312E81;
+    }
+    .callout-important .callout-title { color: #4338CA; }
+
+    .callout-warning {
+        background-color: #FFFBEB;
+        border-left: 4px solid #F59E0B;
+        color: #78350F;
+    }
+    .callout-warning .callout-title { color: #B45309; }
+
+    .callout-tip {
+        background-color: #F0FDF4;
+        border-left: 4px solid #10B981;
+        color: #064E3B;
+    }
+    .callout-tip .callout-title { color: #047857; }
+
+    .badge {
+        display: inline-block;
+        padding: 2px 7px;
+        font-size: 7.5pt;
+        font-weight: 600;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+    .badge-pass { background-color: #DCFCE7; color: #15803D; }
+    .badge-warn { background-color: #FEF3C7; color: #B45309; }
+    .badge-crit { background-color: #FEE2E2; color: #B91C1C; }
+    
+    </style>
+</head>
+<body>
+    <h1>CAMPUSOS BACKEND DEPLOYMENT RUNBOOK &amp; OPERATIONAL SPECIFICATION</h1>
+<p><strong>Target Architecture:</strong> Monolithic Flask REST API + PyMySQL Engine + Flutter Multi-Role Client + React Vite Admin Control Plane<br />
+<strong>Execution Context:</strong> Pre-Deployment LAN Multi-Device Physical Testing → Controlled Production<br />
+<strong>Document Classification:</strong> Engineering Deployment Runbook<br />
+<strong>Codebase Verification Status:</strong> 100% Verified against Active Repository (Zero Code Changes Applied)</p>
+<hr />
+<h2>1. CURRENT BACKEND ARCHITECTURE</h2>
+<pre><code>                                  CAMPUSOS DEPLOYMENT TOPOLOGY
+
+     [ Physical Mobile Devices ]                          [ Institutional Web Clients ]
+  ┌───────────────────────────────┐                             ┌───────────────────────────────┐
+  │  Student / Teacher / Warden   │                             │  Campus Registrar / Dean Admin│
+  │  Mess Staff / Gate Security   │                             │      (React 19 / Vite SPA)    │
+  └──────────────┬────────────────┘                             └──────────────┬────────────────┘
+                 │ (REST HTTP/JSON)                                            │ (Vite Proxy / Direct)
+                 │ Port: 5000                                                  │ Port: 3000 -&gt; 5000
+                 ▼                                                             ▼
+  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+  │                       CAMPUSOS BACKEND MONOLITH (FLASK / WSGI)                              │
+  │                                                                                             │
+  │  Composition Root &amp; Entry Points:                                                           │
+  │  ├── app.py (create_app() Factory, db.init_app, init_firebase, init_db, register_routes)    │
+  │  └── run.py (CLI entry point, bind: 0.0.0.0, port: PORT or 5000, debug: FLASK_DEBUG)        │
+  │                                                                                             │
+  │  Modular Routing Blueprints (18 Domain Modules):                                            │
+  │  ├── auth_bp (/login, /register, /auth/me, /auth/logout)                                    │
+  │  ├── attendance_bp (/sessions/*, /attendance/*, /attendance/batch-sync, /coupons/*)         │
+  │  ├── leave_bp &amp; warden_bp (/leave/*, /warden/*, /warden/leave-requests/*)                   │
+  │  ├── gate_pass_bp &amp; security_bp (/security/*, /security/gate-pass/verify, /batch-sync)      │
+  │  ├── complaints_bp &amp; admin_bp (/complaints/*, /admin/*, /admin/analytics)                   │
+  │  ├── notices_bp &amp; notifications_bp (/notices/*, /notifications/*, /device-tokens/*)         │
+  │  ├── mess_bp (/mess/*, /mess/entries/verify, /mess/entries/batch-sync)                      │
+  │  ├── passport_bp (/passport/*, /passport/verify-presentation, /passport/trust-bundle)      │
+  │  ├── documents_bp (/documents/*) &amp; fees_bp (/fees/*)                                        │
+  │  ├── academic_updates_bp (/academic-updates/*) &amp; hostel_bp (/hostel/*)                      │
+  │  └── visitors_bp (/visitors/*) &amp; search_bp (/search/*)                                      │
+  │                                                                                             │
+  │  Core Services, Security &amp; Middleware:                                                      │
+  │  ├── middleware/auth.py (JWT Bearer extractor + Legacy X-User-Id fallback resolver)          │
+  │  ├── middleware/roles.py (is_security_guard, is_warden, is_admin, is_mess_manager)          │
+  │  ├── utils/crypto.py (HMAC-SHA256 Compact Tokens, PyJWT HS256 Session Engine)               │
+  │  ├── passport_service.py (Ed25519 Asymmetric Cryptography, Trust Bundles, Cert Chains)     │
+  │  └── services/ (Notice targeting, Complaint NLP clustering, Audit trail recorders)          │
+  └──────────────────────────────┬──────────────────────────────┬───────────────────────────────┘
+                                 │                              │
+                                 ▼                              ▼
+                 ┌───────────────────────────────┐     ┌────────────────────────────────┐
+                 │   MYSQL RELATIONAL DATABASE   │     │  EXTERNAL SERVICES &amp; WORKERS   │
+                 │   Database: attentify         │     │                                │
+                 │   Port: 3306                  │     │  Firebase Cloud Messaging      │
+                 │   Engine: InnoDB / PyMySQL    │     │  - Project: attentify-ac5e6    │
+                 │   Schema: 27 Unified Tables   │     │  - firebase_credentials.json   │
+                 │   Additive auto-initialization│     │  Asynchronous FCM Worker:      │
+                 │   on create_app()             │     │  - Python threading.Thread     │
+                 └───────────────────────────────┘     └────────────────────────────────┘
+</code></pre>
+<h3>Dependency Map (Grounded in Verified Files)</h3>
+<pre><code>CampusOS Monorepo
+├── backend/
+│   ├── Flask (&gt;=2.0.0) [Web Application Framework &amp; Routing]
+│   ├── Flask-Cors (&gt;=3.0.0) [Cross-Origin Resource Sharing Middleware]
+│   ├── Flask-SQLAlchemy (&gt;=3.0.0) [ORM Layer &amp; Session Management]
+│   ├── PyMySQL (&gt;=1.0.0) [Pure-Python MySQL DB-API Driver]
+│   ├── cryptography (&gt;=3.4.0) [Ed25519 Elliptic Curve Key Management &amp; Signatures]
+│   ├── PyJWT (&gt;=2.0.0) [HMAC-SHA256 Token Encoding/Decoding with Claims Verification]
+│   ├── pandas (&gt;=1.3.0) &amp; openpyxl (&gt;=3.0.0) [Attendance Analytics &amp; Excel Cohort Export]
+│   ├── firebase-admin (&gt;=5.0.0) [FCM Push Notifications Infrastructure]
+│   ├── Python Standard Library (hmac, hashlib, base64, threading, uuid, datetime, json)
+│   └── Database: MySQL 8.0+ (InnoDB engine, database name: attentify)
+├── admin-web/
+│   ├── React 19.2.8 &amp; React DOM [UI Framework]
+│   ├── Vite 8.3.0 [Frontend Build Tool &amp; Dev Server with Reverse Proxy]
+│   ├── TypeScript 6.0.2 [Strict Type Enforcement]
+│   ├── @tanstack/react-query 5.104.0 [Asynchronous Server State Synchronization]
+│   ├── @tanstack/react-table 8.20.6 [High-Performance Tabular Control]
+│   ├── TailwindCSS 3.4.19 [Atomic Design Tokens &amp; Responsive Utilities]
+│   └── Lucide React [Interface Icons]
+└── flutter_frontent/
+    ├── Flutter 3.38.4 / Dart 3.10.3 [Cross-Platform Native Client]
+    ├── http 1.2.1 [HTTP/1.1 REST Communication]
+    ├── flutter_blue_plus 1.36.8 &amp; flutter_ble_peripheral 2.0.1 [BLE Attendance Mesh]
+    ├── cryptography 2.7.0 [Client-Side Ed25519 Identity Keypairs &amp; Presentations]
+    ├── qr_flutter &amp; mobile_scanner [QR Gate Pass &amp; Offline Identity Exchange]
+    ├── local_auth 2.2.0 [Biometric Authentication Wrapper]
+    ├── flutter_secure_storage [Hardware-Backed Keystore / Keychain Token Cache]
+    └── shared_preferences [Client State &amp; Offline Queue Cache]
+</code></pre>
+<hr />
+<h2>2. WHAT NEEDS TO BE DEPLOYED</h2>
+<p>For the target <strong>LAN / Physical Multi-Device Deployment (Hackathon &amp; Field Test)</strong>, exactly <strong>two</strong> server processes and <strong>one</strong> database engine must be running:</p>
+<ol>
+<li><strong>MySQL 8.0+ Server Instance:</strong><br />
+   - Must run locally or on the dedicated host machine.<br />
+   - Database name: <code>attentify</code>.<br />
+   - Character set: <code>utf8mb4</code>, Collation: <code>utf8mb4_unicode_ci</code>.</li>
+<li><strong>CampusOS Flask Backend Process:</strong><br />
+   - Started via <code>python app.py</code> or <code>python run.py</code>.<br />
+   - Bound to <code>0.0.0.0</code> (all network interfaces) on port <code>5000</code>.<br />
+   - Must load environment variables (<code>GATE_PASS_SECRET</code>, <code>PASSPORT_INSTITUTION_PRIVATE_KEY</code>, <code>JWT_SECRET</code>).</li>
+<li><strong>React Admin Web (Control Plane):</strong><br />
+   - Development/LAN mode: Ran via <code>npm run dev</code> in <code>admin-web/</code> (listens on port <code>3000</code>).<br />
+   - Bound to <code>0.0.0.0</code> so administrator laptops on the LAN can access it.</li>
+<li><strong>Client Applications (Field Endpoints):</strong><br />
+   - 5 Android mobile devices running the compiled Flutter APK (<code>app-debug.apk</code>), configured with the server's LAN IP address.</li>
+</ol>
+<hr />
+<h2>3. REQUIRED SERVER HARDWARE</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Hardware Resource</th>
+<th style="text-align: left;">Minimum Specification (Hackathon LAN)</th>
+<th style="text-align: left;">Recommended Specification (Institutional Pilot)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>CPU</strong></td>
+<td style="text-align: left;">4 Cores (Intel Core i5 8th Gen / AMD Ryzen 3)</td>
+<td style="text-align: left;">8 Cores (Intel Core i7 / AMD Ryzen 7 / Xeon)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>RAM</strong></td>
+<td style="text-align: left;">8 GB DDR4</td>
+<td style="text-align: left;">16 GB DDR4/DDR5</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Storage</strong></td>
+<td style="text-align: left;">20 GB free SSD storage</td>
+<td style="text-align: left;">50 GB free NVMe SSD storage</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Network Interface</strong></td>
+<td style="text-align: left;">100 Mbps Wi-Fi / Ethernet adapter</td>
+<td style="text-align: left;">1 Gbps Gigabit Ethernet (RJ-45)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Wi-Fi Router</strong></td>
+<td style="text-align: left;">Standard 802.11ac (Wi-Fi 5) Dual-Band Router</td>
+<td style="text-align: left;">Wi-Fi 6 (802.11ax) Access Point with Client Isolation <strong>DISABLED</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Dedicated IP</strong></td>
+<td style="text-align: left;">Static LAN IP (e.g., <code>192.168.1.100</code>) via DHCP reservation</td>
+<td style="text-align: left;">Static LAN IP + DNS record</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>4. REQUIRED SOFTWARE</h2>
+<h3>Server Software Checklist</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Software Component</th>
+<th style="text-align: left;">Exact Version Supported</th>
+<th style="text-align: left;">Verification Command</th>
+<th style="text-align: left;">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Python</strong></td>
+<td style="text-align: left;">3.10.x – 3.14.x (64-bit)</td>
+<td style="text-align: left;"><code>python --version</code></td>
+<td style="text-align: left;">Flask application runtime</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>MySQL Server</strong></td>
+<td style="text-align: left;">8.0.x or 8.4 LTS</td>
+<td style="text-align: left;"><code>mysql --version</code></td>
+<td style="text-align: left;">Relational database engine</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Node.js</strong></td>
+<td style="text-align: left;">20.x or 24.x LTS</td>
+<td style="text-align: left;"><code>node --version</code></td>
+<td style="text-align: left;">Admin Web build and Vite runtime</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>npm</strong></td>
+<td style="text-align: left;">10.x+</td>
+<td style="text-align: left;"><code>npm --version</code></td>
+<td style="text-align: left;">Package manager for Admin Web</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Android platform-tools</strong></td>
+<td style="text-align: left;">34.0+</td>
+<td style="text-align: left;"><code>adb version</code></td>
+<td style="text-align: left;">USB reverse debugging and APK side-loading</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Git</strong></td>
+<td style="text-align: left;">2.40+</td>
+<td style="text-align: left;"><code>git --version</code></td>
+<td style="text-align: left;">Source inspection and tracking</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>5. REQUIRED SERVICES</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Service Name</th>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Mandatory for LAN?</th>
+<th style="text-align: left;">Fallback Behavior if Unavailable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>MySQL Database</strong></td>
+<td style="text-align: left;">Internal Daemon</td>
+<td style="text-align: left;"><strong>YES (CRITICAL)</strong></td>
+<td style="text-align: left;">Server crashes immediately on startup (<code>PyMySQL.err.OperationalError</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Flask REST API</strong></td>
+<td style="text-align: left;">Application Process</td>
+<td style="text-align: left;"><strong>YES (CRITICAL)</strong></td>
+<td style="text-align: left;">Clients fail with <code>Connection refused</code> / <code>SocketException</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Firebase Admin SDK</strong></td>
+<td style="text-align: left;">External Cloud (Google)</td>
+<td style="text-align: left;">NO (Optional)</td>
+<td style="text-align: left;"><code>extensions.py</code> detects absence of <code>firebase_credentials.json</code> or network timeout, prints <code>[INFO] Running in local mode (notifications disabled)</code> and continues serving all REST and cryptographic requests normally.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Vite Dev Server</strong></td>
+<td style="text-align: left;">Web Process</td>
+<td style="text-align: left;">NO (Admin only)</td>
+<td style="text-align: left;">Mobile clients function 100% without Admin Web; Admin Web is only required for registrar/warden triage.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>6. ENVIRONMENT VARIABLES</h2>
+<p>The backend configuration loader in <code>backend/config.py</code> uses standard library reading of <code>.env</code> files located in <code>backend/.env</code> or repository root.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Variable Name</th>
+<th style="text-align: left;">Purpose</th>
+<th style="text-align: left;">Required?</th>
+<th style="text-align: left;">Example Format (Placeholders)</th>
+<th style="text-align: left;">Used In</th>
+<th style="text-align: left;">Safe to Expose to Client?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>DATABASE_URL</code></td>
+<td style="text-align: left;">SQLAlchemy connection string</td>
+<td style="text-align: left;">NO (Has dev fallback)</td>
+<td style="text-align: left;"><code>mysql+pymysql://&lt;user&gt;:&lt;password&gt;@localhost:3306/attentify</code></td>
+<td style="text-align: left;"><code>config.py:33</code></td>
+<td style="text-align: left;"><strong>NO (CRITICAL SECRET)</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>GATE_PASS_SECRET</code></td>
+<td style="text-align: left;">HMAC-SHA256 symmetric signing secret for QR Gate Passes</td>
+<td style="text-align: left;"><strong>YES (Fails fast if missing)</strong></td>
+<td style="text-align: left;"><code>campusos_gate_sec_&lt;64_char_hex_or_alphanumeric&gt;</code></td>
+<td style="text-align: left;"><code>config.py:40</code>, <code>utils/crypto.py:17</code></td>
+<td style="text-align: left;"><strong>NO (CRITICAL SECRET)</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>PASSPORT_INSTITUTION_PRIVATE_KEY</code></td>
+<td style="text-align: left;">Base64-encoded 32-byte Ed25519 private key for signing Passport certificates</td>
+<td style="text-align: left;"><strong>YES (Fails fast if missing)</strong></td>
+<td style="text-align: left;"><code>&lt;44_char_base64_string&gt;=</code> (32 raw bytes)</td>
+<td style="text-align: left;"><code>passport_service.py:80</code></td>
+<td style="text-align: left;"><strong>NO (TOP SECRET ROOT KEY)</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>PASSPORT_INSTITUTION_KEY_ID</code></td>
+<td style="text-align: left;">Identifier for active institutional signing key</td>
+<td style="text-align: left;">NO (Defaults to <code>campusos-root-2026-v1</code>)</td>
+<td style="text-align: left;"><code>campusos-root-2026-v1</code></td>
+<td style="text-align: left;"><code>config.py:43</code>, <code>passport_service.py:71</code></td>
+<td style="text-align: left;">YES (Public identifier)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>JWT_SECRET</code></td>
+<td style="text-align: left;">HMAC-SHA256 secret for user session tokens</td>
+<td style="text-align: left;">NO (Has dev fallback, <strong>REQUIRED FOR PROD</strong>)</td>
+<td style="text-align: left;"><code>campusos_jwt_sec_&lt;64_char_hex&gt;</code></td>
+<td style="text-align: left;"><code>config.py:53</code>, <code>utils/crypto.py:77</code></td>
+<td style="text-align: left;"><strong>NO (CRITICAL SECRET)</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>JWT_EXPIRATION_HOURS</code></td>
+<td style="text-align: left;">Lifespan of issued Bearer JWTs</td>
+<td style="text-align: left;">NO (Defaults to <code>168</code>)</td>
+<td style="text-align: left;"><code>168</code> (Integer hours, e.g. 7 days)</td>
+<td style="text-align: left;"><code>config.py:54</code>, <code>utils/crypto.py:102</code></td>
+<td style="text-align: left;">YES (Configuration parameter)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>FLASK_DEBUG</code></td>
+<td style="text-align: left;">Controls Flask debug and reload mode</td>
+<td style="text-align: left;">NO (Defaults to <code>false</code>)</td>
+<td style="text-align: left;"><code>false</code> or <code>true</code></td>
+<td style="text-align: left;"><code>app.py:162</code>, <code>run.py:12</code></td>
+<td style="text-align: left;">YES (Set <code>false</code> for multi-client testing)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>PORT</code></td>
+<td style="text-align: left;">Listening TCP port for backend</td>
+<td style="text-align: left;">NO (Defaults to <code>5000</code>)</td>
+<td style="text-align: left;"><code>5000</code></td>
+<td style="text-align: left;"><code>run.py:11</code></td>
+<td style="text-align: left;">YES (Port number)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>VITE_API_BASE_URL</code></td>
+<td style="text-align: left;">Admin Web API target URL</td>
+<td style="text-align: left;">NO (Defaults to <code>/api</code>)</td>
+<td style="text-align: left;"><code>http://192.168.1.100:5000</code></td>
+<td style="text-align: left;"><code>admin-web/src/services/api/api-client.ts:22</code></td>
+<td style="text-align: left;">YES (Client-side URL)</td>
+</tr>
+</tbody>
+</table>
+<h3>Environment Files Matrix</h3>
+<h4><code>backend/.env</code> (LAN Testing Configuration)</h4>
+<pre><code class="language-env"># CampusOS LAN Deployment Environment Configuration
+DATABASE_URL=mysql+pymysql://root:nandasourav766@localhost:3306/attentify
+GATE_PASS_SECRET=campusos_gate_sec_7a9f82d1c4b8e053a6f1d2e4c8b7a9f0
+PASSPORT_INSTITUTION_KEY_ID=campusos-root-2026-v1
+PASSPORT_INSTITUTION_PRIVATE_KEY=t6s2qBfceKH/2cFn7Fy/yD7NdY+650e369ujP4/VD2E=
+JWT_SECRET=campusos_jwt_sec_8f9c2d1b4e053a6f1d2e4c8b7a9f0e3d
+JWT_EXPIRATION_HOURS=168
+FLASK_DEBUG=false
+PORT=5000
+</code></pre>
+<h4><code>backend/.env.production</code> (Production Hardened Template)</h4>
+<pre><code class="language-env"># CampusOS Production Environment Configuration
+DATABASE_URL=mysql+pymysql://campusos_user:&lt;GENERATE_STRONG_DB_PASSWORD&gt;@127.0.0.1:3306/attentify
+GATE_PASS_SECRET=&lt;GENERATE_64_CHAR_HEX_SECRET&gt;
+PASSPORT_INSTITUTION_KEY_ID=campusos-root-2026-v1
+PASSPORT_INSTITUTION_PRIVATE_KEY=&lt;GENERATE_BASE64_ED25519_PRIVATE_KEY&gt;
+JWT_SECRET=&lt;GENERATE_64_CHAR_HEX_SECRET&gt;
+JWT_EXPIRATION_HOURS=24
+FLASK_DEBUG=false
+PORT=5000
+</code></pre>
+<hr />
+<h2>7. DATABASE SETUP</h2>
+<h3>Database Initialization Mechanism</h3>
+<p>The repository does <strong>not</strong> use Alembic or Flask-Migrate directories. Instead, it utilizes an <strong>idempotent, non-destructive additive programmatic migration engine</strong> implemented in <code>backend/models/schema.py</code>:<br />
+1. <code>db.create_all()</code> creates all 27 SQLAlchemy tables if they do not exist.<br />
+2. An additive inspection phase inspects MySQL <code>information_schema.COLUMNS</code> and <code>information_schema.TABLES</code> to alter and add missing columns (<code>notices</code>, <code>notification_deliveries</code>, <code>device_tokens</code>, <code>mess_menus</code>, etc.).<br />
+3. An indexing phase validates and creates composite performance indexes across high-traffic transit tables (<code>idx_gp_student_status</code>, <code>idx_me_student_date_meal</code>, etc.).<br />
+4. This mechanism runs automatically every time <code>create_app()</code> executes.</p>
+<h3>Step-by-Step MySQL Setup Commands</h3>
+<h4>1. Log in to MySQL as root:</h4>
+<pre><code class="language-bash">mysql -u root -p
+</code></pre>
+<h4>2. Execute Database and User Provisioning Script:</h4>
+<pre><code class="language-sql">-- 1. Create the official CampusOS database with UTF-8 support
+CREATE DATABASE IF NOT EXISTS attentify 
+CHARACTER SET utf8mb4 
+COLLATE utf8mb4_unicode_ci;
+
+-- 2. Verify creation
+SHOW DATABASES LIKE 'attentify';
+
+-- 3. (Optional for production) Create dedicated least-privilege user
+CREATE USER IF NOT EXISTS 'campusos_user'@'localhost' IDENTIFIED BY 'CampusOS@Secure2026';
+GRANT ALL PRIVILEGES ON attentify.* TO 'campusos_user'@'localhost';
+FLUSH PRIVILEGES;
+
+-- 4. Exit MySQL prompt
+EXIT;
+</code></pre>
+<h4>3. Initialize Schema:</h4>
+<p>Run Python interactive app context to verify instant table creation:</p>
+<pre><code class="language-bash">python -c &quot;from app import app, db; app.app_context().push(); print('Tables:', len(db.metadata.tables))&quot;
+</code></pre>
+<p><em>Expected Output:</em> <code>Tables: 27</code></p>
+<hr />
+<h2>8. SECRET SETUP</h2>
+<h3>1. Gate Pass Signing Secret (<code>GATE_PASS_SECRET</code>)</h3>
+<ul>
+<li><strong>Primitive:</strong> HMAC-SHA256 symmetric signature.</li>
+<li><strong>Generation Command (PowerShell / Linux):</strong><br />
+<code>bash
+  python -c "import secrets; print('campusos_gate_sec_' + secrets.token_hex(32))"</code></li>
+<li><strong>Loss Impact:</strong> If rotated while students have unexpired gate passes, existing passes will fail verification at the gate with <code>"Cryptographic verification failed: Signature mismatch / tampering detected"</code>.</li>
+<li><strong>Mitigation:</strong> Only rotate during scheduled maintenance windows when all student gate passes have reached <code>RETURNED</code> or <code>EXPIRED</code> status.</li>
+</ul>
+<h3>2. Passport Institutional Signing Key (<code>PASSPORT_INSTITUTION_PRIVATE_KEY</code>)</h3>
+<ul>
+<li><strong>Primitive:</strong> Ed25519 (Edwards-curve Digital Signature Algorithm, RFC 8032).</li>
+<li><strong>Generation Command:</strong><br />
+<code>bash
+  python -c "import base64; from cryptography.hazmat.primitives.asymmetric import ed25519; k = ed25519.Ed25519PrivateKey.generate(); print(base64.b64encode(k.private_bytes_raw()).decode())"</code></li>
+<li><strong>Loss Impact:</strong> If the private key is lost or modified, offline verifiers and the mess verification engine will reject all previously issued student device certificates (<code>DeviceCertificate</code>).</li>
+<li><strong>Mitigation:</strong> The active institution private key must be safely backed up in cold storage.</li>
+</ul>
+<h3>3. JWT Session Signing Secret (<code>JWT_SECRET</code>)</h3>
+<ul>
+<li><strong>Primitive:</strong> HMAC-SHA256 compact token signing.</li>
+<li><strong>Generation Command:</strong><br />
+<code>bash
+  python -c "import secrets; print('campusos_jwt_sec_' + secrets.token_hex(32))"</code></li>
+<li><strong>Loss Impact:</strong> Invalidates all active user sessions; all mobile clients and admin portals will receive <code>401 Unauthorized</code> and will be required to log in again.</li>
+</ul>
+<hr />
+<h2>9. BACKEND STARTUP</h2>
+<h3>Development / LAN Testing Server</h3>
+<p>The development entry point is configured in <code>backend/run.py</code> or <code>backend/app.py</code>:<br />
+- Listens on <code>0.0.0.0</code> (all network interfaces).<br />
+- Port: <code>5000</code>.<br />
+- Multi-threading enabled by default in Flask 2.0+.</p>
+<pre><code class="language-bash">cd backend
+python app.py
+</code></pre>
+<p><em>Expected Startup Output:</em></p>
+<pre><code>[OK] [PASSPORT] Institutional signing key configured: keyId=campusos-root-2026-v1, pubKey=8zW...
+[OK] Firebase Admin initialized successfully.
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.100:5000
+Press CTRL+C to quit
+</code></pre>
+<h3>Production WSGI Server (Waitress on Windows / Gunicorn on Linux)</h3>
+<h4>Windows Server (via Waitress):</h4>
+<pre><code class="language-bash">pip install waitress
+python -c &quot;from waitress import serve; from app import app; print('Serving on 0.0.0.0:5000...'); serve(app, host='0.0.0.0', port=5000, threads=8)&quot;
+</code></pre>
+<h4>Linux Server (via Gunicorn):</h4>
+<pre><code class="language-bash">pip install gunicorn
+gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 2 --timeout 60 app:app
+</code></pre>
+<hr />
+<h2>10. FIREWALL / NETWORK CONFIGURATION</h2>
+<p>The backend host must permit incoming TCP traffic on port <code>5000</code> (Flask API) and port <code>3000</code> (Admin Web) across the local subnet.</p>
+<h3>Windows Firewall Configuration (Administrator PowerShell):</h3>
+<pre><code class="language-powershell"># Open inbound TCP port 5000 for Flask REST API
+New-NetFirewallRule -DisplayName &quot;CampusOS Backend REST API (5000)&quot; `
+    -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow -Profile Private,Domain
+
+# Open inbound TCP port 3000 for Admin Web Control Plane
+New-NetFirewallRule -DisplayName &quot;CampusOS Admin Web (3000)&quot; `
+    -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Private,Domain
+
+# Verify rules are active
+Get-NetFirewallRule -DisplayName &quot;CampusOS*&quot; | Select-Object DisplayName, Enabled, Direction, Action
+</code></pre>
+<h3>Linux Firewall Configuration (UFW):</h3>
+<pre><code class="language-bash">sudo ufw allow 5000/tcp comment &quot;CampusOS Flask API&quot;
+sudo ufw allow 3000/tcp comment &quot;CampusOS Admin Web&quot;
+sudo ufw status verbose
+</code></pre>
+<h3>Finding the Server LAN IP:</h3>
+<ul>
+<li><strong>Windows:</strong> Run <code>ipconfig</code> and look for <code>IPv4 Address</code> under your active Wi-Fi or Ethernet adapter (e.g., <code>192.168.1.100</code>).</li>
+<li><strong>Linux:</strong> Run <code>ip -br a</code> or <code>hostname -I</code>.</li>
+</ul>
+<hr />
+<h2>11. FLUTTER CONNECTION</h2>
+<h3>Actual Configuration Location</h3>
+<p>In the Flutter codebase, the API base URL is defined in:<br />
+<strong>flutter_frontent/lib/core/config/app_config.dart</strong></p>
+<pre><code class="language-dart">static const String _defaultUrl = 'http://127.0.0.1:5000';
+static const String baseUrl =
+    String.fromEnvironment('API_BASE_URL', defaultValue: _defaultUrl);
+</code></pre>
+<h3>Configuring Mobile Devices for Physical Testing</h3>
+<h4>Option A: Compile-Time / Run-Time Parameter (Recommended - Zero Code Changes)</h4>
+<p>Pass <code>--dart-define</code> with the server's actual LAN IP:</p>
+<pre><code class="language-bash">flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000
+</code></pre>
+<p>Or build the APK for distribution across test phones:</p>
+<pre><code class="language-bash">flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.1.100:5000
+</code></pre>
+<h4>Option B: Direct File Configuration</h4>
+<p>Modify line 10 in <code>flutter_frontent/lib/core/config/app_config.dart</code>:</p>
+<pre><code class="language-dart">static const String _defaultUrl = 'http://192.168.1.100:5000';
+</code></pre>
+<h3>Android Cleartext Policy Verification</h3>
+<p>In <code>flutter_frontent/android/app/src/main/AndroidManifest.xml</code> line 19:</p>
+<pre><code class="language-xml">&lt;application
+    android:label=&quot;CampusOS&quot;
+    android:usesCleartextTraffic=&quot;true&quot;&gt;
+</code></pre>
+<p><em>Verification:</em> <code>android:usesCleartextTraffic="true"</code> is <strong>already enabled</strong>. Android devices will connect directly to <code>http://&lt;SERVER_LAN_IP&gt;:5000</code> over Wi-Fi without SSL/TLS blocking.</p>
+<hr />
+<h2>12. ADMIN WEB CONNECTION</h2>
+<h3>Configuration Location</h3>
+<p>In <code>admin-web/src/services/api/api-client.ts</code> line 22:</p>
+<pre><code class="language-typescript">const BASE_URL = import.meta.env.VITE_API_BASE_URL || &quot;/api&quot;
+</code></pre>
+<h3>LAN Deployment Options</h3>
+<h4>Option A: Running Vite on the Server Machine (Recommended)</h4>
+<p><code>admin-web/vite.config.ts</code> includes a built-in proxy:</p>
+<pre><code class="language-typescript">server: {
+  port: 3000,
+  host: '0.0.0.0', // Expose to LAN
+  proxy: {
+    '/api': {
+      target: 'http://127.0.0.1:5000',
+      changeOrigin: true,
+      rewrite: (path) =&gt; path.replace(/^\/api/, ''),
+    },
+  },
+}
+</code></pre>
+<p>Run from <code>admin-web/</code>:</p>
+<pre><code class="language-bash">npm run dev -- --host 0.0.0.0
+</code></pre>
+<p>Any browser on the LAN can navigate to <code>http://192.168.1.100:3000</code>. All <code>/api/*</code> calls are transparently proxied to Flask on port 5000 with zero CORS friction.</p>
+<h4>Option B: Standalone Production Build</h4>
+<p>Create <code>admin-web/.env.production</code>:</p>
+<pre><code class="language-env">VITE_API_BASE_URL=http://192.168.1.100:5000
+</code></pre>
+<p>Build static assets:</p>
+<pre><code class="language-bash">npm run build
+npm run preview -- --host 0.0.0.0 --port 3000
+</code></pre>
+<hr />
+<h2>13. TEST DATA SYSTEM</h2>
+<p>The repository contains an idempotent, deterministic seed system in:<br />
+<strong><code>backend/seed_test_data.py</code></strong></p>
+<h3>What It Generates</h3>
+<ol>
+<li><strong>6 Primary Role Users:</strong> Creates or updates accounts with verified emails and roles.</li>
+<li><strong>Relational Entity Purge:</strong> Safely purges only the relational child records belonging to the test accounts (leaves, passes, attendances, sessions, meal entries, certificates) without touching other user data.</li>
+<li><strong>Hostel Allocation &amp; Room Assets:</strong> Assigns student Aarav Sharma to Room <code>B-204</code> with study desk asset <code>ABH-B204-DSK-01</code>.</li>
+<li><strong>Academic Sessions &amp; Attendance:</strong> Creates active B.Tech CSE Year 3 class <code>CS301</code> with lecture session and marked attendance.</li>
+<li><strong>Coupons:</strong> Provisions an active campus cafeteria reward coupon.</li>
+<li><strong>Student Leave Request &amp; Approved Gate Pass:</strong> Generates an approved leave request and an active <code>GatePass</code> with an authentic HMAC-SHA256 signed compact token.</li>
+<li><strong>Institutional Notices:</strong> Seeds academic and administrative notices with target deliveries and read tracking.</li>
+<li><strong>Mess Menus &amp; Dining Feedback:</strong> Seeds today's Breakfast, Lunch, Snacks, and Dinner with menu items and rating records.</li>
+<li><strong>Cryptographic Passport Identity:</strong> Provisions an Ed25519 <code>DeviceIdentityKey</code> and signs a <code>DeviceCertificate</code> bound to the student user record.</li>
+<li><strong>Academic Updates &amp; Complaints:</strong> Seeds class rescheduling announcements and pending hostel maintenance complaints.</li>
+</ol>
+<h3>Seeding Execution Commands</h3>
+<pre><code class="language-bash">cd backend
+
+# Execute clean seed (idempotent)
+python seed_test_data.py
+
+# Verify seeded entities and relationships
+python seed_test_data.py --verify
+
+# Optional full relational purge and fresh re-seed
+python seed_test_data.py --reset
+</code></pre>
+<hr />
+<h2>14. SIX TEST ACCOUNTS (DETERMINISTIC MATRIX)</h2>
+<div class="callout callout-warning"><div class="callout-title">⚠️ WARNING</div><div class="callout-body">These credentials are strictly for isolated LAN and staging validation. They MUST NOT be deployed to any publicly accessible internet endpoint.</div></div>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Role</th>
+<th style="text-align: left;">Email</th>
+<th style="text-align: left;">Password</th>
+<th style="text-align: left;">Display Name</th>
+<th style="text-align: left;">Registration / Employee ID</th>
+<th style="text-align: left;">Client Interface</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Admin</strong></td>
+<td style="text-align: left;"><code>admin@campusos.edu</code></td>
+<td style="text-align: left;"><code>Admin@1234</code></td>
+<td style="text-align: left;">Institutional Registrar &amp; Dean</td>
+<td style="text-align: left;"><code>ADM-2026-001</code></td>
+<td style="text-align: left;">React Admin Web (<code>:3000</code>)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Teacher</strong></td>
+<td style="text-align: left;"><code>teacher@campusos.edu</code></td>
+<td style="text-align: left;"><code>Teacher@1234</code></td>
+<td style="text-align: left;">Prof. Sarah Jenkins</td>
+<td style="text-align: left;"><code>FAC-CSE-104</code></td>
+<td style="text-align: left;">Flutter Mobile App</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Student</strong></td>
+<td style="text-align: left;"><code>student@campusos.edu</code></td>
+<td style="text-align: left;"><code>Student@1234</code></td>
+<td style="text-align: left;">Aarav Sharma</td>
+<td style="text-align: left;"><code>2023CSE042</code></td>
+<td style="text-align: left;">Flutter Mobile App</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Warden</strong></td>
+<td style="text-align: left;"><code>warden@campusos.edu</code></td>
+<td style="text-align: left;"><code>Warden@1234</code></td>
+<td style="text-align: left;">Dr. Rajesh Sharma (Chief Warden)</td>
+<td style="text-align: left;"><code>WRD-BH-01</code></td>
+<td style="text-align: left;">Flutter Mobile App</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Mess Staff</strong></td>
+<td style="text-align: left;"><code>mess@campusos.edu</code></td>
+<td style="text-align: left;"><code>Mess@1234</code></td>
+<td style="text-align: left;">Ramesh Kumar (Mess Manager)</td>
+<td style="text-align: left;"><code>MSS-NORTH-01</code></td>
+<td style="text-align: left;">Flutter Mobile App</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Gate Security</strong></td>
+<td style="text-align: left;"><code>security@campusos.edu</code></td>
+<td style="text-align: left;"><code>Security@1234</code></td>
+<td style="text-align: left;">Officer Vikram Singh</td>
+<td style="text-align: left;"><code>SEC-MAIN-007</code></td>
+<td style="text-align: left;">Flutter Mobile App</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>15. PHYSICAL E2E TEST PLAN (6 CORE WORKFLOWS)</h2>
+<h3>Workflow 1: Leave Request -&gt; Gate Pass Lifecycle</h3>
+<ol>
+<li><strong>Student Phone:</strong> Navigates to Outing/Leave, applies for leave with reason "Home Visit", exit 18:00, return 21:00.</li>
+<li><strong>Warden Phone:</strong> Receives leave request under Pending Leave tab. Reviews and taps "Approve". Backend transitions status to <code>APPROVED</code> and generates <code>GatePass</code> with signed HMAC token.</li>
+<li><strong>Student Phone:</strong> Gate pass appears with live dynamic QR code containing the HMAC-SHA256 compact token.</li>
+<li><strong>Security Phone:</strong> Opens Gate Scanner, scans student QR code. Scanner verifies token via <code>POST /security/gate-pass/verify</code>. Displays student name, roll number, and approved destination. Guard confirms Exit.</li>
+<li><strong>Security Phone:</strong> Later when student returns, guard scans student QR again. Backend marks gate pass <code>RETURNED</code>.</li>
+</ol>
+<h3>Workflow 2: BLE / QR Attendance Verification</h3>
+<ol>
+<li><strong>Teacher Phone:</strong> Starts attendance session for Class <code>CS301</code> with transmit power set to Medium. Backend creates session with unique nonce. Teacher device begins BLE advertisement.</li>
+<li><strong>Student Phone:</strong> Opens Attendance tab. Discovers teacher's BLE broadcast or scans session QR code fallback.</li>
+<li><strong>Student Phone:</strong> Submits attendance payload signed by student identity key.</li>
+<li><strong>Backend:</strong> Verifies session nonce and records student attendance as <code>PRESENT</code>. Evaluates loyalty rules and issues coupon reward.</li>
+</ol>
+<h3>Workflow 3: Mess Dining Passport Verification</h3>
+<ol>
+<li><strong>Student Phone:</strong> Opens Dining Passport tab. Generates dynamic Ed25519 meal presentation token.</li>
+<li><strong>Mess Staff Phone:</strong> Opens Dining Scanner, scans student QR code.</li>
+<li><strong>Backend:</strong> Calls <code>POST /mess/entries/verify</code>. <code>PassportService.verify_presentation</code> validates Ed25519 digital signature and certificate validity. Inserts <code>meal_entries</code> record. Staff UI displays green success checkmark with student photo and meal type.</li>
+</ol>
+<h3>Workflow 4: Complaint Resolution Flow</h3>
+<ol>
+<li><strong>Student Phone:</strong> Submits hostel maintenance complaint regarding study desk lamp.</li>
+<li><strong>Admin Web:</strong> Complaint appears on Admin Dashboard under Active Complaints. Registrar assigns complaint to maintenance contractor and updates status to <code>IN_PROGRESS</code>.</li>
+<li><strong>Student Phone:</strong> Receives updated status notification. Once fixed, Admin marks complaint <code>RESOLVED</code>.</li>
+</ol>
+<h3>Workflow 5: Targeted Institutional Notice Broadcast</h3>
+<ol>
+<li><strong>Admin Web:</strong> Composes emergency academic notice targeted to <code>B.Tech CSE Year 3</code>. Taps "Publish Notice".</li>
+<li><strong>Backend:</strong> Resolves matching student recipients and creates <code>notification_deliveries</code> records. Dispatches FCM push notification.</li>
+<li><strong>Student Phone:</strong> Receives real-time push notification and banner on Student Home Screen. Opens notice, updating read status to <code>READ</code>.</li>
+</ol>
+<h3>Workflow 6: Visitor Pass Issuance &amp; Security Clearance</h3>
+<ol>
+<li><strong>Student Phone:</strong> Submits visitor request for parent arrival.</li>
+<li><strong>Warden Phone:</strong> Reviews visitor request and grants approval. Backend issues 6-digit visitor pass code.</li>
+<li><strong>Security Phone:</strong> Enters visitor pass code at campus security gate. Clearance confirmed and entry timestamp recorded.</li>
+</ol>
+<hr />
+<h2>16. BACKUP AND RESTORE</h2>
+<h3>Automated Backup Script (Windows PowerShell)</h3>
+<p>Create <code>backend/backup_db.ps1</code>:</p>
+<pre><code class="language-powershell">$Date = Get-Date -Format &quot;yyyyMMdd_HHmmss&quot;
+$BackupDir = &quot;D:\DEVLOPEMENT\ezzo_7.5\backups&quot;
+if (!(Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }
+$OutputFile = &quot;$BackupDir\attentify_backup_$Date.sql&quot;
+
+Write-Host &quot;Creating backup of database 'attentify'...&quot; -ForegroundColor Cyan
+&amp; &quot;mysqldump.exe&quot; -u root -p attentify --routines --triggers --events &gt; $OutputFile
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host &quot;Backup successfully created: $OutputFile&quot; -ForegroundColor Green
+} else {
+    Write-Host &quot;Backup failed with exit code $LASTEXITCODE&quot; -ForegroundColor Red
+}
+</code></pre>
+<h3>Automated Backup Script (Linux Bash)</h3>
+<pre><code class="language-bash">#!/bin/bash
+DATE=$(date +&quot;%Y%m%d_%H%M%S&quot;)
+BACKUP_DIR=&quot;/var/backups/campusos&quot;
+mkdir -p &quot;$BACKUP_DIR&quot;
+OUTPUT_FILE=&quot;$BACKUP_DIR/attentify_backup_$DATE.sql&quot;
+
+echo &quot;Creating MySQL backup...&quot;
+mysqldump -u root -p attentify --routines --triggers --events &gt; &quot;$OUTPUT_FILE&quot;
+
+if [ $? -eq 0 ]; then
+    echo &quot;Backup created successfully at $OUTPUT_FILE&quot;
+else
+    echo &quot;Backup failed!&quot; &gt;&amp;2
+fi
+</code></pre>
+<h3>Restoration Commands</h3>
+<p>To restore a snapshot into a clean database:</p>
+<pre><code class="language-bash"># 1. Re-create clean database
+mysql -u root -p -e &quot;DROP DATABASE IF EXISTS attentify; CREATE DATABASE attentify CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;&quot;
+
+# 2. Import SQL dump
+mysql -u root -p attentify &lt; /path/to/attentify_backup_YYYYMMDD_HHMMSS.sql
+
+# 3. Verify table counts
+mysql -u root -p -e &quot;SELECT COUNT(*) AS total_tables FROM information_schema.tables WHERE table_schema='attentify';&quot;
+</code></pre>
+<hr />
+<h2>17. LAN DEPLOYMENT RUNBOOK (STEP-BY-STEP EXECUTION)</h2>
+<h3>STEP 1 — Verify Environment Prerequisites</h3>
+<ul>
+<li><strong>Purpose:</strong> Ensure Python, Node, MySQL, and Flutter SDKs are present.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  python --version
+  node --version
+  mysql --version</code></li>
+<li><strong>Expected Output:</strong> Python 3.10+, Node v20+, MySQL 8.0+.</li>
+<li><strong>Common Error:</strong> Command not found.</li>
+<li><strong>Fix:</strong> Add installation folders to system <code>PATH</code>.</li>
+</ul>
+<hr />
+<h3>STEP 2 — Setup Python Virtual Environment</h3>
+<ul>
+<li><strong>Purpose:</strong> Isolate project dependencies.</li>
+<li><strong>Commands (Windows):</strong><br />
+<code>powershell
+  cd d:\DEVLOPEMENT\ezzo_7.5\backend
+  python -m venv .venv
+  .venv\Scripts\Activate.ps1
+  pip install --upgrade pip
+  pip install -r requirements.txt</code></li>
+<li><strong>Expected Output:</strong> <code>Successfully installed Flask Flask-Cors Flask-SQLAlchemy PyMySQL cryptography PyJWT ...</code></li>
+</ul>
+<hr />
+<h3>STEP 3 — Verify and Configure MySQL Database</h3>
+<ul>
+<li><strong>Purpose:</strong> Provision <code>attentify</code> database.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS attentify CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"</code></li>
+<li><strong>Expected Output:</strong> Query OK, 1 row affected.</li>
+</ul>
+<hr />
+<h3>STEP 4 — Configure Backend Environment File</h3>
+<ul>
+<li><strong>Purpose:</strong> Configure signing secrets and database URI in <code>backend/.env</code>.</li>
+<li><strong>Action:</strong> Ensure <code>backend/.env</code> exists and contains:<br />
+<code>env
+  DATABASE_URL=mysql+pymysql://root:nandasourav766@localhost:3306/attentify
+  GATE_PASS_SECRET=campusos_gate_sec_7a9f82d1c4b8e053a6f1d2e4c8b7a9f0
+  PASSPORT_INSTITUTION_KEY_ID=campusos-root-2026-v1
+  PASSPORT_INSTITUTION_PRIVATE_KEY=t6s2qBfceKH/2cFn7Fy/yD7NdY+650e369ujP4/VD2E=
+  JWT_SECRET=campusos_jwt_sec_8f9c2d1b4e053a6f1d2e4c8b7a9f0e3d
+  FLASK_DEBUG=false
+  PORT=5000</code></li>
+</ul>
+<hr />
+<h3>STEP 5 — Run Automated Backend Validation Suites</h3>
+<ul>
+<li><strong>Purpose:</strong> Confirm all cryptographic and domain units pass before launching.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  python run_all_backend_tests.py</code></li>
+<li><strong>Expected Output:</strong><br />
+<code>Total Suites: 19 | Passed: 19 | Failed: 0</code></li>
+</ul>
+<hr />
+<h3>STEP 6 — Seed Deterministic Multi-Role Data</h3>
+<ul>
+<li><strong>Purpose:</strong> Populate database with verified accounts across all 6 roles.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  python seed_test_data.py --verify</code></li>
+<li><strong>Expected Output:</strong><br />
+<code>[OK] All 6 role accounts verified.
+  [OK] System is ready for physical multi-device testing.</code></li>
+</ul>
+<hr />
+<h3>STEP 7 — Launch Flask Backend on LAN Interface</h3>
+<ul>
+<li><strong>Purpose:</strong> Serve REST API to LAN devices.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  python app.py</code></li>
+<li><strong>Expected Output:</strong> <code>Running on http://0.0.0.0:5000</code></li>
+</ul>
+<hr />
+<h3>STEP 8 — Open Firewall Ports</h3>
+<ul>
+<li><strong>Purpose:</strong> Allow incoming mobile traffic through OS firewall.</li>
+<li><strong>Commands (PowerShell Admin):</strong><br />
+<code>powershell
+  New-NetFirewallRule -DisplayName "CampusOS Backend" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow</code></li>
+</ul>
+<hr />
+<h3>STEP 9 — Identify Server LAN IP Address</h3>
+<ul>
+<li><strong>Purpose:</strong> Get target IP for mobile clients.</li>
+<li><strong>Commands:</strong><br />
+<code>powershell
+  Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Wi-Fi*","Ethernet*" | Select-Object IPAddress, InterfaceAlias</code></li>
+<li><strong>Example Value:</strong> <code>192.168.1.100</code></li>
+</ul>
+<hr />
+<h3>STEP 10 — Launch Admin Web Control Plane</h3>
+<ul>
+<li><strong>Purpose:</strong> Start Registrar / Warden control panel.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  cd d:\DEVLOPEMENT\ezzo_7.5\admin-web
+  npm install
+  npm run dev -- --host 0.0.0.0</code></li>
+<li><strong>Expected Output:</strong> <code>➜ Network: http://192.168.1.100:3000/</code></li>
+</ul>
+<hr />
+<h3>STEP 11 — Compile &amp; Distribute Flutter Mobile Client</h3>
+<ul>
+<li><strong>Purpose:</strong> Install CampusOS mobile application on physical Android devices.</li>
+<li><strong>Commands:</strong><br />
+<code>bash
+  cd d:\DEVLOPEMENT\ezzo_7.5\flutter_frontent
+  flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.1.100:5000</code></li>
+<li><strong>Output Artifact:</strong> <code>build/app/outputs/flutter-apk/app-debug.apk</code></li>
+<li><strong>Installation:</strong><br />
+<code>bash
+  adb -s &lt;DEVICE_SERIAL&gt; install -r build/app/outputs/flutter-apk/app-debug.apk</code></li>
+</ul>
+<hr />
+<h3>STEP 12 — Execute 6-Role Device Login Verification</h3>
+<ul>
+<li><strong>Purpose:</strong> Verify authentication from each physical device.</li>
+<li><strong>Action:</strong> Log in with:<br />
+  1. Phone 1: <code>student@campusos.edu</code> / <code>Student@1234</code><br />
+  2. Phone 2: <code>teacher@campusos.edu</code> / <code>Teacher@1234</code><br />
+  3. Phone 3: <code>warden@campusos.edu</code> / <code>Warden@1234</code><br />
+  4. Phone 4: <code>security@campusos.edu</code> / <code>Security@1234</code><br />
+  5. Phone 5: <code>mess@campusos.edu</code> / <code>Mess@1234</code><br />
+  6. Laptop Browser: <code>admin@campusos.edu</code> / <code>Admin@1234</code> at <code>http://192.168.1.100:3000</code></li>
+</ul>
+<hr />
+<h2>18. INTERNET DEPLOYMENT RUNBOOK (CONTROLLED / PRODUCTION)</h2>
+<pre><code>[ Internet Clients (Mobile / Web) ]
+               │ (HTTPS:443 / TLS 1.3)
+               ▼
+[ Nginx Reverse Proxy / Cloudflare Edge ]
+               │ (HTTP:5000 - Reverse Proxied over Unix Socket or 127.0.0.1)
+               ▼
+[ Gunicorn / Waitress WSGI Application Server (4 Workers) ]
+               │
+[ CampusOS Flask Application Root ]
+               │
+[ MySQL 8.0 InnoDB Database Engine (127.0.0.1:3306) ]
+</code></pre>
+<h3>Production Security Checklist Before Public Exposure</h3>
+<ol>
+<li><strong>Password Hashing:</strong><br />
+   - <em>Current State:</em> Plaintext strings (<code>User.password</code>).<br />
+   - <em>Mandatory Fix:</em> Migrate to <code>bcrypt.hashpw()</code> or Argon2id in <code>routes/auth.py</code> and <code>models/user.py</code>.</li>
+<li><strong>Strict JWT Enforcement:</strong><br />
+   - <em>Current State:</em> Legacy fallback to <code>X-User-Id</code> and query parameters exists in <code>middleware/auth.py</code>.<br />
+   - <em>Mandatory Fix:</em> Disable <code>X-User-Id</code> resolution in production (<code>if not app.config['DEBUG']: reject unauthenticated</code>).</li>
+<li><strong>Explicit JWT Secrets:</strong><br />
+   - <em>Current State:</em> Default fallback secret in <code>config.py</code>.<br />
+   - <em>Mandatory Fix:</em> Make <code>JWT_SECRET</code> mandatory; raise <code>RuntimeError</code> if missing from environment.</li>
+<li><strong>Nginx Reverse Proxy Configuration:</strong><br />
+   Create <code>/etc/nginx/sites-available/campusos.conf</code>:<br />
+   ```nginx<br />
+   server {<br />
+       listen 80;<br />
+       server_name campusos.institution.edu;<br />
+       return 301 https://$host$request_uri;<br />
+   }</li>
+</ol>
+<p>server {<br />
+       listen 443 ssl http2;<br />
+       server_name campusos.institution.edu;</p>
+<pre><code>   ssl_certificate /etc/letsencrypt/live/campusos.institution.edu/fullchain.pem;
+   ssl_certificate_key /etc/letsencrypt/live/campusos.institution.edu/privkey.pem;
+   ssl_protocols TLSv1.2 TLSv1.3;
+   ssl_ciphers HIGH:!aNULL:!MD5;
+
+   # Security Headers
+   add_header X-Content-Type-Options nosniff;
+   add_header X-Frame-Options DENY;
+   add_header X-XSS-Protection "1; mode=block";
+
+   # Reverse Proxy to Gunicorn
+   location / {
+       proxy_pass http://127.0.0.1:5000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_connect_timeout 30s;
+       proxy_read_timeout 60s;
+   }
+</code></pre>
+<p>}<br />
+   ```</p>
+<hr />
+<h2>19. DEPLOYMENT BLOCKERS &amp; REMEDIATION MATRIX</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Issue / Vulnerability</th>
+<th style="text-align: left;">Current Implementation</th>
+<th style="text-align: left;">Blocks LAN Testing?</th>
+<th style="text-align: left;">Blocks Internet Production?</th>
+<th style="text-align: left;">Severity</th>
+<th style="text-align: left;">Remediation Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Plaintext Passwords</strong></td>
+<td style="text-align: left;"><code>User.password</code> stored as plain string in MySQL</td>
+<td style="text-align: left;"><strong>NO</strong> (Acceptable for isolated physical lab)</td>
+<td style="text-align: left;"><strong>YES (CRITICAL)</strong></td>
+<td style="text-align: left;">CRITICAL</td>
+<td style="text-align: left;">Migrate to <code>bcrypt</code> / <code>argon2</code> hashing before exposing to internet.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>X-User-Id</code> Header Fallback</strong></td>
+<td style="text-align: left;"><code>middleware/auth.py</code> accepts client-supplied header if no Bearer token</td>
+<td style="text-align: left;"><strong>NO</strong> (Permitted for rapid role switching/testing)</td>
+<td style="text-align: left;"><strong>YES (CRITICAL)</strong></td>
+<td style="text-align: left;">CRITICAL</td>
+<td style="text-align: left;">Strip <code>X-User-Id</code> fallback; strictly enforce <code>verify_access_token()</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Hardcoded JWT Secret Fallback</strong></td>
+<td style="text-align: left;"><code>config.py</code> provides static default fallback</td>
+<td style="text-align: left;"><strong>NO</strong> (Working for local runs)</td>
+<td style="text-align: left;"><strong>YES (HIGH)</strong></td>
+<td style="text-align: left;">HIGH</td>
+<td style="text-align: left;">Require <code>JWT_SECRET</code> in environment; fail fast if missing.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>HTTP Cleartext Traffic</strong></td>
+<td style="text-align: left;">Mobile communicates over unencrypted HTTP</td>
+<td style="text-align: left;"><strong>NO</strong> (<code>usesCleartextTraffic="true"</code> configured)</td>
+<td style="text-align: left;"><strong>YES (HIGH)</strong></td>
+<td style="text-align: left;">HIGH</td>
+<td style="text-align: left;">Deploy TLS cert via Nginx / Cloudflare; re-compile Flutter with HTTPS.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Wildcard CORS</strong></td>
+<td style="text-align: left;"><code>CORS(app)</code> in <code>app.py</code> allows all origins <code>*</code></td>
+<td style="text-align: left;"><strong>NO</strong> (Ideal for multi-machine local test)</td>
+<td style="text-align: left;"><strong>YES (MEDIUM)</strong></td>
+<td style="text-align: left;">MEDIUM</td>
+<td style="text-align: left;">Restrict CORS to explicit institutional domains in <code>CORS(app, origins=[...])</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Missing Health Endpoint</strong></td>
+<td style="text-align: left;">No <code>/health</code> route exists in routes or <code>app.py</code></td>
+<td style="text-align: left;"><strong>NO</strong> (Not needed for basic operation)</td>
+<td style="text-align: left;">NO</td>
+<td style="text-align: left;">LOW</td>
+<td style="text-align: left;"><em>REQUIRES DECISION:</em> Implement <code>GET /health</code> if load balancers require uptime probing.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Local Logging via <code>print()</code></strong></td>
+<td style="text-align: left;">Output printed to standard console</td>
+<td style="text-align: left;"><strong>NO</strong> (Readable in dev console)</td>
+<td style="text-align: left;">NO</td>
+<td style="text-align: left;">MEDIUM</td>
+<td style="text-align: left;">Configure standard <code>logging</code> with timed rotating file handlers.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Missing FCM Service Key</strong></td>
+<td style="text-align: left;">Handled gracefully in <code>extensions.py</code></td>
+<td style="text-align: left;"><strong>NO</strong> (Notifications gracefully disable)</td>
+<td style="text-align: left;">NO (Non-push features work)</td>
+<td style="text-align: left;">LOW</td>
+<td style="text-align: left;">Provide <code>firebase_credentials.json</code> if physical push is required.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>20. EXACT COPY-PASTE COMMANDS</h2>
+<h3>Windows Server (Command Line / PowerShell)</h3>
+<pre><code class="language-powershell"># 1. Initialize environment
+cd d:\DEVLOPEMENT\ezzo_7.5\backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 2. Setup MySQL database
+mysql -u root -p -e &quot;CREATE DATABASE IF NOT EXISTS attentify CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;&quot;
+
+# 3. Seed deterministic physical test records
+python seed_test_data.py --verify
+
+# 4. Open Windows Firewall ports
+New-NetFirewallRule -DisplayName &quot;CampusOS-5000&quot; -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue
+
+# 5. Start Flask backend
+python app.py
+</code></pre>
+<h3>Linux Server (Bash)</h3>
+<pre><code class="language-bash"># 1. Initialize environment
+cd /opt/campusos/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Setup MySQL database
+sudo mysql -e &quot;CREATE DATABASE IF NOT EXISTS attentify CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;&quot;
+
+# 3. Seed test data
+python seed_test_data.py --verify
+
+# 4. Open firewall
+sudo ufw allow 5000/tcp
+sudo ufw allow 3000/tcp
+
+# 5. Start production WSGI
+gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
+</code></pre>
+<h3>Flutter Client Compilation (Deploy to 5 Phones)</h3>
+<pre><code class="language-bash">cd d:\DEVLOPEMENT\ezzo_7.5\flutter_frontent
+# Replace 192.168.1.100 with your actual server LAN IP
+flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.1.100:5000
+</code></pre>
+<h3>React Admin Web Launch</h3>
+<pre><code class="language-bash">cd d:\DEVLOPEMENT\ezzo_7.5\admin-web
+npm install
+npm run dev -- --host 0.0.0.0
+</code></pre>
+<hr />
+<h2>21. TROUBLESHOOTING RUNBOOK</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Symptom / Error Message</th>
+<th style="text-align: left;">Root Cause</th>
+<th style="text-align: left;">Exact Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>CRITICAL CONFIGURATION ERROR: 'GATE_PASS_SECRET' environment variable is not configured</code></td>
+<td style="text-align: left;">Missing <code>GATE_PASS_SECRET</code> in <code>backend/.env</code></td>
+<td style="text-align: left;">Add <code>GATE_PASS_SECRET=campusos_gate_sec_7a9f82d1c4b8e053a6f1d2e4c8b7a9f0</code> to <code>backend/.env</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Institutional signing key is not configured. Set the 'PASSPORT_INSTITUTION_PRIVATE_KEY' environment variable</code></td>
+<td style="text-align: left;">Missing Ed25519 root private key</td>
+<td style="text-align: left;">Add <code>PASSPORT_INSTITUTION_PRIVATE_KEY=t6s2qBfceKH/2cFn7Fy/yD7NdY+650e369ujP4/VD2E=</code> to <code>backend/.env</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>PyMySQL.err.OperationalError: (2003, "Can't connect to MySQL server")</code></td>
+<td style="text-align: left;">MySQL service is stopped or port 3306 blocked</td>
+<td style="text-align: left;">Start MySQL service: <code>net start MySQL80</code> (Windows) or <code>sudo systemctl start mysql</code> (Linux).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>SocketException: OS Error: Connection refused, errno = 111</code> on mobile</td>
+<td style="text-align: left;">Phone cannot reach backend port 5000</td>
+<td style="text-align: left;">1. Ensure phone and server are on identical Wi-Fi SSID.<br>2. Confirm Wi-Fi AP has "Client Isolation" disabled.<br>3. Open port 5000 in Windows Firewall.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Login failed: This account is locked to another device</code> (Student login)</td>
+<td style="text-align: left;">Student <code>device_id</code> does not match database record</td>
+<td style="text-align: left;">Execute reset command: <code>python -c "from app import app, db; from models.user import User; app.app_context().push(); u = User.query.filter_by(email='student@campusos.edu').first(); u.device_id = None; db.session.commit(); print('Device unlocked')"</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Cryptographic verification failed: Signature mismatch / tampering detected</code> at Security Gate</td>
+<td style="text-align: left;"><code>GATE_PASS_SECRET</code> on server was rotated after pass was issued</td>
+<td style="text-align: left;">Re-issue gate pass from Student phone or re-run <code>python seed_test_data.py</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Cryptographic presentation rejected: Verification failed</code> at Mess Scanner</td>
+<td style="text-align: left;">Student device identity certificate signed by different institution key ID</td>
+<td style="text-align: left;">Ensure student device certificate was generated against current <code>PASSPORT_INSTITUTION_PRIVATE_KEY</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>22. FINAL DEPLOYMENT CHECKLIST</h2>
+<p>Before beginning the physical testing session, verify off all 10 checkpoints:</p>
+<ul>
+<li>[ ] <strong>Database Running:</strong> MySQL server is active and accessible via <code>DATABASE_URL</code>.</li>
+<li>[ ] <strong>Table Count Verified:</strong> Exactly 27 relational tables present in database <code>attentify</code>.</li>
+<li>[ ] <strong>Deterministic Seed Loaded:</strong> <code>python seed_test_data.py --verify</code> exits cleanly with <code>0</code> errors.</li>
+<li>[ ] <strong>Backend Secrets Set:</strong> <code>GATE_PASS_SECRET</code> and <code>PASSPORT_INSTITUTION_PRIVATE_KEY</code> populated in <code>.env</code>.</li>
+<li>[ ] <strong>Backend Bound to LAN:</strong> Flask listening on <code>0.0.0.0:5000</code>.</li>
+<li>[ ] <strong>Firewall Ports Open:</strong> Inbound TCP 5000 and 3000 allowed on server.</li>
+<li>[ ] <strong>Wi-Fi Isolation Disabled:</strong> Server and mobile phones can ping each other across LAN.</li>
+<li>[ ] <strong>Flutter APK Built:</strong> Compiled with <code>--dart-define=API_BASE_URL=http://&lt;SERVER_LAN_IP&gt;:5000</code>.</li>
+<li>[ ] <strong>Cleartext Traffic Enabled:</strong> <code>android:usesCleartextTraffic="true"</code> confirmed in <code>AndroidManifest.xml</code>.</li>
+<li>[ ] <strong>Admin Web Accessible:</strong> Vite dev server accessible from client browsers at <code>http://&lt;SERVER_LAN_IP&gt;:3000</code>.</li>
+</ul>
+<hr />
+<h2>23. ROLLBACK PROCEDURE</h2>
+<p>If the backend encounters unexpected runtime data corruption during multi-device testing:</p>
+<pre><code class="language-bash"># 1. Stop Flask backend (CTRL+C)
+
+# 2. Execute automated deterministic database purge &amp; re-seed
+cd d:\DEVLOPEMENT\ezzo_7.5\backend
+python seed_test_data.py --reset
+
+# 3. Alternatively, restore previous clean MySQL snapshot
+mysql -u root -p attentify &lt; ..\backups\attentify_clean_predeploy.sql
+
+# 4. Clear client-side offline caches on test mobile devices
+# (In Android Settings -&gt; Apps -&gt; CampusOS -&gt; Storage -&gt; Clear Storage &amp; Cache)
+
+# 5. Restart Flask backend
+python app.py
+</code></pre>
+</body>
+</html>

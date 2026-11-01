@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update, delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Attendance collection
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if false; // Prevent deletion
+    }
+    
+    // Sessions collection
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated(); // Can be restricted to instructors
+      allow delete: if false; // Prevent deletion
+    }
+    
+    // Coupons collection
+    match /coupons/{couponId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if false; // Prevent deletion
+    }
+  }
+}

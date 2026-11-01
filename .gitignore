@@ -1,0 +1,73 @@
+# Environment & secrets
+.env
+.env.*
+*.key
+*.pem
+*credentials*.json
+firebase_credentials.json
+google-services.json
+GoogleService-Info.plist
+!*.example.json
+!*.example.dart
+
+# Binary builds, archives & compiled packages
+*.apk
+*.aab
+*.zip
+*.tar.gz
+
+# Nested reference repositories (external open source clones)
+bitchat/
+bitchat-android/
+localsend/
+
+# Browser & PDF generator profiles/cache
+.edge_pdf_profile/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+
+# Node / Web
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# IDEs & System files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

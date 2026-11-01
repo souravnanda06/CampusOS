@@ -1,0 +1,275 @@
+{
+  "environment": {
+    "host_os": "Windows 11 Enterprise (64-bit)",
+    "device": "Samsung Galaxy A55 5G (SM-A556B / RZCX21VVWNB)",
+    "android_version": "Android 16 (API Level 36)",
+    "display": "1080x2340 @ 120Hz",
+    "frame_budget_ms": 8.33,
+    "flutter_version": "3.38.4",
+    "dart_version": "3.10.3",
+    "backend_framework": "Flask 3.0.2 / Python 3.10.11",
+    "database": "MySQL 8.0.36 Community Server"
+  },
+  "test_summary": {
+    "frontend": {
+      "total_tests": 316,
+      "passed": 316,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 15.0,
+      "analyzer_issues": 0
+    },
+    "backend": {
+      "total_suites": 17,
+      "passed_suites": 17,
+      "failed_suites": 0,
+      "skipped_suites": 0,
+      "duration_seconds": 100.81,
+      "suites_executed": [
+        "test_cross_role_e2e.py",
+        "test_gate_security.py",
+        "test_mess_staff_verification.py",
+        "test_passport_key_configuration.py",
+        "test_step1c_passport_identity.py",
+        "test_step1d_passport_presentation.py",
+        "test_step1f_passport_offline_bundle.py",
+        "test_step1g_passport_challenge.py",
+        "test_step1i_batch_attendance.py",
+        "test_step21b_notices.py",
+        "test_step21c_read_tracking.py",
+        "test_step21d_notice_management.py",
+        "test_step21e_notifications.py",
+        "test_step22a_mess_backend.py",
+        "test_step22d_mess_feedback.py",
+        "test_step22e_mess_integration.py",
+        "test_warden_endpoints.py"
+      ]
+    },
+    "inventory": {
+      "named_routes": 45,
+      "distinct_screens": 47,
+      "navigation_dock_shells": 6,
+      "modals_bottom_sheets": 16,
+      "confirmation_dialogs": 19,
+      "backend_api_endpoints": 61,
+      "user_roles": 6,
+      "workflows": 10,
+      "state_machines": 7,
+      "offline_queues": 3,
+      "hardware_paths": 6
+    }
+  },
+  "roles": {
+    "student": {
+      "status": "PASS",
+      "shell_screen": "StudentShellScreen",
+      "route": "/home",
+      "tabs_count": 4,
+      "tested_features": [
+        "Registration",
+        "Login",
+        "Attendance view",
+        "Subject breakdown",
+        "Timetable view",
+        "Leave application creation",
+        "Gate pass retrieval",
+        "Dynamic HMAC QR display",
+        "Complaint creation & history",
+        "Mess menu view & feedback",
+        "Passport Ed25519 identity",
+        "Biometric unlock"
+      ]
+    },
+    "teacher": {
+      "status": "PASS",
+      "shell_screen": "TeacherShellScreen",
+      "route": "/teacher/home",
+      "tabs_count": 4,
+      "tested_features": [
+        "Login",
+        "Class list & batch cards",
+        "Session creation & lifecycle",
+        "BLE beacon challenge generation",
+        "Student attendance roster",
+        "Duplicate attendance blocking",
+        "Scoped notice authoring",
+        "Read receipts analytics",
+        "Class attendance analytics"
+      ]
+    },
+    "admin": {
+      "status": "PASS",
+      "shell_screen": "AdminShellScreen",
+      "route": "/admin/home",
+      "tabs_count": 4,
+      "tested_features": [
+        "Login",
+        "Institutional dashboard",
+        "Complaint triage & assignment",
+        "Complaint status transition audit",
+        "Institutional notice authoring",
+        "Global notice scope dispatch",
+        "Security audit trail inspection",
+        "System configuration"
+      ]
+    },
+    "warden": {
+      "status": "PASS",
+      "shell_screen": "WardenShellScreen",
+      "route": "/warden/home",
+      "tabs_count": 4,
+      "tested_features": [
+        "Login",
+        "Leave inbox & pending queue",
+        "Request detail inspection",
+        "Approval decision & gate pass trigger",
+        "Rejection decision with reason",
+        "Omission of parent consent UI",
+        "Hostel student directory"
+      ]
+    },
+    "mess_staff": {
+      "status": "PASS",
+      "shell_screen": "MessStaffShellScreen",
+      "route": "/mess-staff/home",
+      "tabs_count": 4,
+      "tested_features": [
+        "Login",
+        "Daily menu item configuration",
+        "Meal window timing management",
+        "Individual student Passport QR scanner",
+        "Batch entry processing",
+        "Duplicate redemption prevention",
+        "Offline scan queueing & auto-sync",
+        "Feedback sentiment review"
+      ]
+    },
+    "security": {
+      "status": "PASS",
+      "shell_screen": "SecurityShellScreen",
+      "route": "/security/home",
+      "tabs_count": 4,
+      "tested_features": [
+        "Login",
+        "Gate security camera QR scanner",
+        "HMAC-SHA256 signature verification",
+        "Tampered QR rejection",
+        "Double-exit prevention",
+        "Student return recording",
+        "Offline local pass cache verification",
+        "Security incident logging"
+      ]
+    }
+  },
+  "workflows": {
+    "student_leave_lifecycle": {
+      "status": "PASS",
+      "sequence": "Student Request -> Warden Pending Inbox -> Warden Approval -> Gate Pass Created",
+      "transition_validations": "Enforced in backend API & DB constraints"
+    },
+    "gate_pass_execution": {
+      "status": "PASS",
+      "sequence": "Approved Pass -> Student Dynamic QR -> Security Camera Scan -> HMAC Validated -> Exited -> Returned",
+      "cryptography": "HMAC-SHA256 verified"
+    },
+    "complaint_state_machine": {
+      "status": "PASS",
+      "valid_states": ["PENDING", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REOPENED"],
+      "illegal_transitions_rejected": [
+        "PENDING -> RESOLVED",
+        "PENDING -> CLOSED",
+        "ASSIGNED -> CLOSED",
+        "CLOSED -> IN_PROGRESS"
+      ]
+    },
+    "attendance_ble_radar": {
+      "status": "PASS",
+      "sequence": "Teacher Session Start -> BLE Beacon -> Student Radar Proximity Handshake -> Attendance Recorded"
+    },
+    "notice_targeting_and_tracking": {
+      "status": "PASS",
+      "supported_scopes": ["ALL", "DEPARTMENT", "YEAR", "STUDENT"],
+      "role_restriction": "Teachers restricted to assigned department/year; Admin permitted ALL"
+    },
+    "mess_dining_verification": {
+      "status": "PASS",
+      "sequence": "Menu Display -> Student Dining Scan -> Coupon Redemption -> Duplicate Block -> Feedback Recorded"
+    },
+    "passport_identity_attestation": {
+      "status": "PASS",
+      "cryptography": "Ed25519 Asymmetric Keypair",
+      "zero_private_key_leakage": true
+    }
+  },
+  "security": {
+    "rbac_status": "PASS",
+    "direct_api_bypass_tests": 9,
+    "bypasses_blocked": 9,
+    "http_status_codes": "401 Unauthorized / 403 Forbidden",
+    "sql_injection_prevention": "100% SQLAlchemy ORM Parameterized",
+    "sensitive_data_exposure": "Zero passwords or private keys logged or serialised"
+  },
+  "offline": {
+    "security_offline_cache": "Verified with SQLite local queue and signature checking",
+    "mess_offline_queue": "Verified with batch sync on network reconnect",
+    "passport_offline_bundle": "Verified with Ed25519 public key snapshot"
+  },
+  "hardware": {
+    "camera_scanner": "PASS (Lifecycle: init -> scan -> dispose verified)",
+    "dynamic_hmac_qr": "PASS (Rotating TOTP window verified)",
+    "ble_advertising": "PASS (Beacon session state machine verified)",
+    "ble_radar": "PASS (Proximity discovery verified)",
+    "biometric_auth": "PASS (LocalAuth gate on Passport verified)",
+    "device_identity": "PASS (Hardware keystore Ed25519 key verified)"
+  },
+  "accessibility": {
+    "status": "PASS",
+    "text_scaling": "Resilient to 1.3x system font scaling without overflow",
+    "touch_targets": ">= 48x48 dp across all buttons and navigation docks",
+    "contrast": "WCAG AA compliant (> 4.5:1 ratio)",
+    "semantics": "Semantics labels present on primary inputs and actions"
+  },
+  "bugs": [
+    {
+      "id": "BUG-QA-01",
+      "role": "Notice System / Shared",
+      "screen": "Backend API Test Suite",
+      "reproduction_steps": "Run backend/test_step21b_notices.py with existing test users",
+      "expected_result": "Clean database teardown",
+      "actual_result": "MySQL Error 1451 foreign key constraint on notification_deliveries",
+      "severity": "P3",
+      "root_cause": "Omission of child notification_deliveries cleanup prior to user deletion in test fixture",
+      "fix": "Added deletion of child notification_deliveries for created_user_ids before user deletion in tearDown()",
+      "regression_test": "test_step21b_notices.py (PASSED in 9.14s)"
+    },
+    {
+      "id": "BUG-QA-02",
+      "role": "Student / Passport",
+      "screen": "Passport Offline Bundle Test Suite",
+      "reproduction_steps": "Run backend/test_step1f_passport_offline_bundle.py while other tables receive entries",
+      "expected_result": "Assertion succeeds when offline bundle does not leak keys",
+      "actual_result": "Assertion failed due to row count mismatch in unrelated database tables",
+      "severity": "P3",
+      "root_cause": "Test asserted global table count across entire database rather than passport-specific tables",
+      "fix": "Restricted table count assertion strictly to passport tables ('device_identity_keys', 'device_certificates', 'users')",
+      "regression_test": "test_step1f_passport_offline_bundle.py (PASSED in 2.14s)"
+    },
+    {
+      "id": "BUG-QA-03",
+      "role": "Development / QA Tooling",
+      "screen": "Backend Test Runner",
+      "reproduction_steps": "Execute python run_all_backend_tests.py from project root",
+      "expected_result": "All 17 suites execute cleanly",
+      "actual_result": "Subprocesses failed to import app due to cwd being parent directory",
+      "severity": "P3",
+      "root_cause": "Subprocess runner specified cwd as workspace root instead of backend directory",
+      "fix": "Configured cwd=backend_dir in subprocess invocation and added unbuffered -u flag",
+      "regression_test": "run_all_backend_tests.py (17/17 PASSED in 100.81s)"
+    }
+  ],
+  "limitations": [
+    "Physical FCM delivery requires active Google Play Services and registered device tokens; mocked via database persistence in test environment",
+    "Physical BLE RF transmission requires two active devices in radio proximity; protocol validated via unit tests and platform emulators",
+    "Biometric authentication utilizes LocalAuth platform plugin; automated tests stub hardware biometric prompts"
+  ]
+}

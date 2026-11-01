@@ -1,0 +1,12 @@
+# Local environment variables and secrets
+.env
+.env.*
+*.key
+*.pem
+firebase_credentials.json
+*credentials*.json
+!*.example.json
+
+# Python bytecode
+__pycache__/
+*.py[cod]

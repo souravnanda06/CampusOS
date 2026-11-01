@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CampusOS — Complete Product & Implementation Documentation</title>
+    <style>
+    
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+        size: A4 portrait;
+        margin: 20mm 16mm 20mm 16mm;
+        @bottom-right {
+            content: "Page " counter(page) " of " counter(pages);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 8pt;
+            color: #64748B;
+        }
+        @bottom-left {
+            content: "CampusOS — BPUT Hackathon PS07 Documentation";
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 8pt;
+            color: #64748B;
+        }
+    }
+
+    body {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 10pt;
+        line-height: 1.6;
+        color: #1E293B;
+        background-color: #FFFFFF;
+        margin: 0;
+        padding: 0;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        color: #0F172A;
+        font-weight: 700;
+        margin-top: 1.4em;
+        margin-bottom: 0.5em;
+        page-break-after: avoid;
+    }
+
+    h1 {
+        font-size: 24pt;
+        letter-spacing: -0.5px;
+        line-height: 1.2;
+        border-bottom: 2px solid #0F172A;
+        padding-bottom: 8px;
+        margin-top: 0;
+    }
+
+    h2 {
+        font-size: 15pt;
+        letter-spacing: -0.3px;
+        border-bottom: 1px solid #E2E8F0;
+        padding-bottom: 5px;
+        margin-top: 1.8em;
+    }
+
+    h3 {
+        font-size: 12pt;
+        color: #1E293B;
+    }
+
+    h4 {
+        font-size: 10.5pt;
+        color: #334155;
+    }
+
+    p {
+        margin: 0.6em 0;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.2em 0;
+        font-size: 8.5pt;
+        page-break-inside: avoid;
+        background: #FFFFFF;
+    }
+
+    th, td {
+        border: 1px solid #CBD5E1;
+        padding: 6px 10px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    th {
+        background-color: #0F172A;
+        color: #F8FAFC;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 7.5pt;
+        letter-spacing: 0.5px;
+    }
+
+    tr:nth-child(even) td {
+        background-color: #F8FAFC;
+    }
+
+    pre {
+        background-color: #0F172A;
+        color: #E2E8F0;
+        padding: 12px 14px;
+        border-radius: 6px;
+        font-family: 'JetBrains Mono', Consolas, monospace;
+        font-size: 8pt;
+        line-height: 1.45;
+        overflow-x: auto;
+        page-break-inside: avoid;
+        border: 1px solid #1E293B;
+        margin: 1em 0;
+    }
+
+    code {
+        font-family: 'JetBrains Mono', Consolas, monospace;
+        font-size: 8.5pt;
+        background-color: #F1F5F9;
+        color: #0F172A;
+        padding: 2px 5px;
+        border-radius: 4px;
+        border: 1px solid #E2E8F0;
+    }
+
+    pre code {
+        background-color: transparent;
+        color: inherit;
+        padding: 0;
+        border: none;
+    }
+
+    blockquote {
+        margin: 1em 0;
+        padding: 10px 16px;
+        border-left: 4px solid #2563EB;
+        background-color: #F8FAFC;
+        color: #334155;
+        page-break-inside: avoid;
+        border-radius: 0 4px 4px 0;
+    }
+
+    .callout {
+        margin: 1.2em 0;
+        padding: 12px 16px;
+        border-radius: 6px;
+        page-break-inside: avoid;
+        border-left: 5px solid;
+    }
+
+    .callout-title {
+        font-weight: 700;
+        font-size: 9pt;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .callout-body {
+        font-size: 9.5pt;
+    }
+
+    .callout-note {
+        background-color: #EFF6FF;
+        border-color: #2563EB;
+        color: #1E3A8A;
+    }
+
+    .callout-important {
+        background-color: #F5F3FF;
+        border-color: #7C3AED;
+        color: #4C1D95;
+    }
+
+    .callout-warning {
+        background-color: #FFFBEB;
+        border-color: #D97706;
+        color: #78350F;
+    }
+
+    .callout-tip {
+        background-color: #ECFDF5;
+        border-color: #059669;
+        color: #064E3B;
+    }
+
+    ul, ol {
+        margin: 0.6em 0;
+        padding-left: 20px;
+    }
+
+    li {
+        margin-bottom: 4px;
+    }
+
+    hr {
+        border: none;
+        border-top: 1px solid #E2E8F0;
+        margin: 2em 0;
+    }
+
+    .cover-meta {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 2em;
+    }
+
+    .cover-meta table {
+        margin: 0;
+        background: transparent;
+    }
+
+    .cover-meta td {
+        border: none;
+        padding: 4px 8px;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 7.5pt;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+    }
+
+    .badge-green { background: #DCFCE7; color: #166534; }
+    .badge-yellow { background: #FEF9C3; color: #854D0E; }
+    .badge-blue { background: #DBEAFE; color: #1E40AF; }
+    .badge-red { background: #FEE2E2; color: #991B1B; }
+
+    .page-break {
+        page-break-before: always;
+    }
+    
+    </style>
+</head>
+<body>
+    <h1>CAMPUSOS</h1>
+<h2>Complete Product, Architecture, Protocol &amp; Implementation Specification</h2>
+<p><strong>Document Version:</strong> 4.0 (Unified Production, Security &amp; Decentralized Mesh Baseline)<br />
+<strong>Date:</strong> October 8, 2026<br />
+<strong>Problem Statement:</strong> BPUT Hackathon 2026 — Problem Statement PS07 (<em>Institutional Campus Operating System &amp; Disaster Offline Survivability</em>)<br />
+<strong>System Classification:</strong> Enterprise Campus Operating System with Peer-to-Peer BLE 5.x Mesh Fabric &amp; LocalSend Wi-Fi LAN P2P<br />
+<strong>Audience:</strong> Hackathon Technical Judges, University Deans, Systems Architects, Security Auditors, Institutional Contributor Teams<br />
+<strong>Authoritative Source of Truth:</strong> Active Monorepo (<code>frontend/</code>, <code>backend/</code>, <code>admin-web/</code>) &amp; 100% Verified Automated Test Harness<br />
+<strong>Verified Quality Baseline:</strong> 449 Flutter Core Tests (100% Pass) | 183 Decentralized Mesh Tests (100% Pass) | 19 Backend Integration Suites (100% Pass, 41 Penetration Checks Verified)<br />
+<strong>Binary Release Artifacts:</strong> <code>CampusOS.apk</code> (86.4 MB Release Package) | <code>CampusOS_Complete_Product_and_Implementation_Documentation.pdf</code> (Print-Ready System Specification)  </p>
+<hr />
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-executive-summary--institutional-vision">Executive Summary &amp; Institutional Vision</a></li>
+<li><a href="#2-problem-statement--bput-hackathon-ps07-context">Problem Statement &amp; BPUT Hackathon PS07 Context</a></li>
+<li><a href="#3-product-vision--core-operating-philosophy">Product Vision &amp; Core Operating Philosophy</a></li>
+<li><a href="#4-six-institutional-roles--access-control-architecture">Six Institutional Roles &amp; Access Control Architecture</a></li>
+<li><a href="#5-the-student-experience--digital-lifecycle">The Student Experience &amp; Digital Lifecycle</a></li>
+<li><a href="#6-the-campus-wallet-6-card-physical-carousel">The Campus Wallet (6-Card Physical Carousel)</a></li>
+<li><a href="#7-campusos-passport-cryptographic-identity--pki">CampusOS Passport: Cryptographic Identity &amp; PKI</a></li>
+<li><a href="#8-attendance-verification-system-ble-proximity--dynamic-qr">Attendance Verification System (BLE Proximity &amp; Dynamic QR)</a></li>
+<li><a href="#9-mess--dining-system-tokenless-anti-proxy-verification">Mess &amp; Dining System (Tokenless Anti-Proxy Verification)</a></li>
+<li><a href="#10-hostel-leave-gate-pass--perimeter-physical-security">Hostel Leave, Gate Pass &amp; Perimeter Physical Security</a></li>
+<li><a href="#11-grievance-redressal-sla-tracking--nlp-complaint-clustering">Grievance Redressal, SLA Tracking &amp; NLP Complaint Clustering</a></li>
+<li><a href="#12-scoped-notices-targeted-circulars--read-tracking-receipts">Scoped Notices, Targeted Circulars &amp; Read Tracking Receipts</a></li>
+<li><a href="#13-hostel--room-asset-management">Hostel &amp; Room Asset Management</a></li>
+<li><a href="#14-documents--official-certificate-issuance-engine">Documents &amp; Official Certificate Issuance Engine</a></li>
+<li><a href="#15-fees-dues--financial-records-management">Fees, Dues &amp; Financial Records Management</a></li>
+<li><a href="#16-visitor-management--security-check-in">Visitor Management &amp; Security Check-In</a></li>
+<li><a href="#17-academic-updates--schedule-shifting-feed">Academic Updates &amp; Schedule Shifting Feed</a></li>
+<li><a href="#18-admin-mobile-operations-console">Admin Mobile Operations Console</a></li>
+<li><a href="#19-react-19-admin-web-control-plane-complete-17-module-architecture">React 19 Admin Web Control Plane (Complete 17-Module Architecture)</a></li>
+<li><a href="#20-profile-vs-settings-architectural-separation">Profile vs. Settings Architectural Separation</a></li>
+<li><a href="#21-multilingual-localization--accessibility-conformance">Multilingual Localization &amp; Accessibility Conformance</a></li>
+<li><a href="#22-offline-operation--delay-tolerant-synchronization">Offline Operation &amp; Delay-Tolerant Synchronization</a></li>
+<li><a href="#23-campusos-decentralized-ble-mesh-network--academic-airdrop-phases-m1m7">CampusOS Decentralized BLE Mesh Network &amp; Academic AirDrop (Phases M1–M7)</a><ul>
+<li><a href="#231-multi-tier-zero-infrastructure-architecture">23.1 Multi-Tier Zero-Infrastructure Architecture</a></li>
+<li><a href="#232-phase-m1-ed25519-peer-cryptographic-identity--trust-bundles">23.2 Phase M1: Ed25519 Peer Cryptographic Identity &amp; Trust Bundles</a></li>
+<li><a href="#233-phase-m2-wire-protocol-packet-envelope--multi-hop-relay-engine">23.3 Phase M2: Wire Protocol, Packet Envelope &amp; Multi-Hop Relay Engine</a></li>
+<li><a href="#234-phase-m3-interactive-mesh-hub-live-peer-radar--peer-registry">23.4 Phase M3: Interactive Mesh Hub, Live Peer Radar &amp; Peer Registry</a></li>
+<li><a href="#235-phase-m4-off-grid-scoped-channel-communications-general-hostel-emergency">23.5 Phase M4: Off-Grid Scoped Channel Communications (#general, #hostel, #emergency)</a></li>
+<li><a href="#236-phase-m5a-pure-offline-ble-mesh-academic-airdrop--2-mb">23.6 Phase M5A: Pure Offline BLE Mesh Academic AirDrop (&lt;= 2 MB)</a></li>
+<li><a href="#237-phase-m5b-hybrid-local-wi-fi-airdrop--localsend-udptcp-integration--100-mb-50-mbs">23.7 Phase M5B: Hybrid Local Wi-Fi AirDrop &amp; LocalSend UDP/TCP Integration (&lt;= 100 MB, 50 MB/s)</a></li>
+<li><a href="#238-phase-m6-emergency-disaster-flare-system-audio-siren--vibration-overrides">23.8 Phase M6: Emergency Disaster Flare System, Audio Siren &amp; Vibration Overrides</a></li>
+<li><a href="#239-phase-m7-physical-validation-harness--stage-simulation-engine">23.9 Phase M7: Physical Validation Harness &amp; Stage Simulation Engine</a></li>
+<li><a href="#2310-binary-packet-codecs-header-specifications--deduplication">23.10 Binary Packet Codecs, Header Specifications &amp; Deduplication</a></li>
+</ul>
+</li>
+<li><a href="#24-cryptographic-specifications--security-primitives">Cryptographic Specifications &amp; Security Primitives</a></li>
+<li><a href="#25-security-architecture-threat-model--41-penetration-attack-tests">Security Architecture, Threat Model &amp; 41 Penetration Attack Tests</a></li>
+<li><a href="#26-backend-architecture--modular-flask-monolith">Backend Architecture &amp; Modular Flask Monolith</a></li>
+<li><a href="#27-comprehensive-relational-database-schema-27-mysql-tables">Comprehensive Relational Database Schema (27 MySQL Tables)</a></li>
+<li><a href="#28-complete-rest-api-landscape--endpoint-catalog-19-blueprints">Complete REST API Landscape &amp; Endpoint Catalog (19 Blueprints)</a></li>
+<li><a href="#29-mobile-client-architecture--state-management-flutter">Mobile Client Architecture &amp; State Management (Flutter)</a></li>
+<li><a href="#30-performance-optimization-frame-budgets--120hz-benchmarks">Performance Optimization, Frame Budgets &amp; 120Hz Benchmarks</a></li>
+<li><a href="#31-adaptive-performance-engine--thermal-throttling-guards">Adaptive Performance Engine &amp; Thermal Throttling Guards</a></li>
+<li><a href="#32-quality-assurance-reality-audit--verified-limitations">Quality Assurance, Reality Audit &amp; Verified Limitations</a></li>
+<li><a href="#33-comprehensive-automated-testing-harness-backend-frontend-mesh">Comprehensive Automated Testing Harness (Backend, Frontend, Mesh)</a></li>
+<li><a href="#34-physical-network-deployment--demonstration-topology">Physical Network Deployment &amp; Demonstration Topology</a></li>
+<li><a href="#35-deterministic-test-data-generation--multi-role-seeding">Deterministic Test Data Generation &amp; Multi-Role Seeding</a></li>
+<li><a href="#36-production-deployment-runbook-nginx-gunicorn-systemd-mysql-8-hardening-ssl">Production Deployment Runbook (Nginx, Gunicorn, systemd, MySQL 8 Hardening, SSL)</a></li>
+<li><a href="#37-smartphone-optional--assisted-access-kiosk-architecture">Smartphone-Optional / Assisted Access Kiosk Architecture</a></li>
+<li><a href="#38-institutional-migration-center--ai-assisted-ingestion-roadmap">Institutional Migration Center &amp; AI-Assisted Ingestion (Roadmap)</a></li>
+<li><a href="#39-end-to-end-cross-role-operational-workflows">End-to-End Cross-Role Operational Workflows</a></li>
+<li><a href="#40-role-based-user-journeys-all-6-roles">Role-Based User Journeys (All 6 Roles)</a></li>
+<li><a href="#41-design-system--human-interface-guidelines">Design System &amp; Human-Interface Guidelines</a></li>
+<li><a href="#42-complete-repository--component-directory-map">Complete Repository &amp; Component Directory Map</a></li>
+<li><a href="#43-live-stage-demonstration--evaluation-playbook">Live Stage Demonstration &amp; Evaluation Playbook</a></li>
+<li><a href="#44-master-implementation-status-matrix">Master Implementation Status Matrix</a></li>
+<li><a href="#45-final-product-synthesis--future-roadmap">Final Product Synthesis &amp; Future Roadmap</a></li>
+</ol>
+<hr />
+<h2>1. Executive Summary &amp; Institutional Vision</h2>
+<p><strong>CampusOS</strong> is a unified, offline-resilient, multi-role digital campus operating platform engineered for universities, engineering colleges, and polytechnic campuses governed under frameworks such as BPUT (Biju Patnaik University of Technology). It eliminates administrative friction, proxy fraud, and communication collapse by replacing fragmented manual paper registers, vulnerable roll calls, unverified paper slips, and informal social media groups with an authoritative digital operating layer.</p>
+<p>Historically, campus management software treats institutions as static administrative offices with constant, high-speed fiber internet. In reality, residential engineering campuses face deep operational and infrastructural constraints:<br />
+- <strong>Network Fragility:</strong> Concrete hostel basements, underground lab facilities, rural boundary gates, and coastal weather events (e.g., Cyclones Fani or Dana in Odisha) consistently sever internet and cellular towers.<br />
+- <strong>Operational Fragmentation:</strong> Attendance is tracked in paper registers; mess dining uses plastic tokens; hostel leave requires walking across campus for physical signatures; complaints disappear in unmoderated WhatsApp chats; and deans have zero real-time operational visibility.<br />
+- <strong>Security &amp; Identity Vulnerabilities:</strong> Traditional student ID cards and static QR codes are trivially forged, screenshotted, and proxied.</p>
+<p>CampusOS unites all six primary campus stakeholders—<strong>Students</strong>, <strong>Teachers</strong>, <strong>Hostel Wardens</strong>, <strong>Mess Staff</strong>, <strong>Gate Security Guards</strong>, and <strong>System Administrators / Deans</strong>—around an authoritative MySQL 8 relational database, device-bound Ed25519 cryptographic identities (<strong>CampusOS Passport</strong>), and an autonomous <strong>Decentralized BLE Mesh &amp; Hybrid AirDrop Network</strong> (Phases M1–M7) that continues to function without internet, cellular connectivity, or central servers.</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                                CAMPUSOS CORE VALUE PILLARS                            |
++---------------------------------------------------------------------------------------+
+| 1. UNIFIED MULTI-ROLE FABRIC  : 6 Roles in 1 System | Cascading Cross-Role Workflows  |
+| 2. CRYPTOGRAPHIC PASSPORT     : Ed25519 Device-Bound Identity | 30s Dynamic QR Codes  |
+| 3. ZERO-INFRASTRUCTURE MESH   : BLE 5.x Multi-Hop Relay | LocalSend Wi-Fi AirDrop     |
+| 4. EMERGENCY DISASTER FLARES  : Authority-Signed SOS Siren | Store &amp; Forward Data Mule|
+| 5. DEAN COMMAND PLANE         : React 19 Desktop Console | 17 Operational Modules     |
+| 6. ADAPTIVE RUNTIME ENGINE    : 120Hz Smooth Rendering | Zero Heap Memory Leaks       |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<hr />
+<h2>2. Problem Statement &amp; BPUT Hackathon PS07 Context</h2>
+<p>BPUT Hackathon 2026 Problem Statement PS07 charges engineering teams with building a modern, comprehensive digital operating platform for university campuses. The evaluation mandates five rigorous technical deliverables:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Deliverable</th>
+<th style="text-align: left;">Official BPUT PS07 Requirement</th>
+<th style="text-align: left;">CampusOS Verified Implementation</th>
+<th style="text-align: left;">Technical Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Deliverable 1</strong></td>
+<td style="text-align: left;">Unified Multi-Role Architecture</td>
+<td style="text-align: left;">Full integration across all 6 campus roles (Student, Teacher, Warden, Mess, Security, Dean) with strict Role-Based Access Control (RBAC).</td>
+<td style="text-align: left;"><code>backend/middleware/roles.py</code>, <code>frontend/lib/</code> role directories, React Admin Web.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Deliverable 2</strong></td>
+<td style="text-align: left;">Tamper-Proof Digital Identity &amp; Attendance</td>
+<td style="text-align: left;">Device-bound Ed25519 digital identity (CampusOS Passport) with 30s rotating dynamic QR codes, BLE attendance beacons, and offline trust bundles.</td>
+<td style="text-align: left;"><code>backend/routes/passport.py</code>, <code>frontend/lib/core/mesh/mesh_crypto.dart</code>, 41 passing security attack tests.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Deliverable 3</strong></td>
+<td style="text-align: left;">Cascading Campus Workflows</td>
+<td style="text-align: left;">Real-time leave approvals generating cryptographically signed HMAC-SHA256 Gate Passes, perimeter security transit logging, and tokenless dining fraud prevention.</td>
+<td style="text-align: left;"><code>backend/routes/leave.py</code>, <code>backend/routes/security.py</code>, <code>test_cross_role_e2e.py</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Deliverable 4</strong></td>
+<td style="text-align: left;">Low-Bandwidth Operation &amp; Disaster Survivability</td>
+<td style="text-align: left;">Autonomous peer-to-peer BLE 5.x mesh networking, store-and-forward data mules, and LocalSend UDP/TCP LAN AirDrop operating without cellular or internet connectivity.</td>
+<td style="text-align: left;"><code>frontend/lib/core/mesh/</code>, <code>docs/CAMPUSOS_MESH_COMPLETE_SPECIFICATION.md</code>, 183 automated mesh tests.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Deliverable 5</strong></td>
+<td style="text-align: left;">Production Readiness &amp; Administrative Control</td>
+<td style="text-align: left;">Desktop React 19 control plane with 17 operational modules, NLP grievance clustering, 120Hz mobile frame budget optimization, and complete MySQL 8 schema.</td>
+<td style="text-align: left;"><code>admin-web/src/features/</code>, <code>backend/models/</code>, <code>convert_doc_to_pdf.py</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>3. Product Vision &amp; Core Operating Philosophy</h2>
+<p>CampusOS is built upon five foundational engineering principles:</p>
+<ol>
+<li><strong>Zero-Assumption Connectivity (Offline-First):</strong> Every critical campus interaction—verifying student identity at the dining hall, marking lecture attendance in a basement classroom, scanning an authorized gate pass, or broadcasting an urgent cyclone evacuation notice—must execute seamlessly with zero internet connectivity.</li>
+<li><strong>Cryptographic Proof Over Human Trust:</strong> Plastic ID cards and paper passes rely on human fallibility. CampusOS replaces human inspection with mathematical guarantees: Ed25519 asymmetric signatures, HMAC-SHA256 tokens, and cryptographic nonces that guarantee authenticity, non-repudiation, and anti-replay protection.</li>
+<li><strong>Role Autonomy with Shared Reality:</strong> While each stakeholder operates through a purpose-built interface optimized for their physical environment (e.g., high-contrast 1-tap QR scanning for security guards, tactile card carousels for students, data-dense sorting grids for university deans), all actions update an authoritative relational state machine.</li>
+<li><strong>Zero Battery &amp; Memory Penalty:</strong> Autonomous mesh protocols and heavy mobile UIs must not drain student batteries or cause thermal throttling. CampusOS uses an <strong>Adaptive Performance Engine</strong> that enforces strict 8.33ms (120Hz) frame budgets, isolates GPU repaint boundaries, debounces camera scanners, and limits background mesh memory to under 15 MB RAM.</li>
+<li><strong>Equitable Multi-Lingual Participation:</strong> Higher education institutions in India feature linguistically diverse student bodies. CampusOS natively implements full runtime localization across English, Hindi, Odia, and Bengali, ensuring that language is never a barrier to academic or residential services.</li>
+</ol>
+<hr />
+<h2>4. Six Institutional Roles &amp; Access Control Architecture</h2>
+<p>CampusOS implements a strictly enforced <strong>Role-Based Access Control (RBAC)</strong> architecture. Every API endpoint inspects cryptographically signed HS256 JWT tokens containing verified role claims (<code>role</code>). In addition, the frontend dynamically configures role shells, navigation drawers, and authorized command desks based on verified claims.</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                              ROLE-BASED ACCESS CONTROL MATRIX                         |
++-------------------+---------+---------+---------+---------+---------+-----------------+
+| Module / Domain   | Student | Teacher | Warden  | Mess    | Security| Admin / Dean    |
++-------------------+---------+---------+---------+---------+---------+-----------------+
+| Campus Wallet     | R/W     | -       | -       | -       | -       | R (Audit)       |
+| Ed25519 Passport  | Present | Verify  | -       | Verify  | Verify  | CA / Revoke     |
+| Class Attendance  | CheckIn | Host    | -       | -       | -       | Global Analytics|
+| Hostel Leave Flow | Submit  | -       | Approve | -       | View Out| Policy Audit    |
+| Perimeter Passes  | View QR | -       | Approve | -       | Scan In | Shift Ledgers   |
+| Dining Mess Engine| Rate/Eat| -       | -       | Scan/Pub| -       | Revenue/Waste   |
+| Grievance Triage  | File    | -       | Triage  | -       | -       | SLA Clustering  |
+| Circular Notices  | Read    | Post Cls| Post Hst| -       | -       | Post All Campus |
+| Hostel Inventory  | Report  | -       | Allocate| -       | -       | Asset Ledgers   |
+| Official Docs     | Request | -       | -       | -       | -       | Sign &amp; Number   |
+| BLE Mesh AirDrop  | Send/Rec| Send/Rec| Send/Rec| -       | -       | Send/Rec        |
+| Emergency Flares  | Listen  | Listen  | Siren TX| -       | Listen  | Master Siren TX |
++-------------------+---------+---------+---------+---------+---------+-----------------+
+</code></pre>
+<h3>Role Middleware Verification (<code>backend/middleware/roles.py</code>):</h3>
+<p>The backend rejects privilege escalation attempts with <code>HTTP 403 Forbidden</code>. For example:<br />
+- Students attempting to post notices targeting <code>ALL</code> students receive HTTP 403.<br />
+- Teachers attempting to approve hostel leave requests receive HTTP 403.<br />
+- Non-admin users attempting to access <code>/admin/analytics</code> or <code>/complaints/clusters</code> receive HTTP 403.<br />
+- Mess staff cannot scan perimeter gate passes, and security guards cannot record dining meals.</p>
+<hr />
+<h2>5. The Student Experience &amp; Digital Lifecycle</h2>
+<p>The student mobile client (<code>frontend/lib/student/</code>) is designed around a tactile, responsive mobile experience. When a student opens CampusOS, they are greeted by the <strong>Student Home Feed</strong>:</p>
+<ol>
+<li><strong>Real-Time Attendance Gauge:</strong> An animated circular SVG arc visualizing the student's aggregate academic attendance percentage against the mandatory 75% university threshold, complete with warning states when attendance dips below 75%.</li>
+<li><strong>Bento Grid Action Hub:</strong> Quick-action tiles for submitting leave requests, filing hostel maintenance complaints, exploring today's mess menu, and viewing fee payment statuses.</li>
+<li><strong>Today's Academic Schedule:</strong> Dynamic feed displaying lecture time, room number, faculty name, and live class shifts or room changes broadcast by teachers.</li>
+<li><strong>The Campus Wallet Carousel:</strong> A central physical carousel hosting 6 vital institutional cards.</li>
+<li><strong>Integrated Emergency &amp; Mesh Hub Access:</strong> One-tap navigation to the offline Mesh Hub (<code>campus_mesh_hub_screen.dart</code>), AirDrop receiver, and Disaster Flare monitor.</li>
+</ol>
+<hr />
+<h2>6. The Campus Wallet (6-Card Physical Carousel)</h2>
+<p>The <strong>Campus Wallet</strong> (<code>frontend/lib/student/screens/campus_wallet_screen.dart</code>) consolidates every physical card and credential a student carries into a unified, interactive carousel inspired by Apple Wallet:</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                           THE 6-CARD CAMPUS WALLET CAROUSEL                           |
++---------------------------------------------------------------------------------------+
+| 1. CAMPUSOS PASSPORT  : High-Security Ed25519 Identity Card | Biometric Unlock        |
+| 2. STUDENT ID CARD    : Institutional Photo ID | Roll Number | Branch | Academic Year |
+| 3. ACTIVE GATE PASS   : Approved Leave Ticket | Live Expiry Countdown | HMAC QR Modal |
+| 4. OFFICIAL DOCUMENTS : Bonafide &amp; Grade Sheets | Cryptographic Serial Numbers        |
+| 5. FEES &amp; DUES CARD   : Semester Tuition Ledger | Receipt History | Outstanding Balance|
+| 6. ACTIVE VISITOR PASS: Visiting Parents/Guests Pass | Security Gate Scanner QR Code  |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<h3>Physical Interaction Design:</h3>
+<ul>
+<li><strong>Card Snapping &amp; Haptics:</strong> Swiping between cards triggers tactile haptic feedback (<code>AppHaptics.selectionClick()</code>).</li>
+<li><strong>Perspective Transformations:</strong> Non-active cards scale down and shift backward with 3D perspective depth (<code>Transform(transform: Matrix4.identity()..setEntry(3, 2, 0.001)...)</code>).</li>
+<li><strong>Smooth Expansion:</strong> Tapping any card triggers an animated expansion sheet displaying detailed breakdowns, payment histories, or high-resolution cryptographic QR codes.</li>
+</ul>
+<hr />
+<h2>7. CampusOS Passport: Cryptographic Identity &amp; PKI</h2>
+<p>The <strong>CampusOS Passport</strong> is a device-bound cryptographic identity credential based on the <strong>Ed25519 (RFC 8032)</strong> asymmetric signature scheme. It permanently eliminates identity proxy fraud, physical card duplication, and credential sharing across campus.</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                           CAMPUSOS PASSPORT ARCHITECTURE                              |
++---------------------------------------------------------------------------------------+
+|                                                                                       |
+|  [ STUDENT ENROLLMENT ]                                                               |
+|  1. Device generates 32-byte Ed25519 Private Key -&gt; Keystore / EncryptedSharedPreferences|
+|  2. Public Key uploaded to Backend (`/passport/register-key`)                         |
+|  3. Backend signs Device Certificate with Institutional Root Key                      |
+|                                                                                       |
+|  [ 30-SECOND DYNAMIC PRESENTATION ]                                                   |
+|  1. Student unlocks Passport using Android BiometricPrompt (`local_auth`)             |
+|  2. Client generates 16-byte random Nonce &amp; current Unix Timestamp                   |
+|  3. Signs payload: Sign(Student_UUID || Nonce || Timestamp, Device_Private_Key)      |
+|  4. Renders compact QR: Base64URL encoded signature bundle (expires in 30 seconds)     |
+|                                                                                       |
+|  [ OFFLINE VERIFIER CHECK (Mess / Gate / Attendance) ]                                |
+|  1. Verifier scans QR without internet                                                |
+|  2. Verifies Ed25519 signature against pre-cached `PassportTrustBundle`               |
+|  3. Checks timestamp drift (&lt; 30 seconds) &amp; checks Nonce in local SQLite DB           |
+|  4. If valid: Authenticated instantly! If duplicate: Replay blocked with HTTP 409!    |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<h3>Security Properties:</h3>
+<ul>
+<li><strong>Screenshot-Proof:</strong> Screenshots expire in under 30 seconds, preventing students from texting their QR code to friends.</li>
+<li><strong>Private Keys Never Leave Device:</strong> The private key is never transmitted over the network or stored in the backend database.</li>
+<li><strong>Zero-Knowledge Offline Trust:</strong> Gate guards and mess staff verify signatures offline using the university's pre-distributed public key certificate bundle (<code>/passport/trust-bundle</code>).</li>
+</ul>
+<hr />
+<h2>8. Attendance Verification System (BLE Proximity &amp; Dynamic QR)</h2>
+<p>Classroom attendance verification is protected against proxy fraud through a multi-factor proximity handshake:</p>
+<h3>1. BLE Proximity Beacon Mode:</h3>
+<ul>
+<li>The teacher launches an attendance session from the Teacher Mobile App (<code>frontend/lib/teacher/</code>).</li>
+<li>The teacher's device begins broadcasting a Bluetooth Low Energy (BLE 5.0) advertising beacon containing an ephemeral <code>session_token</code> and RSSI proximity threshold.</li>
+<li>Student devices in the classroom detect the beacon. Proximity is enforced by verifying that received signal strength (RSSI) is stronger than <code>-75 dBm</code> (ensuring physical classroom presence).</li>
+<li>The student's device prompts for biometric authentication, signs the challenge nonce using their on-device Ed25519 key, and responds via BLE.</li>
+</ul>
+<h3>2. High-Speed Dynamic QR Fallback Mode:</h3>
+<ul>
+<li>For classrooms with dense RF interference or older student hardware, the teacher's screen renders a 10-second rotating QR code containing an ephemeral HMAC-signed session challenge.</li>
+<li>Students scan the teacher's screen to record attendance.</li>
+<li>The backend attendance ingestion engine (<code>/attendance/batch-sync</code>) processes check-ins idempotently, rejecting duplicate submissions for the same session.</li>
+</ul>
+<hr />
+<h2>9. Mess &amp; Dining System (Tokenless Anti-Proxy Verification)</h2>
+<p>University dining halls experience significant operational waste and fraud due to paper coupon forging, unverified plastic tokens, and student proxy dining. CampusOS introduces a tokenless cryptographic dining architecture:</p>
+<ol>
+<li><strong>Weekly Menu &amp; Nutritional Publishing:</strong> Mess managers publish breakfast, lunch, snacks, and dinner menus with nutritional facts and allergen badges (<code>/mess/menus</code>).</li>
+<li><strong>Dining Hall Check-In:</strong> Students present their dynamic 30-second Passport QR at the dining turnstile.</li>
+<li><strong>Cryptographic Anti-Replay Engine:</strong><br />
+   - The Mess Staff App (<code>frontend/lib/mess/</code>) scans the QR code and validates the signature.<br />
+   - The backend checks <code>meal_entries</code> for an existing record with matching <code>(student_id, meal_id, date)</code>.<br />
+   - If the student has already dined during that meal window, the server immediately returns <strong>HTTP 409 Conflict</strong> with an audible error tone, preventing duplicate meal claims.</li>
+<li><strong>Feedback &amp; Quality Analytics:</strong> Students rate meals on a 1-to-5 star scale with categorical tags (taste, hygiene, temperature, quantity). Deans monitor real-time satisfaction curves on the Admin Web dashboard.</li>
+</ol>
+<hr />
+<h2>10. Hostel Leave, Gate Pass &amp; Perimeter Physical Security</h2>
+<p>Hostel residential security is managed through an integrated multi-role state machine connecting Students, Wardens, and Security Guards:</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                          HOSTEL LEAVE TO GATE PASS STATE MACHINE                      |
++---------------------------------------------------------------------------------------+
+|                                                                                       |
+|   [ STUDENT ]                 [ WARDEN ]                     [ SECURITY GUARD ]       |
+|        │                           │                                  │               |
+|        ├── Submit Leave ──────────&gt;│                                  │               |
+|        │   (Reason, Dates, Phone)  │                                  │               |
+|        │                           ├── Triage Queue &amp; History         │               |
+|        │                           ├── APPROVE LEAVE                  │               |
+|        │                           │   (Auto-Generates Gate Pass)     │               |
+|        │&lt;── Push Alert Notification┤                                  │               |
+|        │                           │                                  │               |
+|        ├── Display HMAC Gate Pass ───────────────────────────────────&gt;│               |
+|        │   (Inside Valid Time Window)                                 ├── Scan QR     |
+|        │                                                              ├── Verify HMAC |
+|        │                                                              ├── Mark EXITED |
+|        │                                                              │   (Campus -1) |
+|        │                                                              │               |
+|        ├── Return to Campus Gate ────────────────────────────────────&gt;│               |
+|        │                                                              ├── Scan QR     |
+|        │                                                              ├── Mark RETURN |
+|        │                                                              │   (Campus +1) |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<h3>Anti-Passback &amp; Grace Period Security:</h3>
+<ul>
+<li><strong>Anti-Passback Enforcement:</strong> A student who has exited cannot scan an exit again without an intervening return scan; attempts return <code>HTTP 400 Bad Request</code>.</li>
+<li><strong>HMAC-SHA256 Token Signing:</strong> Gate pass barcodes are cryptographically signed using the institutional server secret (<code>GATE_PASS_SECRET</code>). Offline security tablets verify token validity and expiry without continuous server connectivity.</li>
+<li><strong>Real-Time Perimeter Ledger:</strong> Deans and Wardens monitor the exact count and identity of students currently outside the campus gates in real-time.</li>
+</ul>
+<hr />
+<h2>11. Grievance Redressal, SLA Tracking &amp; NLP Complaint Clustering</h2>
+<p>Campus facilities maintenance (broken ceiling fans, plumbing leaks, Wi-Fi outages) often suffers from accountability failure. CampusOS provides a closed-loop grievance pipeline:</p>
+<ul>
+<li><strong>Ticket Lifecycle:</strong> <code>PENDING</code> -&gt; <code>ASSIGNED</code> -&gt; <code>IN_PROGRESS</code> -&gt; <code>RESOLVED</code> -&gt; <code>CLOSED</code>.</li>
+<li><strong>Immutable Audit Trail:</strong> Every status mutation appends a permanent record to <code>complaint_status_history</code> capturing the actor ID, timestamp, and notes.</li>
+<li><strong>SLA Ageing Tracking (&gt;48 Hours):</strong> Complaints unresolved after 48 hours are automatically flagged in red and prioritized on the Dean's Command Center.</li>
+<li><strong>Recurring Issue NLP Clustering:</strong> An intelligent clustering algorithm (<code>services/complaint_service.py</code>) groups semantically similar complaints across hostel blocks and rooms. For example, multiple complaints citing 'water pressure', 'dry taps', and 'motor pump' in Hostel Block B are automatically clustered into a single systemic infrastructure alert for university leadership.</li>
+</ul>
+<hr />
+<h2>12. Scoped Notices, Targeted Circulars &amp; Read Tracking Receipts</h2>
+<p>Traditional campus announcements get lost in chaotic WhatsApp groups. CampusOS replaces informal circulars with authoritative, scoped institutional notices:</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                                SCOPED TARGETING HIERARCHY                             |
++---------------------------------------------------------------------------------------+
+| 1. ALL CAMPUS      : University-wide announcements (Restricted to Dean / Admin)       |
+| 2. DEPARTMENT      : Targeted to specific branch (e.g., Computer Science &amp; Eng.)      |
+| 3. ACADEMIC YEAR   : Targeted to specific cohort (e.g., 3rd Year / 6th Semester)      |
+| 4. HOSTEL BLOCK    : Targeted to residential building (e.g., Brahmaputra Boys Hostel) |
+| 5. SPECIFIC CLASS  : Targeted to a single course section (Accessible to Faculty)      |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<h3>Per-User Delivery &amp; Read Tracking (<code>models/notification.py</code>):</h3>
+<p>When an administrator posts a notice, the backend computes the exact recipient audience and generates individual rows in <code>notification_deliveries</code>. As students interact with the mobile app, their delivery state transitions:<br />
+<code>QUEUED</code> -&gt; <code>DELIVERED</code> -&gt; <code>READ</code> -&gt; <code>ACTIONED</code>.<br />
+Administrators inspect real-time read percentages (e.g., 'Notice read by 84% of CSE 3rd Year students in 2 hours').</p>
+<hr />
+<h2>13. Hostel &amp; Room Asset Management</h2>
+<p>Residential campus operations require rigorous physical inventory control:<br />
+- <strong>Hostel Allocations:</strong> Tracks building block, floor, room number, bed allocation, and roommate associations (<code>hostel_allocations</code>).<br />
+- <strong>Room Asset Registry:</strong> Every physical item assigned to a room (study table, wooden chair, mattress, ceiling fan, fluorescent tubelight) is tracked with serial numbers and condition states (<code>hostel_assets</code>).<br />
+- <strong>Defect Reporting &amp; Work Orders:</strong> Students report broken furniture or damaged electrical fixtures directly against specific asset IDs, enabling maintenance teams to arrive with exact replacement components (<code>asset_issues</code>).</p>
+<hr />
+<h2>14. Documents &amp; Official Certificate Issuance Engine</h2>
+<p>Students routinely queue at the registrar office for physical certificates. CampusOS digitizes the document lifecycle:<br />
+- <strong>Requisition Submission:</strong> Students request Bonafide Certificates, Fee Estimation Letters, Character Certificates, or Grade Transcripts directly from their phone (<code>document_requests</code>).<br />
+- <strong>Administrative Verification:</strong> The registrar reviews academic standing and fee dues on the Admin Web interface before one-tap approval.<br />
+- <strong>Digital Certificate Numbering:</strong> Approved documents receive an authoritative cryptographic serial code (e.g., <code>DOC-2026-BPUT-BONAFIDE-7F892A</code>).<br />
+- <strong>Instant Wallet Integration:</strong> The issued credential appears in the student's Campus Wallet under the Documents Card, where it can be displayed and exported as a PDF.</p>
+<hr />
+<h2>15. Fees, Dues &amp; Financial Records Management</h2>
+<p>University finances require transparency across tuition, examination, hostel, and mess dues:<br />
+- <strong>Categorized Dues Breakdown:</strong> Transparent ledger itemizing Tuition Fee, Hostel Rent, Mess Advance, and Laboratory Dues (<code>fee_records</code>).<br />
+- <strong>Due Dates &amp; Penalty Tracking:</strong> Real-time visibility into payment deadlines and late-fee calculations.<br />
+- <strong>Receipt History &amp; Payment Proof:</strong> Students inspect transaction references, payment dates, and download digital fee clearance receipts directly into their phone.</p>
+<hr />
+<h2>16. Visitor Management &amp; Security Check-In</h2>
+<p>Campus safety requires strict auditing of visiting parents, alumni, guest lecturers, and vendors:<br />
+- <strong>Student Host Registration:</strong> Students submit visitor details (visitor name, phone number, relationship, expected arrival date, and purpose of visit) via the app (<code>visitor_requests</code>).<br />
+- <strong>Warden Authorization:</strong> The Hostel Warden reviews the visit and approves the request.<br />
+- <strong>Dynamic Visitor Pass:</strong> An approved Visitor Pass appears in the student's Wallet, featuring an HMAC-signed visitor QR code.<br />
+- <strong>Perimeter Guard Check-In:</strong> Security guards scan the pass at the main gate, recording vehicle license plate numbers, entering check-in timestamps, and tracking visitor exit.</p>
+<hr />
+<h2>17. Academic Updates &amp; Schedule Shifting Feed</h2>
+<p>Classroom schedules change frequently due to faculty meetings or lab extensions:<br />
+- <strong>Instant Class Shifts:</strong> Faculty broadcast schedule modifications (e.g., 'Compiler Design shifted from Room 301 to Lab 4 at 2:00 PM') in under 10 seconds (<code>class_updates</code>).<br />
+- <strong>Home Feed Integration:</strong> Updates appear prominently at the top of the student's home feed.<br />
+- <strong>Dismissible Cards with Undo:</strong> Students swipe to dismiss acknowledged alerts, with a 5-second snackbar undo option.</p>
+<hr />
+<h2>18. Admin Mobile Operations Console</h2>
+<p>University deans and department heads are not always seated at desktop computers. CampusOS includes an <strong>Admin Mobile Shell</strong> (<code>frontend/lib/admin/</code>):<br />
+- <strong>Real-Time Campus Vitals:</strong> Live cards displaying active students on campus, students currently outside gates, today's average attendance rate, and open critical complaints.<br />
+- <strong>Emergency Broadcast Launcher:</strong> Fast modal for dispatching campus-wide emergency circulars or triggering disaster flares.<br />
+- <strong>Complaints Escalation Queue:</strong> Mobile triage desk for reviewing high-priority grievances and reassigning facility staff on the go.</p>
+<hr />
+<h2>19. React 19 Admin Web Control Plane (Complete 17-Module Architecture)</h2>
+<p>The <strong>Admin Web Application</strong> (<code>admin-web/</code>) is a desktop-first operational command plane built with <strong>React 19</strong>, <strong>TypeScript</strong>, <strong>Vite</strong>, and <strong>Tailwind CSS</strong>. It provides university deans, registrars, and chief wardens with comprehensive institutional control.</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                           REACT 19 ADMIN WEB MODULE ARCHITECTURE                      |
++---------------------------------------------------------------------------------------+
+|                                                                                       |
+|  [ NAVIGATION SIDEBAR ]  [ COMMAND CENTER WORKSPACE ]                                 |
+|  ├── 1. Dashboard        │  • Institutional KPIs (Attendance %, Bed Occupancy, Dues)  |
+|  ├── 2. Students         │  • Full Student Directory, Branch Filters, Device Bindings |
+|  ├── 3. Academic         │  • Course Catalog, Timetables, Faculty Class Allocations   |
+|  ├── 4. Attendance       │  • University-Wide Attendance Curves &amp; Session Logs        |
+|  ├── 5. Complaints       │  • Grievance Triage Desk, &gt;48h SLA Flags, NLP Clusters     |
+|  ├── 6. Hostel           │  • Room Allocations, Bed Capacities, Asset Defect Ledgers  |
+|  ├── 7. Fees             │  • Fee Collections, Outstanding Dues Ledger, Receipts      |
+|  ├── 8. Documents        │  • Certificate Requisitions, Serial Numbering, PDF Sign    |
+|  ├── 9. Visitors         │  • Real-Time Guest Transit Logs &amp; Vehicle Ledgers          |
+|  ├── 10. Mess            │  • Menu Scheduler, Daily Volume Charts, Student Ratings    |
+|  ├── 11. Notices         │  • Scoped Circular Composer &amp; Real-Time Delivery Tracking  |
+|  ├── 12. Notifications   │  • System Notification Queue Telemetry &amp; FCM Delivery Log  |
+|  ├── 13. Security        │  • Perimeter Gate Shift Reports, Outside Students Ledger   |
+|  ├── 14. Passport        │  • Public Key Directory, Trust Bundle Sync, Revocation CA  |
+|  ├── 15. Audit           │  • Immutable Security Trail (Actor, Timestamp, IP Address) |
+|  ├── 16. Search          │  • Instant Full-Text Search Across All Campus Entities     |
+|  └── 17. Auth            │  • Role Login, Session Revocation, Multi-Device Security   |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<h3>Front-End Engineering Stack:</h3>
+<ul>
+<li><strong>Framework &amp; Runtime:</strong> React 19.2 + TypeScript + Vite 8.3.</li>
+<li><strong>Design Primitives:</strong> Tailwind CSS 3.4 + Radix UI primitives (<code>shadcn/ui</code>).</li>
+<li><strong>Data Fetching &amp; Caching:</strong> <code>@tanstack/react-query</code> v5 for resilient asynchronous caching and automatic background refetching.</li>
+<li><strong>High-Performance Grids:</strong> <code>@tanstack/react-table</code> v8 for virtualized sorting, multi-column filtering, and pagination of large student datasets.</li>
+<li><strong>Data Visualizations:</strong> <code>recharts</code> for responsive SVG attendance curves, complaint resolution funnels, and dining satisfaction histograms.</li>
+</ul>
+<hr />
+<h2>20. Profile vs. Settings Architectural Separation</h2>
+<p>CampusOS strictly separates identity data from client configuration:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Dimension</th>
+<th style="text-align: left;">User Profile Screen (<code>/profile</code>)</th>
+<th style="text-align: left;">App Settings Screen (<code>/settings</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Conceptual Question</strong></td>
+<td style="text-align: left;"><em>'Who am I on this university campus?'</em></td>
+<td style="text-align: left;"><em>'How should this app behave on my device?'</em></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Domain Scope</strong></td>
+<td style="text-align: left;">Authoritative Institutional Identity</td>
+<td style="text-align: left;">Local Client Runtime Configuration</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Primary Fields</strong></td>
+<td style="text-align: left;">Name, Roll Number, Branch, Academic Year, Hostel Room, Bed ID, Linked Phone, Ed25519 Public Key Fingerprint.</td>
+<td style="text-align: left;">Theme Mode (Light / Dark / System), Language Selection (en, hi, or, bn), Haptics Toggle, Performance Profile.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Persistence</strong></td>
+<td style="text-align: left;">Authoritative MySQL 8 Database (<code>users</code> table)</td>
+<td style="text-align: left;">Device Local Storage (<code>SharedPreferences</code>)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Security Guard</strong></td>
+<td style="text-align: left;">Read-only identity credentials locked to student record.</td>
+<td style="text-align: left;">User-configurable preferences without security impact.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>21. Multilingual Localization &amp; Accessibility Conformance</h2>
+<p>Higher education campuses in eastern India feature diverse regional student bodies. CampusOS natively implements runtime localization across four languages:</p>
+<ol>
+<li><strong>English (<code>en</code>):</strong> Default administrative and technical terminology.</li>
+<li><strong>Hindi (<code>hi</code>):</strong> Comprehensive translations for national accessibility.</li>
+<li><strong>Odia (<code>or</code>):</strong> Native regional language for Odisha state universities under BPUT.</li>
+<li><strong>Bengali (<code>bn</code>):</strong> Regional support for Eastern zone engineering colleges.</li>
+</ol>
+<h3>Technical Architecture (<code>frontend/lib/core/localization/app_strings.dart</code>):</h3>
+<ul>
+<li>Complete dictionary covering 100% of user-facing strings across all 6 roles.</li>
+<li>Dynamic language switching without requiring application restart.</li>
+<li>Zero hardcoded strings in core UI widgets.</li>
+</ul>
+<h3>Accessibility (a11y) Conformance:</h3>
+<ul>
+<li><strong>Touch Target Sizing:</strong> All interactive elements maintain a minimum touch target size of 48x48 logical pixels.</li>
+<li><strong>Contrast Ratios:</strong> Text conforms to WCAG 2.1 AA contrast ratios (minimum 4.5:1 for normal text).</li>
+<li><strong>Scalable Typography:</strong> Full support for 1.5x system text scaling without UI clipping or overflow errors.</li>
+<li><strong>Reduced Motion:</strong> System-level reduced motion preferences automatically suppress non-essential scale and translation animations.</li>
+</ul>
+<hr />
+<h2>22. Offline Operation &amp; Delay-Tolerant Synchronization</h2>
+<p>CampusOS is engineered to function continuously during complete internet and cellular infrastructure outages:</p>
+<ol>
+<li><strong>Pre-Cached Trust Bundles:</strong> During initial online onboarding, the client downloads the university's cryptographic trust bundle (<code>/passport/trust-bundle</code>), caching root public keys locally in SQLite.</li>
+<li><strong>Local Presentation Verification:</strong> Gate guards and mess staff verify dynamic 30-second Passport QR signatures purely through local mathematical verification of Ed25519 curves.</li>
+<li><strong>Delay-Tolerant Store-and-Forward Buffering:</strong> Meal scans, attendance audits, and gate check-ins recorded in offline basements are queued in local mobile storage (<code>Drift</code> SQLite).</li>
+<li><strong>Idempotent Background Reconciliation:</strong> When a staff tablet or student device re-enters Wi-Fi or cellular coverage, the offline queue syncs to the server via batch reconciliation endpoints (<code>/attendance/batch-sync</code>, <code>/mess/entries/batch-sync</code>, <code>/security/batch-sync</code>). Unique client-generated UUIDs guarantee that duplicate network transmissions never produce duplicate records.</li>
+</ol>
+<hr />
+<h2>23. CampusOS Decentralized BLE Mesh Network &amp; Academic AirDrop (Phases M1–M7)</h2>
+<p>The <strong>CampusOS Mesh Network</strong> is a zero-infrastructure peer-to-peer communication fabric embedded directly into the mobile client (<code>frontend/lib/core/mesh/</code>). It delivers Deliverable 4 of the BPUT PS07 mandate (<em>'Low-bandwidth operation, patchy hostel network, and disaster-proof offline survivability'</em>).</p>
+<h3>23.1 Multi-Tier Zero-Infrastructure Architecture</h3>
+<p>CampusOS unites two physical transport layers with cloud reconciliation to form an adaptive transport hierarchy:</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                          CAMPUSOS MULTI-TIER MESH HIERARCHY                           |
++-------------------+----------------------+--------------------+-----------------------+
+| Transport Tier    | Physical Medium      | Bandwidth / Limit  | Institutional Purpose |
++-------------------+----------------------+--------------------+-----------------------+
+| TIER 1: BLE Mesh  | Bluetooth 5.x BLE    | 50 - 200 KB/s      | Emergency Flares,     |
+|                   | Multi-Hop (30m/hop)  | Payload &lt;= 2 MB    | Text Channels, Notes  |
++-------------------+----------------------+--------------------+-----------------------+
+| TIER 2: Wi-Fi LAN | 802.11 b/g/n/ac/ax   | 20 - 50 MB/s       | High-Speed AirDrop,   |
+| (LocalSend Protocol) Local Hotspot/Router | Payload &lt;= 100 MB  | Textbooks, Code, Video|
++-------------------+----------------------+--------------------+-----------------------+
+| TIER 3: Data Mule | Delayed Sync to      | Full Internet      | Database Sync when any|
+| Reconciler        | Cloud / MySQL Server | Unlimited          | peer reaches coverage |
++-------------------+----------------------+--------------------+-----------------------+
+</code></pre>
+<h3>23.2 Phase M1: Ed25519 Peer Cryptographic Identity &amp; Trust Bundles</h3>
+<ul>
+<li><strong>Decentralized Node Identity:</strong> Every mesh device generates a unique 16-character hexadecimal Node ID derived from its on-device Ed25519 public key (<code>mesh_crypto.dart</code>).</li>
+<li><strong>Tamper-Proof Headers:</strong> All mesh packets carry an Ed25519 origin signature computed across <code>[packet_id, source_node, channel, payload, timestamp]</code>. Rogue nodes cannot forge fake dean notices or emergency alerts.</li>
+<li><strong>Trust Verification:</strong> Receiving peers verify the packet signature against their pre-cached institutional trust bundle before processing.</li>
+</ul>
+<h3>23.3 Phase M2: Wire Protocol, Packet Envelope &amp; Multi-Hop Relay Engine</h3>
+<ul>
+<li><strong>Wire Packet Structure (<code>mesh_packet.dart</code>):</strong><br />
+<code>[1B Version] [1B PacketType] [16B PacketUUID] [16B SourceNode] [16B TargetNode]
+  [1B TTL] [1B HopCount] [4B PayloadLength] [Variable Payload] [64B Ed25519 Sig] [4B CRC32]</code></li>
+<li><strong>Controlled Flooding with TTL:</strong> Packets initialize with a Time-To-Live (default: <code>TTL = 5</code>). Each intermediary hop decrements TTL by 1 and increments <code>hop_count</code>. Packets with <code>TTL == 0</code> are dropped, preventing infinite broadcast storms.</li>
+<li><strong>Deduplication Store (<code>mesh_deduplication_store.dart</code>):</strong> An in-memory LRU cache storing the last 1,024 observed packet UUIDs suppresses duplicate rebroadcasts, maintaining flat RAM consumption under 2 MB.</li>
+</ul>
+<h3>23.4 Phase M3: Interactive Mesh Hub, Live Peer Radar &amp; Peer Registry</h3>
+<ul>
+<li><strong>Campus Mesh Hub (<code>campus_mesh_hub_screen.dart</code>):</strong> Central dashboard providing live toggle control for mesh networking, active peer counts, node ID clipboard copy, and quick-launch cards for Chat, AirDrop, Emergency Flares, and Simulator.</li>
+<li><strong>Live Node Radar (<code>campus_mesh_node_radar_screen.dart</code>):</strong> An animated concentric circular radar mapping nearby BLE peers based on measured RSSI signal strength (Strong: &gt;-60 dBm, Medium: -60 to -80 dBm, Weak: &lt;-80 dBm), displaying device role badges and link quality.</li>
+<li><strong>Peer Registry (<code>mesh_peer_registry.dart</code>):</strong> Continuously tracks peer discovery timestamps, RSSI averages, and connection states with automatic 45-second stale peer pruning.</li>
+</ul>
+<h3>23.5 Phase M4: Off-Grid Scoped Channel Communications (#general, #hostel, #emergency)</h3>
+<ul>
+<li><strong>Offline P2P Mesh Chat (<code>campus_mesh_chat_screen.dart</code>):</strong> Decentralized group messaging functioning over pure BLE radio:</li>
+<li><code>#general</code>: Open campus-wide peer chat.</li>
+<li><code>#hostel</code>: Localized residential block discussions.</li>
+<li><code>#emergency</code>: Priority broadcast channel reserved for authorities.</li>
+<li><strong>Image Chunking:</strong> Supports compressed image transfer over BLE by fragmenting JPEG payloads into paced 100-byte packets reassembled in local mobile storage.</li>
+</ul>
+<h3>23.6 Phase M5A: Pure Offline BLE Mesh Academic AirDrop (&lt;= 2 MB)</h3>
+<ul>
+<li>Zero-router peer-to-peer file transfer designed for lecture summaries, syllabus PDFs, and lab assignments.</li>
+<li>Direct streaming from disk via Dart <code>RandomAccessFile</code> in 100-byte chunks with 15ms pacing to prevent BLE radio buffer saturation.</li>
+<li>End-to-end SHA-256 checksum verification guarantees zero file corruption upon reassembly.</li>
+</ul>
+<h3>23.7 Phase M5B: Hybrid Local Wi-Fi AirDrop &amp; LocalSend UDP/TCP Integration (&lt;= 100 MB, 50 MB/s)</h3>
+<ul>
+<li><strong>LocalSend Protocol Integration (<code>localsend/</code>):</strong> When sending large academic files (engineering datasets, lecture video recordings, textbook PDFs up to 100 MB), the app automatically detects if peers share a local Wi-Fi router or mobile hotspot.</li>
+<li><strong>High-Speed UDP Discovery:</strong> Broadcasts LocalSend announcement packets over UDP port <code>53317</code> (multicast group <code>224.0.0.167</code>). Discovers peers across the local network in under 500 milliseconds.</li>
+<li><strong>Direct TCP Socket Streaming:</strong> Launches an ephemeral HTTP streaming server and client on port <code>53317</code>, achieving transfer speeds between <strong>20 and 50 MB/s</strong> while maintaining flat heap usage under 15 MB RAM.</li>
+<li><strong>Benchmark File Generator:</strong> Built-in generator allowing evaluators to synthesize and benchmark 2 MB, 10 MB, 25 MB, and 50 MB test transfers with one tap.</li>
+</ul>
+<h3>23.8 Phase M6: Emergency Disaster Flare System, Audio Siren &amp; Vibration Overrides</h3>
+<ul>
+<li><strong>Disaster Evacuation Alerts (<code>campus_mesh_emergency_screen.dart</code>):</strong> Engineered for severe natural emergencies (coastal cyclones, fire alarms, electrical grid collapses).</li>
+<li><strong>Hardware Siren Override:</strong> When a disaster flare is received over the <code>#emergency</code> mesh channel, the mobile client overrides device silent mode to sound a localized siren audio tone, activates continuous heavy haptic vibrations (<code>AppHaptics.heavyAlert()</code>), and posts a persistent status-bar notification.</li>
+<li><strong>Authority Verification Desk (<code>campus_mesh_emergency_dispatcher_screen.dart</code>):</strong> Deans and Wardens have a dedicated emergency command desk to trigger flares with customizable disaster severity levels (Minor, Moderate, Critical, Catastrophic). The system records an immutable cryptographic audit log of all dispatched alerts.</li>
+</ul>
+<h3>23.9 Phase M7: Physical Validation Harness &amp; Stage Simulation Engine</h3>
+<ul>
+<li><strong>Physical Validation Screen (<code>campus_mesh_physical_validation_screen.dart</code>):</strong> Live telemetry display showing raw packet streams, total TX/RX packet counts, round-trip ping times, and calculated packet drop percentages across physical test devices.</li>
+<li><strong>Interactive Stage Simulator (<code>campus_mesh_stage_simulator_screen.dart</code>):</strong> A stage presentation engine (<code>mesh_stage_simulator.dart</code>) that synthesizes 10+ virtual mesh nodes across customizable topologies (Linear Multi-Hop Chain, Dense Hostel Mesh, Disaster Grid). Allows evaluators and judges to observe multi-hop packet propagation, packet deduplication, and emergency flare flooding on a single phone or projector.</li>
+</ul>
+<h3>23.10 Binary Packet Codecs, Header Specifications &amp; Deduplication</h3>
+<p>The mesh engine uses compact binary encoding (<code>mesh_packet_codec.dart</code>) to maximize packet density over constrained 2.4 GHz radio channels:<br />
+- CRC32 checksums appended to all envelopes detect physical radio bit flips.<br />
+- Payloads exceeding maximum single-packet capacity are sliced into indexed sequence chunks and reassembled into temporary files via atomic file renaming.</p>
+<hr />
+<h2>24. Cryptographic Specifications &amp; Security Primitives</h2>
+<p>CampusOS employs modern, lightweight, industry-standard cryptographic primitives designed for resource-constrained mobile and embedded environments:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Cryptographic Primitive</th>
+<th style="text-align: left;">Implementation Library</th>
+<th style="text-align: left;">Operational Purpose in CampusOS</th>
+<th style="text-align: left;">Security Guarantee</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Ed25519 (RFC 8032)</strong></td>
+<td style="text-align: left;">Python <code>cryptography</code> / Dart <code>cryptography</code></td>
+<td style="text-align: left;">High-speed asymmetric digital signatures for CampusOS Passport credentials, attendance responses, and BLE mesh packets.</td>
+<td style="text-align: left;">128-bit security level, collision-resistant, non-malleable, 64-byte compact signatures.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>HMAC-SHA256</strong></td>
+<td style="text-align: left;">Python <code>hashlib</code> / Dart <code>crypto</code></td>
+<td style="text-align: left;">Symmetric message authentication codes securing Gate Pass QR tokens and visitor entry codes against forgery.</td>
+<td style="text-align: left;">Tamper-proof token authenticity verifiable offline using institutional secret.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>HS256 (JWT)</strong></td>
+<td style="text-align: left;">Python <code>PyJWT</code></td>
+<td style="text-align: left;">Cryptographically signed session tokens verifying user identity and institutional roles across all REST API calls.</td>
+<td style="text-align: left;">RFC 7519 compliance, role claim binding, configurable expiry windows.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>SHA-256</strong></td>
+<td style="text-align: left;">Standard Library</td>
+<td style="text-align: left;">Cryptographic hashing of nonces, presentation challenge tokens, and AirDrop file checksums.</td>
+<td style="text-align: left;">Pre-image resistance, collision resistance, end-to-end data integrity.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Biometric Authentication</strong></td>
+<td style="text-align: left;">Android <code>BiometricPrompt</code> (<code>local_auth</code>)</td>
+<td style="text-align: left;">Hardware biometric liveness gate ensuring that only the enrolled owner can authorize an Ed25519 signing operation.</td>
+<td style="text-align: left;">Strong local user presence verification preventing stolen-device abuse.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>25. Security Architecture, Threat Model &amp; 41 Penetration Attack Tests</h2>
+<p>CampusOS was subjected to an exhaustive automated penetration testing suite (<code>backend/test_phase6_security_attacks.py</code>) comprising <strong>41 live attack checks</strong> across 6 critical threat vectors. All 41 penetration attacks are verified blocked by the codebase:</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                          41-POINT SECURITY PENETRATION AUDIT MATRIX                   |
++-----------------------------------+---------+-----------------------------------------+
+| Threat Vector &amp; Attack Scenario   | Result  | Codebase Mitigation &amp; Defense Mechanism |
++-----------------------------------+---------+-----------------------------------------+
+| 1. SQL Injection (Auth / Search)  | BLOCKED | SQLAlchemy parameterized queries; no raw|
+|                                   |         | string interpolation in SQL routines.   |
+| 2. Cross-Site Scripting (XSS)     | BLOCKED | React JSX auto-escaping; sanitization on|
+|                                   |         | notice bodies and complaint remarks.    |
+| 3. Broken Object Level Auth (BOLA)| BLOCKED | Role checks verify resource ownership   |
+|                                   |         | (student can only access own records).  |
+| 4. Privilege Escalation (RBAC)    | BLOCKED | Middleware rejects student attempts to  |
+|                                   |         | call /admin/* or /warden/* (HTTP 403).  |
+| 5. JWT Token Tampering &amp; Forgery  | BLOCKED | HS256 secret verification rejects forged|
+|                                   |         | tokens, expired tokens, and bad claims. |
+| 6. Replay Attacks (Gate Pass)     | BLOCKED | Gate security rejects reused nonces;    |
+|                                   |         | anti-passback rejects duplicate exits.  |
+| 7. Duplicate Dining Exploitation  | BLOCKED | Meal verification checks (student, meal,|
+|                                   |         | date) uniqueness; returns HTTP 409.     |
+| 8. QR Code Screenshot Cloning     | BLOCKED | Dynamic presentation QR codes expire in |
+|                                   |         | 30 seconds; expired tokens rejected.    |
+| 9. Mesh Packet Spoofing           | BLOCKED | Ed25519 signatures over wire headers;   |
+|                                   |         | unverified emergency flares dropped.    |
+| 10. Mesh Broadcast Storm / Loops  | BLOCKED | 1,024-entry UUID LRU deduplication store|
+|                                   |         | and TTL decrements halt infinite loops. |
++-----------------------------------+---------+-----------------------------------------+
+</code></pre>
+<hr />
+<h2>26. Backend Architecture &amp; Modular Flask Monolith</h2>
+<p>The CampusOS backend (<code>backend/</code>) is structured as a <strong>Modular Monolith</strong> in Python using Flask and SQLAlchemy. It avoids the operational complexity and network latency of microservices while maintaining clean domain boundaries across 19 Blueprints:</p>
+<pre><code>backend/
+├── app.py                     # Application factory (create_app), extension setup, route registration
+├── config.py                  # Environment variable configuration (MySQL, JWT, Gate Pass secrets)
+├── extensions.py              # Shared SQLAlchemy DB and Firebase Admin instances
+├── run.py                     # Local execution entrypoint (port 5000, 0.0.0.0 bind)
+├── passport_service.py        # Ed25519 PKI, trust bundles, certificate issuance
+├── seed_test_data.py          # Deterministic relational test data seeder for all 6 roles
+├── run_all_backend_tests.py   # Master test runner executing all 19 test suites
+├── models/                    # 27 SQLAlchemy domain models
+├── routes/                    # 19 Modular Flask Route Blueprints
+├── services/                  # Business logic (notices, NLP clustering, audit trail)
+├── middleware/                # RBAC and JWT token authorization decorators
+└── utils/                     # Cryptographic helpers, validators, and serializers
+</code></pre>
+<hr />
+<h2>27. Comprehensive Relational Database Schema (27 MySQL Tables)</h2>
+<p>All institutional state is unified within an authoritative <strong>MySQL 8</strong> relational database (<code>attentify</code>). All 27 tables are actively maintained with foreign keys, indexes, and constraints:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Table Name</th>
+<th style="text-align: left;">Primary Key</th>
+<th style="text-align: left;">Key Foreign Keys</th>
+<th style="text-align: left;">Key Operational Fields &amp; Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>users</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;"><code>email</code>, <code>role</code>, <code>name</code>, <code>registration_no</code>, <code>department</code>, <code>year</code>, <code>hostel_block</code>, <code>room_no</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>sessions</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>teacher_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>course_name</code>, <code>session_token</code>, <code>status</code>, <code>created_at</code>, <code>expires_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>attendance</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>session_id</code>, <code>student_id</code></td>
+<td style="text-align: left;"><code>verification_mode</code>, <code>verified_at</code>, <code>status</code>, <code>nonce</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>coupons</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>session_id</code>, <code>student_id</code></td>
+<td style="text-align: left;"><code>coupon_code</code>, <code>status</code>, <code>generated_at</code>, <code>redeemed_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>saved_classes</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>teacher_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>subject_code</code>, <code>subject_name</code>, <code>department</code>, <code>semester</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>leave_requests</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code>, <code>warden_id</code></td>
+<td style="text-align: left;"><code>start_date</code>, <code>end_date</code>, <code>reason</code>, <code>destination</code>, <code>status</code>, <code>warden_remarks</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>gate_passes</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>leave_id</code>, <code>student_id</code></td>
+<td style="text-align: left;"><code>pass_token</code>, <code>valid_from</code>, <code>valid_until</code>, <code>status</code>, <code>exit_time</code>, <code>return_time</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>request_audits</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>actor_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>action_type</code>, <code>entity_type</code>, <code>entity_id</code>, <code>ip_address</code>, <code>timestamp</code>, <code>details</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>complaints</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code>, <code>assigned_to</code></td>
+<td style="text-align: left;"><code>title</code>, <code>description</code>, <code>category</code>, <code>priority</code>, <code>status</code>, <code>hostel_block</code>, <code>room_no</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>complaint_status_history</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>complaint_id</code>, <code>actor_id</code></td>
+<td style="text-align: left;"><code>previous_status</code>, <code>new_status</code>, <code>changed_at</code>, <code>notes</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>notices</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>created_by</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>title</code>, <code>body</code>, <code>target_type</code>, <code>target_dept</code>, <code>target_year</code>, <code>priority</code>, <code>status</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>notification_deliveries</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>notice_id</code>, <code>user_id</code></td>
+<td style="text-align: left;"><code>status</code> (<code>QUEUED</code>, <code>DELIVERED</code>, <code>READ</code>, <code>ACTIONED</code>), <code>updated_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>device_tokens</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>user_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>fcm_token</code>, <code>device_type</code>, <code>last_active_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>mess_menus</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>created_by</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>menu_date</code>, <code>meal_type</code> (Breakfast, Lunch, Snacks, Dinner), <code>status</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>mess_meals</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>menu_id</code> -&gt; <code>mess_menus.id</code></td>
+<td style="text-align: left;"><code>dish_name</code>, <code>calories</code>, <code>is_vegetarian</code>, <code>allergens</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>meal_entries</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code>, <code>menu_id</code></td>
+<td style="text-align: left;"><code>meal_type</code>, <code>scanned_at</code>, <code>verified_by</code>, <code>verification_hash</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>mess_feedback</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code>, <code>menu_id</code></td>
+<td style="text-align: left;"><code>rating</code> (1-5), <code>category</code>, <code>comment</code>, <code>submitted_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>device_identity_keys</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>user_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>device_public_key</code>, <code>key_algorithm</code> (Ed25519), <code>created_at</code>, <code>is_active</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>device_certificates</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>device_key_id</code></td>
+<td style="text-align: left;"><code>certificate_pem</code>, <code>issuer_key_id</code>, <code>valid_from</code>, <code>valid_until</code>, <code>revoked</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>document_requests</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code>, <code>approved_by</code></td>
+<td style="text-align: left;"><code>document_type</code>, <code>serial_number</code>, <code>status</code>, <code>remarks</code>, <code>issued_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>fee_records</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>fee_type</code>, <code>total_amount</code>, <code>amount_paid</code>, <code>due_date</code>, <code>receipt_no</code>, <code>status</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>class_updates</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>faculty_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>subject_code</code>, <code>update_message</code>, <code>shift_time</code>, <code>room_no</code>, <code>created_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>hostel_allocations</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>hostel_name</code>, <code>floor</code>, <code>room_number</code>, <code>bed_id</code>, <code>allocated_date</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>hostel_assets</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>room_id</code></td>
+<td style="text-align: left;"><code>asset_name</code>, <code>serial_tag</code>, <code>condition</code> (<code>GOOD</code>, <code>DEFECTIVE</code>), <code>last_inspected</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>hostel_requests</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code> -&gt; <code>users.id</code></td>
+<td style="text-align: left;"><code>request_type</code> (Room Change, Cleaning), <code>status</code>, <code>created_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>asset_issues</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>asset_id</code>, <code>reported_by</code></td>
+<td style="text-align: left;"><code>issue_description</code>, <code>status</code> (<code>OPEN</code>, <code>RESOLVED</code>), <code>resolved_at</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>visitor_requests</code></td>
+<td style="text-align: left;"><code>id</code> (INT)</td>
+<td style="text-align: left;"><code>student_id</code>, <code>approved_by</code></td>
+<td style="text-align: left;"><code>visitor_name</code>, <code>relationship</code>, <code>arrival_date</code>, <code>pass_code</code>, <code>status</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>28. Complete REST API Landscape &amp; Endpoint Catalog (19 Blueprints)</h2>
+<p>The backend exposes <strong>153 unique URL rules across 19 Blueprints</strong>. Below is the authoritative endpoint matrix:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Blueprint</th>
+<th style="text-align: left;">Endpoint Pattern</th>
+<th style="text-align: left;">HTTP Method</th>
+<th style="text-align: left;">Auth Role</th>
+<th style="text-align: left;">Description &amp; Primary Request/Response Payload</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>auth_bp</code></td>
+<td style="text-align: left;"><code>/login</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Public</td>
+<td style="text-align: left;">Authenticates user credentials; returns JWT session token and role claims.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>auth_bp</code></td>
+<td style="text-align: left;"><code>/register</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Public / Admin</td>
+<td style="text-align: left;">Provisions institutional user account with hashed password.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>auth_bp</code></td>
+<td style="text-align: left;"><code>/auth/me</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Authenticated</td>
+<td style="text-align: left;">Returns authenticated user profile, department, and role data.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>attendance_bp</code></td>
+<td style="text-align: left;"><code>/sessions/create</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Teacher</td>
+<td style="text-align: left;">Initializes attendance session with BLE token and expiry window.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>attendance_bp</code></td>
+<td style="text-align: left;"><code>/attendance/submit</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Submits student check-in with biometric challenge signature.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>attendance_bp</code></td>
+<td style="text-align: left;"><code>/attendance/batch-sync</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Teacher</td>
+<td style="text-align: left;">Idempotently submits batch verified classroom attendance records.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>passport_bp</code></td>
+<td style="text-align: left;"><code>/passport/register-key</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Registers student Ed25519 public key and triggers certificate signing.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>passport_bp</code></td>
+<td style="text-align: left;"><code>/passport/trust-bundle</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Authenticated</td>
+<td style="text-align: left;">Downloads active institutional root public keys for offline verification.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>passport_bp</code></td>
+<td style="text-align: left;"><code>/passport/verify-presentation</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Verifier</td>
+<td style="text-align: left;">Server-side verification of dynamic 30s presentation QR bundle.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>leave_bp</code></td>
+<td style="text-align: left;"><code>/requests/leave/submit</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Submits new leave application with reason and date range.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>warden_bp</code></td>
+<td style="text-align: left;"><code>/warden/leave/triage</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Warden</td>
+<td style="text-align: left;">Returns pending leave requests filtered by hostel block.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>warden_bp</code></td>
+<td style="text-align: left;"><code>/warden/leave/approve</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Warden</td>
+<td style="text-align: left;">Approves leave and automatically generates signed Gate Pass.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>gate_pass_bp</code></td>
+<td style="text-align: left;"><code>/requests/gate-pass/my</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Returns active and historical gate passes with HMAC tokens.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>security_bp</code></td>
+<td style="text-align: left;"><code>/security/gate-pass/verify</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Security</td>
+<td style="text-align: left;">Verifies gate pass HMAC; records student EXITED or RETURNED transition.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>security_bp</code></td>
+<td style="text-align: left;"><code>/security/outside-students</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Security/Admin</td>
+<td style="text-align: left;">Returns list of all residential students currently outside campus gates.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>mess_bp</code></td>
+<td style="text-align: left;"><code>/mess/menus</code></td>
+<td style="text-align: left;"><code>GET</code>, <code>POST</code></td>
+<td style="text-align: left;">Mess / Student</td>
+<td style="text-align: left;">Lists active dining menus or publishes new daily meal items.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>mess_bp</code></td>
+<td style="text-align: left;"><code>/mess/entries/verify</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Mess Staff</td>
+<td style="text-align: left;">Scans student Passport QR; logs meal or blocks duplicate with HTTP 409.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>mess_bp</code></td>
+<td style="text-align: left;"><code>/mess/feedback</code></td>
+<td style="text-align: left;"><code>POST</code>, <code>GET</code></td>
+<td style="text-align: left;">Student / Mess</td>
+<td style="text-align: left;">Submits 1-5 star meal ratings or fetches aggregated feedback curves.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>complaints_bp</code></td>
+<td style="text-align: left;"><code>/complaints</code></td>
+<td style="text-align: left;"><code>POST</code>, <code>GET</code></td>
+<td style="text-align: left;">Student / Admin</td>
+<td style="text-align: left;">Files maintenance grievance or triages pending issues by priority.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>complaints_bp</code></td>
+<td style="text-align: left;"><code>/complaints/&lt;id&gt;/status</code></td>
+<td style="text-align: left;"><code>PUT</code></td>
+<td style="text-align: left;">Admin / Warden</td>
+<td style="text-align: left;">Updates ticket state and appends immutable audit entry to history.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>notices_bp</code></td>
+<td style="text-align: left;"><code>/notices</code></td>
+<td style="text-align: left;"><code>POST</code>, <code>GET</code></td>
+<td style="text-align: left;">Admin / Teacher</td>
+<td style="text-align: left;">Posts scoped notice or fetches targeted circulars for current user.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>notifications_bp</code></td>
+<td style="text-align: left;"><code>/device-tokens</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Authenticated</td>
+<td style="text-align: left;">Registers client FCM push notification device token.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>hostel_bp</code></td>
+<td style="text-align: left;"><code>/hostel/allocations</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Warden / Admin</td>
+<td style="text-align: left;">Returns room inventory, bed capacities, and student assignments.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>documents_bp</code></td>
+<td style="text-align: left;"><code>/documents/request</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Requisitions official certificates (Bonafide, Character, etc.).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>fees_bp</code></td>
+<td style="text-align: left;"><code>/fees/ledger</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Student / Admin</td>
+<td style="text-align: left;">Itemizes tuition, hostel, and mess dues with payment statuses.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>visitors_bp</code></td>
+<td style="text-align: left;"><code>/visitors/submit</code></td>
+<td style="text-align: left;"><code>POST</code></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Registers incoming family visitors for Warden approval.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>academic_bp</code></td>
+<td style="text-align: left;"><code>/academic-updates</code></td>
+<td style="text-align: left;"><code>GET</code>, <code>POST</code></td>
+<td style="text-align: left;">Teacher / Student</td>
+<td style="text-align: left;">Posts immediate class room shifts or lists today's updates.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>admin_bp</code></td>
+<td style="text-align: left;"><code>/admin/analytics</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Admin / Dean</td>
+<td style="text-align: left;">Returns global KPIs: attendance rates, bed occupancy, ageing complaints.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>search_bp</code></td>
+<td style="text-align: left;"><code>/search</code></td>
+<td style="text-align: left;"><code>GET</code></td>
+<td style="text-align: left;">Authenticated</td>
+<td style="text-align: left;">Fast full-text query across students, faculty, notices, and documents.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>29. Mobile Client Architecture &amp; State Management (Flutter)</h2>
+<p>The mobile application (<code>frontend/</code>) is engineered with <strong>Flutter 3.x</strong> and <strong>Dart 3.x</strong> using a clean, layered architectural approach:</p>
+<pre><code>frontend/lib/
+├── main.dart                  # Application entrypoint, provider injection, route composition
+├── core/                      # Core foundational services and cross-cutting concerns
+│   ├── localization/          # Multilingual engine (app_strings.dart: en, hi, or, bn)
+│   ├── performance/           # Adaptive performance engine &amp; frame budget monitors
+│   ├── haptics/               # Tactile haptic feedback patterns (app_haptics.dart)
+│   ├── theme/                 # Dark/Light theme tokens, color palettes, and typography
+│   ├── database/              # Local Drift / SQLite offline persistence
+│   └── mesh/                  # Phases M1-M7 Decentralized Mesh Network &amp; Academic AirDrop
+├── student/                   # Student role experience (home, wallet, requests, profile)
+├── teacher/                   # Teacher role experience (classes, attendance beacon, notices)
+├── warden/                    # Warden role experience (leave triage, hostel inventory)
+├── mess/                      # Mess staff role experience (QR scanner, menu composer)
+├── security/                  # Gate security role experience (pass verifier, transit logs)
+├── admin/                     # Admin mobile operations desk
+├── shared/                    # Cross-role UI screens (campus_mesh_hub_screen.dart, etc.)
+└── router/                    # Deep-linking router and transition animations
+</code></pre>
+<h3>State Management Architecture:</h3>
+<ul>
+<li><strong>Provider Pattern (<code>provider</code>):</strong> Lightweight, reactive dependency injection ensuring that only components subscribed to specific domain changes rebuild.</li>
+<li><strong>Singletons for Low-Level Radios:</strong> Core radio and hardware managers (<code>CampusMeshManager</code>, <code>LocalSendUdpDiscoveryService</code>, <code>PerformanceEngine</code>) operate as thread-safe singletons to prevent multiple open socket handles or duplicate camera controllers.</li>
+</ul>
+<hr />
+<h2>30. Performance Optimization, Frame Budgets &amp; 120Hz Benchmarks</h2>
+<p>CampusOS was benchmarked and optimized on physical modern devices, including high-refresh 120Hz displays (Samsung Galaxy A55):</p>
+<h3>The 120Hz Frame Budget Challenge:</h3>
+<ul>
+<li><strong>60Hz Standard Display:</strong> Frame render budget = <strong>16.67 ms</strong>.</li>
+<li><strong>120Hz High-Refresh Display:</strong> Frame render budget = <strong>8.33 ms</strong>.</li>
+<li>Any GPU stall or CPU computational lock exceeding 8.33 ms causes dropped frames (jank).</li>
+</ul>
+<h3>Measured Optimizations &amp; Results (<code>docs/performance/</code>):</h3>
+<ol>
+<li><strong>RepaintBoundary Isolation:</strong> Form inputs (such as the Notice Composer and Attendance Creator) originally triggered full-screen repaints on every keystroke. Isolating inputs inside <code>RepaintBoundary</code> decoupled keyboard cursor rendering, reducing average frame times from <strong>28.0 ms</strong> to <strong>26.0 ms</strong>.</li>
+<li><strong>GPU Frosted Blur Tuning:</strong> The Apple-style frosted bottom dock originally applied <code>ImageFilter.blur(sigmaX: 25, sigmaY: 25)</code> without bounds isolation. Tuning the kernel to <code>sigma: 16</code> and adding <code>RepaintBoundary</code> cut GPU pixel sampling overhead by <strong>59%</strong>, reducing dock switching peak frame stalls from <strong>115.0 ms</strong> down to <strong>62.7 ms</strong> (<strong>-45.5% reduction</strong>).</li>
+<li><strong>Zero Heap Retention Leaks:</strong> Repeated automated navigation cycles across all 6 roles confirmed a <strong>+0 KB heap retention delta</strong> across 5 continuous open/close cycles.</li>
+</ol>
+<hr />
+<h2>31. Adaptive Performance Engine &amp; Thermal Throttling Guards</h2>
+<p>Rather than assuming uniform device performance, the <strong>Adaptive Performance Engine</strong> (<code>performance_engine.dart</code>) actively adapts the UI to runtime conditions:</p>
+<ol>
+<li><strong>Hardware Profiling:</strong> Detects available CPU cores, RAM, and refresh rates (60/90/120Hz) to assign an initial device tier: <code>CONSTRAINED</code>, <code>STANDARD</code>, or <code>HIGH_END</code>.</li>
+<li><strong>Dynamic Thermal Throttling Guard:</strong><br />
+   - Under normal thermals: Enables full frosted blurs, subtle card drop shadows, and high-framerate transitions.<br />
+   - Under moderate thermal rise: Decreases blur sigma to 8 and simplifies multi-layer box shadows.<br />
+   - Under severe thermal rise: Automatically disables background blurs, falls back to flat container borders, and engages <code>ReducedMotion</code>.</li>
+<li><strong>Camera Sensor Lifecycle Management:</strong> Immediately releases mobile barcode scanner camera hardware (<code>mobile_scanner</code>) upon tab switching to prevent camera overheating and background battery drain.</li>
+</ol>
+<hr />
+<h2>32. Quality Assurance, Reality Audit &amp; Verified Limitations</h2>
+<p>In accordance with strict engineering integrity, this section explicitly documents the <strong>boundary between verified code and remaining limitations</strong>:</p>
+<h3>Fully Implemented &amp; Tested:</h3>
+<ul>
+<li>All 6 institutional roles (Student, Teacher, Warden, Mess, Security, Admin).</li>
+<li>Campus Wallet 6-card carousel with physical animations and haptics.</li>
+<li>Ed25519 keypair generation, dynamic 30s rotating presentation QR, and signature validation.</li>
+<li>Full Leave -&gt; Warden Approval -&gt; Gate Pass -&gt; Security Exit/Return flow.</li>
+<li>Mess menu publishing, cryptographic dining scan, and HTTP 409 duplicate blocks.</li>
+<li>Complaints triage, status history audit trail, and recurring issue NLP clustering.</li>
+<li>Scoped notices with per-user read tracking.</li>
+<li>Complete BLE Mesh &amp; Academic AirDrop system (Phases M1–M7) with 183 green automated tests.</li>
+<li>27 MySQL tables fully seeded and verified without data loss.</li>
+</ul>
+<h3>Verified Architectural Limitations:</h3>
+<ol>
+<li><strong>Software Keys vs. Hardware TPM:</strong> Ed25519 private keys are generated in software space and stored in Android <code>EncryptedSharedPreferences</code> / iOS Keystore. Hardware-enclave non-exportable TPM keys are planned for a future security revision.</li>
+<li><strong>No Live UIDAI Aadhaar Integration:</strong> CampusOS deliberately avoids relying on government Aadhaar servers. Identity is verified cryptographically via the internal CampusOS Passport.</li>
+<li><strong>Classroom Radio-Frequency Testing:</strong> The BLE mesh software protocol, multi-hop routing, packet parsing, and challenge signing are 100% verified in automated unit and integration tests. Live radio-frequency propagation with 50+ physical phones in a crowded lecture hall remains an on-campus milestone.</li>
+</ol>
+<hr />
+<h2>33. Comprehensive Automated Testing Harness (Backend, Frontend, Mesh)</h2>
+<p>CampusOS maintains an exhaustive regression testing harness across all layers of the monorepo:</p>
+<pre><code>=======================================================================================
+CAMPUSOS MASTER AUTOMATED VERIFICATION REPORT
+=======================================================================================
+
+1. FLUTTER CORE &amp; ROLE TESTS           : 449 / 449 TESTS PASS (100% Green)
+   - Coverage: Crypto, Wallet Carousel, Role Shells, Localization, Performance Engine.
+
+2. DECENTRALIZED MESH TEST SUITE (M1-M7): 183 / 183 TESTS PASS (100% Green)
+   - Coverage: Wire Packet Codecs, Multi-Hop Relay, Deduplication Store, AirDrop,
+               LocalSend UDP Discovery, Emergency Siren Dispatcher, Stage Simulator.
+
+3. BACKEND PYTHON REGRESSION SUITE     : 19 / 19 SUITES PASS (100% Green)
+   - test_cross_role_e2e.py            [PASS - End-to-End Leave-to-Gate Pass Flow]
+   - test_phase6_security_attacks.py   [PASS - 41 / 41 Live Security Attacks Blocked]
+   - test_gate_security.py             [PASS - HMAC Signatures &amp; Anti-Passback]
+   - test_mess_staff_verification.py   [PASS - Dining Verification &amp; HTTP 409 Conflict]
+   - test_step1c_passport_identity.py  [PASS - Ed25519 Identity &amp; Device Binding]
+   - test_step1d_passport_presentation.py [PASS - 30s Dynamic Presentation QR]
+   - test_step1f_passport_offline_bundle.py [PASS - Trust Bundle Synchronization]
+   - test_step1g_passport_challenge.py [PASS - Cryptographic Challenge-Response]
+   - test_step1i_batch_attendance.py   [PASS - Batch Attendance Verification]
+   - test_step21b_notices.py           [PASS - Scoped Notice Publishing]
+   - test_step21c_read_tracking.py     [PASS - Per-User Read Tracking Receipts]
+   - test_step21e_notifications.py     [PASS - FCM Token Management]
+   - test_step22a_mess_backend.py      [PASS - Menu Scheduling &amp; Relational Integrity]
+   - test_step22d_mess_feedback.py     [PASS - Student Ratings &amp; Sentiment Curves]
+   - test_step22e_mess_integration.py  [PASS - Mess Management Endpoints]
+   - test_warden_endpoints.py          [PASS - Leave Triage &amp; Room Assets]
+   - test_expansion_e2e.py             [PASS - Hostel, Documents, Fees, Visitors]
+   - test_passport_key_configuration.py[PASS - Public Key Registration]
+   - test_phase4_session_reconciliation.py [PASS - Offline Session Reconnect]
+
+4. ADMIN WEB COMPILATION               : 0 ERRORS (React 19 / TypeScript / Vite)
+=======================================================================================
+</code></pre>
+<hr />
+<h2>34. Physical Network Deployment &amp; Demonstration Topology</h2>
+<p>For on-campus evaluations and hackathon stage demonstrations, CampusOS is deployed across a local area network (LAN) without requiring public cloud access:</p>
+<pre><code>+---------------------------------------------------------------------------------------+
+|                         PHYSICAL LAN DEMONSTRATION ARCHITECTURE                       |
++---------------------------------------------------------------------------------------+
+|                                                                                       |
+|     +--------------------------------------------------------------------+            |
+|     |                 CAMPUSOS CENTRAL SERVER / HOST LAPTOP              |            |
+|     |  • Flask REST Backend Monolith (`http://192.168.1.100:5000`)       |            |
+|     |  • MySQL 8 Authoritative Database (`localhost:3306`)               |            |
+|     |  • React 19 Admin Web Dashboard (`http://localhost:5173`)          |            |
+|     +----------------------------------┬---------------------------------+            |
+|                                        │                                              |
+|                          [ Local High-Speed Wi-Fi Router ]                            |
+|                                        │                                              |
+|         ┌──────────────┬───────────────┼──────────────┬──────────────┐                |
+|         ▼              ▼               ▼              ▼              ▼                |
+|    [ STUDENT ]    [ TEACHER ]     [ WARDEN ]      [ MESS ]      [ SECURITY ]          |
+|    Mobile Phone   Mobile Phone    Mobile Phone    Tablet        Mobile Phone          |
+|                                                                                       |
+|    ⚡ ZERO ROUTER / COMPLETE BLACKOUT FALLBACK:                                       |
+|    All devices communicate directly via BLE 5.x Ad-Hoc Mesh &amp; LocalSend P2P!          |
++---------------------------------------------------------------------------------------+
+</code></pre>
+<hr />
+<h2>35. Deterministic Test Data Generation &amp; Multi-Role Seeding</h2>
+<p>The backend includes an idempotent seeding utility (<code>backend/seed_test_data.py</code>) that populates verified accounts for all six institutional roles:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Role</th>
+<th style="text-align: left;">Email</th>
+<th style="text-align: left;">Password</th>
+<th style="text-align: left;">Seeded Identity Details &amp; Permissions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>System Admin / Dean</strong></td>
+<td style="text-align: left;"><code>admin@campusos.edu</code></td>
+<td style="text-align: left;"><code>Admin@1234</code></td>
+<td style="text-align: left;">Dr. Jena — Institutional Dean (Full Access to Admin Web &amp; Mobile Desk).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Faculty / Teacher</strong></td>
+<td style="text-align: left;"><code>teacher@campusos.edu</code></td>
+<td style="text-align: left;"><code>Teacher@1234</code></td>
+<td style="text-align: left;">Prof. Priya Sharma — CSE Faculty (Attendance Sessions &amp; Class Notices).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Student</strong></td>
+<td style="text-align: left;"><code>student@campusos.edu</code></td>
+<td style="text-align: left;"><code>Student@1234</code></td>
+<td style="text-align: left;">Aarav Patel — B.Tech CSE, 3rd Year (Wallet, Passport, Requests, Feed).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Hostel Warden</strong></td>
+<td style="text-align: left;"><code>warden@campusos.edu</code></td>
+<td style="text-align: left;"><code>Warden@1234</code></td>
+<td style="text-align: left;">Dr. Rajesh Sharma — Chief Warden (Leave Approvals &amp; Hostel Triage).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Mess Staff</strong></td>
+<td style="text-align: left;"><code>mess@campusos.edu</code></td>
+<td style="text-align: left;"><code>Mess@1234</code></td>
+<td style="text-align: left;">Gordon — Central Mess Manager (Dining QR Scanner &amp; Menu Publisher).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Gate Security Guard</strong></td>
+<td style="text-align: left;"><code>security@campusos.edu</code></td>
+<td style="text-align: left;"><code>Security@1234</code></td>
+<td style="text-align: left;">Officer Vikram Singh — Main Gate 1 (HMAC Gate Pass Scanner &amp; Ledger).</td>
+</tr>
+</tbody>
+</table>
+<h3>Execution Command:</h3>
+<pre><code class="language-bash">python backend/seed_test_data.py --reset --verify
+</code></pre>
+<hr />
+<h2>36. Production Deployment Runbook (Nginx, Gunicorn, systemd, MySQL 8 Hardening, SSL)</h2>
+<p>For long-term institutional deployment across a university data center, follow this production specification (<code>docs/CAMPUSOS_BACKEND_DEPLOYMENT_RUNBOOK.md</code>):</p>
+<h3>1. Systemd Service Definition (<code>/etc/systemd/system/campusos-backend.service</code>):</h3>
+<pre><code class="language-ini">[Unit]
+Description=CampusOS Flask Monolith Application Server
+After=network.target mysql.service
+
+[Service]
+User=campusos
+WorkingDirectory=/opt/campusos/backend
+Environment=&quot;PATH=/opt/campusos/backend/venv/bin&quot;
+EnvironmentFile=/opt/campusos/backend/.env
+ExecStart=/opt/campusos/backend/venv/bin/gunicorn --workers 4 --bind 127.0.0.1:5000 --timeout 60 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<h3>2. Nginx Reverse Proxy &amp; SSL Configuration (<code>/etc/nginx/sites-available/campusos</code>):</h3>
+<pre><code class="language-nginx">server {
+    listen 80;
+    server_name campusos.university.edu;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name campusos.university.edu;
+
+    ssl_certificate /etc/letsencrypt/live/campusos.university.edu/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/campusos.university.edu/privkey.pem;
+
+    # React Admin Web Static Assets
+    location / {
+        root /opt/campusos/admin-web/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # REST API Gateway Proxy
+    location /api/ {
+        proxy_pass http://127.0.0.1:5000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+</code></pre>
+<h3>3. MySQL 8 Database Hardening:</h3>
+<ul>
+<li>Set default character set to <code>utf8mb4</code> with <code>utf8mb4_unicode_ci</code> collation.</li>
+<li>Configure daily automated database dumps via cron:<br />
+<code>bash
+  0 2 * * * mysqldump -u root -p attentify | gzip &gt; /opt/backups/campusos_$(date +\%F).sql.gz</code></li>
+</ul>
+<hr />
+<h2>37. Smartphone-Optional / Assisted Access Kiosk Architecture</h2>
+<p>To address the campus digital divide where students may have lost, discharged, or no personal smartphones, CampusOS specifies an <strong>Assisted Access Kiosk Mode</strong>:<br />
+- <strong>Physical Kiosk Stations:</strong> Installed at high-traffic hubs (central library, warden office, main security gate).<br />
+- <strong>1:1 Face Verification Workflow:</strong> Student enters their University Registration ID; kiosk webcam captures facial image; verifies against enrolled student photo record; grants an ephemeral 15-minute terminal session.<br />
+- <strong>Emergency Token Printing:</strong> Terminal can print a physical 1-time dynamic thermal barcode token for dining or gate exit.</p>
+<div class="callout callout-important"><div class="callout-title">⚡ IMPORTANT</div><div class="callout-body">**Implementation Status: PLANNED ARCHITECTURE.**
+> While the underlying identity schemas support kiosk sessions, physical face-recognition kiosk hardware is a roadmap capability and is not present in the current software build.</div></div>
+<hr />
+<h2>38. Institutional Migration Center &amp; AI-Assisted Ingestion (Roadmap)</h2>
+<p>Universities running legacy software cannot switch platforms overnight. The <strong>CampusOS Migration Center</strong> is an architectural roadmap for automated legacy data ingestion:<br />
+- <strong>8-Stage Pipeline:</strong> Source Discovery -&gt; Schema Mapping -&gt; Data Validation -&gt; Identity Resolution -&gt; Dry-Run Sandbox -&gt; Exception Handling -&gt; Master Cutover -&gt; Rollback Safety Net.<br />
+- <strong>AI-Assisted Schema Inference:</strong> Uses LLM heuristics to infer legacy column mappings (e.g., mapping <code>STU_ROLL_NO</code> to <code>User.registration_no</code>) with deterministic SQL execution.</p>
+<div class="callout callout-note"><div class="callout-title">ℹ️ NOTE</div><div class="callout-body">**Implementation Status: PLANNED ROADMAP.**
+> Intentionally excluded from the current codebase to prioritize core runtime stability and offline mesh capabilities.</div></div>
+<hr />
+<h2>39. End-to-End Cross-Role Operational Workflows</h2>
+<p>Below are eight verified cross-role operational workflows implemented in CampusOS:</p>
+<ol>
+<li><strong>Workflow 1: Student Leave → Warden Approval → Gate Pass → Security Exit/Return:</strong><br />
+   - Student submits leave -&gt; Warden reviews and approves -&gt; System generates HMAC-signed Gate Pass -&gt; Security scans exit (student count decrements) -&gt; Security scans return (pass completes).</li>
+<li><strong>Workflow 2: Teacher Session → Student Passport → Attendance Verification:</strong><br />
+   - Teacher starts BLE attendance session -&gt; Student device detects beacon (RSSI &gt; -75dBm) -&gt; Biometric gate unlocked -&gt; Student signs challenge with Ed25519 key -&gt; Teacher app aggregates batch -&gt; Backend records attendance.</li>
+<li><strong>Workflow 3: Student Grievance → Admin Triage → Maintenance Resolution:</strong><br />
+   - Student files electrical complaint -&gt; Admin inspects queue -&gt; Assigns maintenance technician -&gt; Status updates with notes -&gt; Student verifies repair and closes ticket.</li>
+<li><strong>Workflow 4: Admin Scoped Notice → Targeted Delivery → Read Tracking:</strong><br />
+   - Admin composes circular targeting CSE 3rd Year -&gt; Deliveries queued -&gt; FCM push dispatched -&gt; Student opens circular -&gt; Read receipt recorded in database.</li>
+<li><strong>Workflow 5: Mess Menu Publication → Student Presentation → Dining Verification:</strong><br />
+   - Mess staff publishes lunch menu -&gt; Student unlocks Passport -&gt; Displays 30s dynamic QR -&gt; Staff scans barcode -&gt; Signature verified -&gt; Duplicate meal claim blocked with HTTP 409.</li>
+<li><strong>Workflow 6: Visitor Request → Warden Approval → Gate Check-In &amp; Check-Out:</strong><br />
+   - Student registers visiting parents -&gt; Warden approves -&gt; Visitor Pass card appears in Student Wallet -&gt; Security scans barcode at gate -&gt; Logs vehicle and arrival timestamp.</li>
+<li><strong>Workflow 7: Document Request → Registrar Issuance → Wallet Integration:</strong><br />
+   - Student requests Bonafide Certificate -&gt; Registrar approves -&gt; System issues unique serial number -&gt; Certificate permanently stored in Wallet Documents card.</li>
+<li><strong>Workflow 8: Disaster Siren → Multi-Hop BLE Mesh Relay → Local Phone Alarm:</strong><br />
+   - Dean triggers disaster flare -&gt; Packets flood over BLE mesh -&gt; Peer devices decrement TTL -&gt; Student phones sound audio siren, vibrate continuously, and display evacuation routes.</li>
+</ol>
+<hr />
+<h2>40. Role-Based User Journeys (All 6 Roles)</h2>
+<h3>1. The Student Journey:</h3>
+<pre><code>Login with Registration No / Email
+   ↓
+Home Screen: Check Attendance Gauge &amp; Today's Shifted Classes
+   ↓
+Open Campus Wallet: Biometric Unlock -&gt; Present 30s Passport QR
+   ↓
+Submit Requests: Hostel Leave, Maintenance Grievances, Document Certificates
+   ↓
+Launch Mesh Hub: AirDrop Lecture Notes, Chat in Off-Grid Channels
+</code></pre>
+<h3>2. The Teacher Journey:</h3>
+<pre><code>Login with Faculty Credentials
+   ↓
+Home: Select Class -&gt; Launch Attendance Session
+   ↓
+Broadcast BLE Beacon &amp; Display Dynamic QR Fallback
+   ↓
+Review Live Attendance Roster &amp; Low Attendance Alerts
+   ↓
+Broadcast Instant Class Room Shift Notice to Students
+</code></pre>
+<h3>3. The Hostel Warden Journey:</h3>
+<pre><code>Login with Warden Credentials
+   ↓
+Hostel Dashboard: View Students Outside Campus &amp; Pending Leaves
+   ↓
+Open Leave Triage Queue: Review History -&gt; Approve (Auto-Triggers Gate Pass)
+   ↓
+Inspect Room Inventory Allocations &amp; Triage Broken Furniture Reports
+   ↓
+Review &amp; Authorize Pending Visitor Passes
+</code></pre>
+<h3>4. The Institutional Admin / Dean Journey:</h3>
+<pre><code>Desktop Login to React 19 Admin Web (or Mobile Admin)
+   ↓
+Command Center: Inspect University Attendance Curves, Bed Occupancy, Dues
+   ↓
+Grievance Desk: Resolve Ageing Complaints (&gt;48h) &amp; Review NLP Clusters
+   ↓
+Issue Official Certificates with Authoritative Digital Serial Numbers
+   ↓
+Publish Scoped Circulars &amp; Audit Perimeter Gate Activity
+</code></pre>
+<h3>5. The Mess Staff Journey:</h3>
+<pre><code>Login to Dining Console
+   ↓
+Publish Weekly Breakfast, Lunch, Snacks, and Dinner Menus
+   ↓
+Launch High-Speed Dining Scanner -&gt; Scan Student Passport QRs
+   ↓
+System Validates Ed25519 Signature &amp; Blocks Duplicate Meal Claims (HTTP 409)
+   ↓
+Review Daily Dining Headcount Volumes &amp; Student Star Ratings
+</code></pre>
+<h3>6. The Gate Security Guard Journey:</h3>
+<pre><code>Login to Security Tablet / Phone
+   ↓
+Gate Console: View Shift Metrics &amp; Students Currently Outside Campus
+   ↓
+Scan Outbound Student Gate Pass -&gt; Confirm Valid Window -&gt; Mark EXITED
+   ↓
+Scan Inbound Returning Student Pass -&gt; Verify Return Time -&gt; Mark RETURNED
+   ↓
+Verify Visitor QR Passes &amp; Record Guest Vehicle Registration Details
+</code></pre>
+<hr />
+<h2>41. Design System &amp; Human-Interface Guidelines</h2>
+<p>CampusOS rejects generic admin templates in favor of a <strong>restrained, premium design system</strong>:<br />
+- <strong>Calm High-Contrast Surfaces:</strong> Deep slate backgrounds (<code>#0F172A</code>, <code>#050814</code>) for cryptographic trust elements; clean white cards (<code>#FFFFFF</code>) for operational tables.<br />
+- <strong>Tactile Haptic Language:</strong> Fine haptic pulses (<code>AppHaptics.selectionClick()</code>) on wallet snapping; medium impacts on status approvals; heavy buzzes on security rejections or disaster flares.<br />
+- <strong>Motion with Continuity:</strong> Smooth 250–350ms ease-out transitions connecting cards to expansion sheets without jarring screen jumps.<br />
+- <strong>Typography:</strong> Google Fonts <em>Plus Jakarta Sans</em> for clean UI hierarchy paired with <em>JetBrains Mono</em> for cryptographic hashes and serial codes.</p>
+<hr />
+<h2>42. Complete Repository &amp; Component Directory Map</h2>
+<pre><code>CampusOS-1.0.0/
+├── README.md                      # Comprehensive project overview &amp; quickstart
+├── build_runbook_pdf.py           # Deployment runbook PDF compilation script
+├── convert_doc_to_pdf.py          # Complete documentation PDF compilation script
+├── CampusOS.apk                   # Precompiled Android release package (86.4 MB)
+├── CampusOS_Architecture_Diagram.jpg # High-resolution architecture blueprint
+│
+├── backend/                       # Python Flask WSGI Modular Monolith
+│   ├── app.py, run.py, config.py  # Application factory, entrypoint, configuration
+│   ├── extensions.py              # SQLAlchemy and Firebase initialization
+│   ├── passport_service.py        # Ed25519 PKI, trust bundles, certificate issuance
+│   ├── models/                    # 27 SQLAlchemy domain models
+│   ├── routes/                    # 19 Flask Route Blueprints
+│   ├── services/                  # Notice targeting, grievance clustering, audit services
+│   ├── middleware/                # RBAC authorization &amp; JWT validation
+│   ├── utils/                     # Cryptographic primitives &amp; request validators
+│   ├── seed_test_data.py          # Relational test data generator for all 6 roles
+│   └── run_all_backend_tests.py   # Master runner executing all 19 test suites
+│
+├── frontend/                      # Flutter Cross-Platform Mobile Application
+│   ├── lib/main.dart              # App initialization &amp; role routing
+│   ├── lib/core/                  # Localization (4 langs), haptics, themes, performance
+│   ├── lib/core/mesh/             # BLE Mesh Engine M1-M7, LocalSend P2P, Crypto, Sockets
+│   ├── lib/student/               # Student experience (wallet, passport, feed, requests)
+│   ├── lib/teacher/               # Teacher experience (attendance broadcaster, reports)
+│   ├── lib/warden/                # Warden experience (leave triage, hostel inventory)
+│   ├── lib/mess/                  # Mess staff experience (dining scanner, menu publisher)
+│   ├── lib/security/              # Gate security experience (pass scanner, ledger)
+│   ├── lib/admin/                 # Admin mobile operations desk
+│   ├── lib/shared/screens/        # Mesh hub, radar, chat, emergency, validation screens
+│   └── test/                      # 449 unit/widget tests + 183 mesh tests (100% green)
+│
+├── admin-web/                     # React 19 + TypeScript + Vite Admin Web Console
+│   ├── src/features/              # 17 Feature modules (Dashboard, People, Grievances, etc.)
+│   ├── src/components/            # shadcn/ui accessible components &amp; Recharts visualizations
+│   ├── src/services/              # API client with JWT bearer propagation
+│   └── vite.config.ts             # Vite bundler configuration
+│
+├── docs/                          # Authoritative System Documentation
+│   ├── CAMPUSOS_COMPLETE_DOCUMENTATION.md # Master 45-chapter system specification
+│   ├── CAMPUSOS_BACKEND_DEPLOYMENT_RUNBOOK.md # Production deployment runbook
+│   ├── CAMPUSOS_MESH_COMPLETE_SPECIFICATION.md # P2P Mesh &amp; AirDrop specification
+│   ├── performance/               # 120Hz physical device performance audit reports
+│   └── qa/                        # Reality audits, security fix reports, test inventories
+│
+├── bitchat/ &amp; bitchat-android/    # BLE mesh reference architectures &amp; native modules
+└── localsend/                     # High-speed local Wi-Fi transfer reference &amp; protocol
+</code></pre>
+<hr />
+<h2>43. Live Stage Demonstration &amp; Evaluation Playbook</h2>
+<p>Use this structured 5-minute walkthrough when presenting CampusOS to hackathon judges or institutional evaluators:</p>
+<h3>Act 1: The Unified Multi-Role Reality (60 Seconds)</h3>
+<ul>
+<li>Open the <strong>React 19 Admin Web Console</strong> on the projector (<code>http://localhost:5173</code>). Highlight real-time campus metrics: total enrolled students, low-attendance warnings, and ageing complaints.</li>
+<li>Switch to the <strong>Student Mobile App</strong>. Display the <strong>Campus Wallet Carousel</strong>. Swipe through the cards with tactile haptic clicks, expanding the <strong>CampusOS Passport</strong>.</li>
+</ul>
+<h3>Act 2: Cryptographic Identity &amp; Anti-Proxy Verification (60 Seconds)</h3>
+<ul>
+<li>Unlock the student Passport using Android Biometrics. Show the dynamic 30-second rotating QR code.</li>
+<li>Open the <strong>Mess Staff App</strong> on a second device. Scan the student's Passport QR. The system displays a green confirmation with meal details.</li>
+<li><strong>The Attack:</strong> Attempt to scan the exact same QR code again. The system instantly sounds an alert and displays <strong>HTTP 409 Conflict: Duplicate Meal Claimed!</strong></li>
+</ul>
+<h3>Act 3: Cascading Leave-to-Gate Pass Flow (60 Seconds)</h3>
+<ul>
+<li>Student submits a hostel leave request for the weekend.</li>
+<li>Open the <strong>Warden Mobile App</strong>. The request appears in the triage inbox. The Warden taps 'Approve with Remarks'.</li>
+<li>Instantly, the student's Campus Wallet updates to display the active <strong>Gate Pass Card</strong> with an HMAC-signed barcode and live return countdown.</li>
+<li>Open the <strong>Gate Security App</strong>. Scan the Gate Pass. Security taps 'Mark Exited'. The outside-campus ledger increments.</li>
+</ul>
+<h3>Act 4: The Blackout Test — Zero-Infrastructure BLE Mesh &amp; AirDrop (90 Seconds)</h3>
+<ul>
+<li><strong>The Extreme Test:</strong> Switch ALL test phones into <strong>Airplane Mode</strong> (Wi-Fi OFF, Cellular Data OFF, Bluetooth ON).</li>
+<li>Open the <strong>Campus Mesh Hub</strong> (<code>campus_mesh_hub_screen.dart</code>). Point out that mesh auto-discovery is active and nearby peers appear on the <strong>Live Node Radar</strong>.</li>
+<li>Send an off-grid message in <code>#hostel</code> channel. The message propagates across devices via multi-hop BLE relaying.</li>
+<li>Open <strong>Academic AirDrop</strong>. Select a 10 MB lecture assignment using the benchmark generator. Demonstrate peer discovery over LocalSend UDP and high-speed socket streaming.</li>
+</ul>
+<h3>Act 5: Disaster Siren Emergency Flare (30 Seconds)</h3>
+<ul>
+<li>From the Dean / Warden mobile console, trigger a <strong>Disaster Evacuation Flare</strong> on the <code>#emergency</code> channel.</li>
+<li>Within 2 seconds, all student devices across the room override silent mode, play an audible siren alarm, vibrate continuously, and display immediate evacuation directives.</li>
+</ul>
+<hr />
+<h2>44. Master Implementation Status Matrix</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Feature / Domain</th>
+<th style="text-align: left;">Institutional Role</th>
+<th style="text-align: left;">Architecture Layer</th>
+<th style="text-align: center;">Verified Status</th>
+<th style="text-align: left;">Technical Implementation Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Authentication &amp; Sessions</strong></td>
+<td style="text-align: left;">All 6 Roles</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">HS256 signed JWTs, session restore, cold start recovery.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Role-Based Access Control</strong></td>
+<td style="text-align: left;">All 6 Roles</td>
+<td style="text-align: left;">Backend Middleware</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Strict RBAC; student/teacher blocked from admin (HTTP 403).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Student Home Feed</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Frontend UI / API</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Attendance gauge, bento grid, notifications, search.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Campus Wallet Carousel</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Frontend UI</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Smooth physical card carousel with satin cards and haptics.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Card 1: Campus Passport</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Ed25519 identity, biometric gate, 30s rotating QR.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Card 2: Student ID Card</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Frontend UI</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Digital institutional ID with registration details.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Card 3: Gate Pass Card</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Live status display, time countdown, HMAC QR modal.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Card 4: Documents Card</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Certificate preview and full Document Viewer Sheet.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Card 5: Fees &amp; Dues Card</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Dues balance, due date, and Fee Details Sheet.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Card 6: Visitor Pass Card</strong></td>
+<td style="text-align: left;">Student</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Dynamic card visible only when active approved pass exists.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>BLE Attendance Broadcast</strong></td>
+<td style="text-align: left;">Teacher / Student</td>
+<td style="text-align: left;">Hardware Bluetooth</td>
+<td style="text-align: center;"><span class="status-badge badge-yellow">AUTOMATION TESTED</span></td>
+<td style="text-align: left;">Protocol and challenge tested; physical RF unverified.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Attendance Batch API</strong></td>
+<td style="text-align: left;">Teacher</td>
+<td style="text-align: left;">Backend API / DB</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Validates batch signatures, prevents duplicate records.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Attendance QR Fallback</strong></td>
+<td style="text-align: left;">Teacher / Student</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Dynamic QR displayed on teacher screen for fallback scan.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Leave Request Pipeline</strong></td>
+<td style="text-align: left;">Student / Warden</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Submit -&gt; Review -&gt; Approve/Reject with audit remarks.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Gate Pass Auto-Creation</strong></td>
+<td style="text-align: left;">Student / Warden</td>
+<td style="text-align: left;">Backend / DB</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Pass automatically generated and approved on leave approval.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Gate Security Scanning</strong></td>
+<td style="text-align: left;">Security Guard</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Verifies HMAC-SHA256 tokens; transitions to EXITED/RETURNED.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Gate Anti-Replay Engine</strong></td>
+<td style="text-align: left;">Security Guard</td>
+<td style="text-align: left;">Backend API</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Rejects duplicate exits; enforces anti-passback rule.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Mess Dining Entry Scan</strong></td>
+<td style="text-align: left;">Mess Staff</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Verifies Ed25519 QR presentation; blocks duplicate meals.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Mess Student Feedback</strong></td>
+<td style="text-align: left;">Student / Mess</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">1-5 star ratings, feedback categories, sentiment curves.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Complaints &amp; Grievances</strong></td>
+<td style="text-align: left;">Student / Admin</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Triage pipeline, status history log, ageing alerts (&gt;48h).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Recurring Issue Clustering</strong></td>
+<td style="text-align: left;">Admin</td>
+<td style="text-align: left;">Backend Service</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Keyword and semantic similarity clustering algorithm.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Scoped Notices Engine</strong></td>
+<td style="text-align: left;">Admin / Teacher</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Scoped targeting; teachers restricted from ALL (HTTP 403).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Notice Read Tracking</strong></td>
+<td style="text-align: left;">Teacher / Admin</td>
+<td style="text-align: left;">Backend / DB</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Per-user delivery states (<code>DELIVERED</code>, <code>READ</code>, <code>ACTIONED</code>).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Hostel &amp; Room Assets</strong></td>
+<td style="text-align: left;">Student / Warden</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Room allocations, bed IDs, and asset defect reporting.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Documents &amp; Certificates</strong></td>
+<td style="text-align: left;">Student / Admin</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Request submission, official serial numbering, wallet save.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Fees &amp; Dues Records</strong></td>
+<td style="text-align: left;">Student / Admin</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Balance tracking, payment references, receipt histories.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Visitor Pass Management</strong></td>
+<td style="text-align: left;">Student / Warden / Sec</td>
+<td style="text-align: left;">Full Stack</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Guest registration, Warden approval, Security check-in.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Decentralized BLE Mesh</strong></td>
+<td style="text-align: left;">All Roles</td>
+<td style="text-align: left;">Mobile Core</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Phases M1-M7; multi-hop relay, loop prevention, deduplication.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Academic AirDrop Tier 1</strong></td>
+<td style="text-align: left;">Students / Faculty</td>
+<td style="text-align: left;">Mobile Core</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Pure offline BLE file chunking (&lt;= 2 MB) with SHA-256.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Academic AirDrop Tier 2</strong></td>
+<td style="text-align: left;">Students / Faculty</td>
+<td style="text-align: left;">Mobile Core</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">LocalSend UDP discovery (Port 53317) &amp; 50 MB/s TCP streaming.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Disaster Flare Sirens</strong></td>
+<td style="text-align: left;">Deans / Wardens</td>
+<td style="text-align: left;">Mobile Core</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Authority-signed emergency sirens, haptics, and audit trail.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Mesh Node Radar &amp; Sim</strong></td>
+<td style="text-align: left;">Evaluators / Deans</td>
+<td style="text-align: left;">Mobile Core</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Visual RSSI node radar, physical validation, stage simulator.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>React Admin Web Console</strong></td>
+<td style="text-align: left;">Admin / Deans</td>
+<td style="text-align: left;">Full Stack Web</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">React 19 desktop control plane with 17 active modules.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Multilingual Localization</strong></td>
+<td style="text-align: left;">All Roles</td>
+<td style="text-align: left;">Frontend UI</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Complete strings in English, Hindi, Odia, and Bengali.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Adaptive Performance</strong></td>
+<td style="text-align: left;">All Roles</td>
+<td style="text-align: left;">Frontend Engine</td>
+<td style="text-align: center;"><span class="status-badge badge-green">IMPLEMENTED &amp; TESTED</span></td>
+<td style="text-align: left;">Frame-budget monitoring, RepaintBoundaries, thermal modes.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Assisted Access Kiosk</strong></td>
+<td style="text-align: left;">Students w/o phones</td>
+<td style="text-align: left;">Hardware / Kiosk</td>
+<td style="text-align: center;"><span class="status-badge badge-yellow">PLANNED ARCHITECTURE</span></td>
+<td style="text-align: left;">Operator-assisted kiosk concept; not implemented in code.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Migration Center</strong></td>
+<td style="text-align: left;">Admin / Deans</td>
+<td style="text-align: left;">Full Stack Web</td>
+<td style="text-align: center;"><span class="status-badge badge-yellow">PLANNED ROADMAP</span></td>
+<td style="text-align: left;">Planned migration pipeline; intentionally excluded.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>45. Final Product Synthesis &amp; Future Roadmap</h2>
+<h3>What CampusOS Is Today:</h3>
+<p><strong>CampusOS is an operational, production-hardened institutional operating platform that replaces fragmented paper registers, lost WhatsApp circulars, and vulnerable attendance apps with a mathematically verifiable digital ecosystem.</strong></p>
+<p>By uniting all six campus stakeholders—<strong>Students</strong>, <strong>Teachers</strong>, <strong>Hostel Wardens</strong>, <strong>Mess Staff</strong>, <strong>Gate Security Guards</strong>, and <strong>Deans</strong>—around an authoritative MySQL 8 backend, Ed25519 cryptographic identities, and an autonomous decentralized BLE mesh communication fabric, CampusOS delivers:<br />
+- <strong>Institutional Accountability:</strong> Real-time visibility into student safety, perimeter movements, dining operations, and facility defect resolution.<br />
+- <strong>Fraud-Proof Integrity:</strong> Asymmetric signatures, 30s rotating dynamic QR codes, and anti-replay nonces permanently eliminate roll-call proxies and meal ticket theft.<br />
+- <strong>Disaster-Proof Offline Survivability:</strong> Total campus communication continuity during severe weather disasters and power outages through peer-to-peer BLE mesh relays, high-speed LocalSend Wi-Fi AirDrop, and delay-tolerant store-and-forward synchronization.<br />
+- <strong>Verified Engineering Quality:</strong> 449 passing Flutter tests, 183 passing mesh tests, 19 passing backend test suites (including 41 live security penetration attacks), 0 fatal analyzer errors, and a silky 120Hz-aware rendering architecture.</p>
+<h3>Future Engineering Roadmap:</h3>
+<ol>
+<li><strong>Hardware Enclave Migration:</strong> Elevating cryptographic key storage from <code>EncryptedSharedPreferences</code> to hardware-backed Secure Element (SE) / StrongBox Android KeyStore.</li>
+<li><strong>Large-Scale Physical RF Trials:</strong> Executing high-density classroom radio trials with 100+ physical handsets running BLE attendance concurrently in a lecture hall.</li>
+<li><strong>Assisted Access Kiosk Terminals:</strong> Fabricating physical touch-screen campus kiosks with localized biometric face verification for students without smartphones.</li>
+<li><strong>Automated Institutional Migration Center:</strong> Building the automated ETL pipeline for ingesting legacy university databases into the standard CampusOS relational schema.</li>
+</ol>
+<p>CampusOS stands fully documented, tested, and validated—ready for rigorous technical evaluation, physical multi-device demonstration, and production deployment across residential university campuses.</p>
+<hr />
+<p><em>End of Complete Product, Architecture, Protocol &amp; Implementation Specification.</em></p>
+</body>
+</html>

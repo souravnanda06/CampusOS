@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 98.5%;
+    --foreground: 224 35% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 35% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 35% 12%;
+
+    --primary: 224 48% 18%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 220 18% 95%;
+    --secondary-foreground: 224 35% 18%;
+
+    --muted: 220 16% 94%;
+    --muted-foreground: 220 12% 44%;
+
+    --accent: 220 18% 94%;
+    --accent-foreground: 224 35% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 13% 89%;
+    --input: 220 13% 89%;
+    --ring: 224 48% 30%;
+
+    --radius: 0.65rem;
+  }
+
+  .dark {
+    --background: 224 36% 7.5%;
+    --foreground: 220 20% 96%;
+
+    --card: 224 32% 10.5%;
+    --card-foreground: 220 20% 96%;
+
+    --popover: 224 32% 10.5%;
+    --popover-foreground: 220 20% 96%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 224 48% 12%;
+
+    --secondary: 224 25% 16%;
+    --secondary-foreground: 220 20% 96%;
+
+    --muted: 224 24% 15%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 224 25% 16%;
+    --accent-foreground: 220 20% 96%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 224 20% 18%;
+    --input: 224 20% 18%;
+    --ring: 215 20% 65%;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-slate-200 dark:selection:bg-slate-800;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Institutional custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.45);
+}

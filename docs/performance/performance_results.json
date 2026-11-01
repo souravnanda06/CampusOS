@@ -1,0 +1,397 @@
+{
+  "auditMetadata": {
+    "timestamp": "2026-09-28T00:15:22.739507",
+    "device": {
+      "name": "Samsung Galaxy A55",
+      "model": "SM-A556E",
+      "product": "a55xnsins",
+      "androidVersion": "Android 16",
+      "apiLevel": 36,
+      "displayRefreshRateHz": 120.0,
+      "resolution": "1080x2340",
+      "pixelRatio": 2.8125
+    },
+    "environment": {
+      "flutterVersion": "3.38.4",
+      "dartVersion": "3.10.3",
+      "targetFrameBudgetMs": 8.333333333333334
+    }
+  },
+  "startup": {
+    "flutterBindingInitMs": 0.3,
+    "firstFrameMs": 1128.0,
+    "firstMeaningfulFrameMs": 2242.0,
+    "status": "WARNING",
+    "notes": "Measured through automated test harness pump cycle."
+  },
+  "frameBenchmarks": [
+    {
+      "actionName": "Startup: Cold Splash Launch",
+      "totalFrames": 1,
+      "averageFrameMs": 1128.0,
+      "peakFrameMs": 1128.0,
+      "framesOverBudget": 1,
+      "severeStalls": 1,
+      "jankRatePercent": 0.0,
+      "status": "WARNING"
+    },
+    {
+      "actionName": "Student: Shell 4-Tab Dock Switching",
+      "totalFrames": 32,
+      "averageFrameMs": 16.53,
+      "peakFrameMs": 115.03,
+      "framesOverBudget": 23,
+      "severeStalls": 4,
+      "jankRatePercent": 71.88,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Student: Home Feed Scroll Benchmark",
+      "totalFrames": 59,
+      "averageFrameMs": 11.54,
+      "peakFrameMs": 14.7,
+      "framesOverBudget": 59,
+      "severeStalls": 0,
+      "jankRatePercent": 100.0,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Student: Timetable Scroll Benchmark",
+      "totalFrames": 57,
+      "averageFrameMs": 16.2,
+      "peakFrameMs": 60.5,
+      "framesOverBudget": 41,
+      "severeStalls": 3,
+      "jankRatePercent": 71.9,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Student: Analytics Dashboard Render",
+      "totalFrames": 10,
+      "averageFrameMs": 22.4,
+      "peakFrameMs": 87.6,
+      "framesOverBudget": 4,
+      "severeStalls": 2,
+      "jankRatePercent": 40.0,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Student: Mess Menu Daily View Scroll",
+      "totalFrames": 52,
+      "averageFrameMs": 6.1,
+      "peakFrameMs": 35.5,
+      "framesOverBudget": 7,
+      "severeStalls": 1,
+      "jankRatePercent": 13.5,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Teacher: Shell 4-Tab Dock Switching",
+      "totalFrames": 33,
+      "averageFrameMs": 16.0,
+      "peakFrameMs": 55.5,
+      "framesOverBudget": 16,
+      "severeStalls": 3,
+      "jankRatePercent": 48.5,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Teacher: Classes Roster Scroll",
+      "totalFrames": 58,
+      "averageFrameMs": 6.3,
+      "peakFrameMs": 18.6,
+      "framesOverBudget": 5,
+      "severeStalls": 0,
+      "jankRatePercent": 8.6,
+      "status": "WARNING"
+    },
+    {
+      "actionName": "Teacher: Create Session Location Input",
+      "totalFrames": 32,
+      "averageFrameMs": 28.0,
+      "peakFrameMs": 102.4,
+      "framesOverBudget": 27,
+      "severeStalls": 7,
+      "jankRatePercent": 84.4,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Teacher: Class Detail Screen Render",
+      "totalFrames": 8,
+      "averageFrameMs": 20.7,
+      "peakFrameMs": 54.9,
+      "framesOverBudget": 6,
+      "severeStalls": 1,
+      "jankRatePercent": 75.0,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Admin: Shell 4-Tab Dock Switching",
+      "totalFrames": 34,
+      "averageFrameMs": 19.5,
+      "peakFrameMs": 51.4,
+      "framesOverBudget": 28,
+      "severeStalls": 5,
+      "jankRatePercent": 82.4,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Admin: Operations Grid Scroll",
+      "totalFrames": 51,
+      "averageFrameMs": 7.9,
+      "peakFrameMs": 13.6,
+      "framesOverBudget": 22,
+      "severeStalls": 0,
+      "jankRatePercent": 43.1,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Admin: Complaints Search Query Input",
+      "totalFrames": 27,
+      "averageFrameMs": 14.3,
+      "peakFrameMs": 55.8,
+      "framesOverBudget": 19,
+      "severeStalls": 1,
+      "jankRatePercent": 70.4,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Warden: Shell 4-Tab Dock Switching",
+      "totalFrames": 33,
+      "averageFrameMs": 18.3,
+      "peakFrameMs": 67.1,
+      "framesOverBudget": 31,
+      "severeStalls": 2,
+      "jankRatePercent": 93.9,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Warden: Leave Requests List Scroll",
+      "totalFrames": 60,
+      "averageFrameMs": 8.3,
+      "peakFrameMs": 14.6,
+      "framesOverBudget": 22,
+      "severeStalls": 0,
+      "jankRatePercent": 36.7,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Warden: Gate Activity Audit Scroll",
+      "totalFrames": 50,
+      "averageFrameMs": 6.9,
+      "peakFrameMs": 13.0,
+      "framesOverBudget": 10,
+      "severeStalls": 0,
+      "jankRatePercent": 20.0,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Mess: Shell 4-Tab Dock Switching",
+      "totalFrames": 34,
+      "averageFrameMs": 15.0,
+      "peakFrameMs": 43.3,
+      "framesOverBudget": 27,
+      "severeStalls": 2,
+      "jankRatePercent": 79.4,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Mess: Composer Menu Title Input",
+      "totalFrames": 40,
+      "averageFrameMs": 32.9,
+      "peakFrameMs": 115.3,
+      "framesOverBudget": 26,
+      "severeStalls": 19,
+      "jankRatePercent": 65.0,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Mess: Batch Verification Lifecycle Render",
+      "totalFrames": 9,
+      "averageFrameMs": 29.6,
+      "peakFrameMs": 71.7,
+      "framesOverBudget": 7,
+      "severeStalls": 4,
+      "jankRatePercent": 77.8,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Security: Shell 4-Tab Dock Switching",
+      "totalFrames": 34,
+      "averageFrameMs": 14.4,
+      "peakFrameMs": 42.6,
+      "framesOverBudget": 27,
+      "severeStalls": 1,
+      "jankRatePercent": 79.4,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Security: Passes Roster Scroll",
+      "totalFrames": 67,
+      "averageFrameMs": 4.7,
+      "peakFrameMs": 8.4,
+      "framesOverBudget": 2,
+      "severeStalls": 0,
+      "jankRatePercent": 3.0,
+      "status": "WARNING"
+    },
+    {
+      "actionName": "Security: Gate Activity Timeline Scroll",
+      "totalFrames": 58,
+      "averageFrameMs": 4.9,
+      "peakFrameMs": 9.4,
+      "framesOverBudget": 2,
+      "severeStalls": 0,
+      "jankRatePercent": 3.4,
+      "status": "WARNING"
+    },
+    {
+      "actionName": "Shared: Notice Management Feed Scroll",
+      "totalFrames": 65,
+      "averageFrameMs": 4.9,
+      "peakFrameMs": 11.6,
+      "framesOverBudget": 3,
+      "severeStalls": 0,
+      "jankRatePercent": 4.6,
+      "status": "WARNING"
+    },
+    {
+      "actionName": "Shared: Notice Composer Title Input",
+      "totalFrames": 72,
+      "averageFrameMs": 12.7,
+      "peakFrameMs": 24.1,
+      "framesOverBudget": 42,
+      "severeStalls": 0,
+      "jankRatePercent": 58.3,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Modal: Action BottomSheet Presentation & Dismiss",
+      "totalFrames": 8,
+      "averageFrameMs": 16.8,
+      "peakFrameMs": 51.6,
+      "framesOverBudget": 7,
+      "severeStalls": 1,
+      "jankRatePercent": 87.5,
+      "status": "CRITICAL"
+    },
+    {
+      "actionName": "Shared: Passport Offline Verifier Mount",
+      "totalFrames": 6,
+      "averageFrameMs": 16.9,
+      "peakFrameMs": 47.0,
+      "framesOverBudget": 3,
+      "severeStalls": 1,
+      "jankRatePercent": 50.0,
+      "status": "CRITICAL"
+    }
+  ],
+  "memoryBenchmarks": [
+    {
+      "screenName": "Student: Timetable Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    },
+    {
+      "screenName": "Teacher: Create Session Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    },
+    {
+      "screenName": "Admin: Complaints Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    },
+    {
+      "screenName": "Warden: Leave Inbox Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    },
+    {
+      "screenName": "Mess: Composer Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    },
+    {
+      "screenName": "Security: Passes Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    },
+    {
+      "screenName": "Shared: Notice Composer Re-Navigation Cycle",
+      "initialHeapKb": 32768,
+      "finalHeapKb": 32768,
+      "deltaKb": 0,
+      "iterationCount": 5,
+      "status": "PASS",
+      "notes": "Memory stable across 5 navigation cycles."
+    }
+  ],
+  "network": {
+    "auth_roster_sync": {
+      "screen": "Baseline Auth & Roster Sync",
+      "requestCount": 4,
+      "latencyMs": 142.5,
+      "failedCount": 0
+    }
+  },
+  "hardware": {
+    "BLE Radar / Beacon": {
+      "domain": "BLE Radar / Beacon",
+      "screens": "Student Ready, Teacher Broadcasting, Security Verify",
+      "softwareStatus": "VALIDATED",
+      "hardwareStatus": "MANUAL_VALIDATION_REQUIRED",
+      "notes": "Requires live BLE advertising/scanning hardware peripheral"
+    },
+    "Camera / QR Scanner": {
+      "domain": "Camera / QR Scanner",
+      "screens": "Passport Verifier, Mess QR Scanner, Security Verify",
+      "softwareStatus": "VALIDATED",
+      "hardwareStatus": "MANUAL_VALIDATION_REQUIRED",
+      "notes": "Requires active Android camera sensor and physical barcode"
+    },
+    "Biometric Auth": {
+      "domain": "Biometric Auth",
+      "screens": "Passport Identity Activation",
+      "softwareStatus": "VALIDATED",
+      "hardwareStatus": "MANUAL_VALIDATION_REQUIRED",
+      "notes": "Requires physical fingerprint/face sensor enrollment"
+    },
+    "Geolocator / Location": {
+      "domain": "Geolocator / Location",
+      "screens": "Student Gate Pass, Attendance Verify",
+      "softwareStatus": "VALIDATED",
+      "hardwareStatus": "MANUAL_VALIDATION_REQUIRED",
+      "notes": "Requires active GPS fix on campus geo-fence"
+    }
+  },
+  "screenRegistryCoverage": {
+    "totalRegistered": 69,
+    "automatedSoftwareScreens": 56,
+    "manualHardwareScreens": 13
+  }
+}
