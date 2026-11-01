@@ -1,6 +1,7 @@
 # Local environment variables and secrets
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 firebase_credentials.json
