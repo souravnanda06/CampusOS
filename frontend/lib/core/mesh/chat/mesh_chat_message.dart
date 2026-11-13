@@ -12,7 +12,7 @@ class MeshChatPayload {
   /// Target channel identifier (e.g. "channel:general" or "dm:devA:devB").
   final String channelId;
 
-  /// Text content of the chat message (character limited for BLE payload efficiency).
+  /// Text content of the chat message (or Base64 ciphertext when [isEncrypted] is true).
   final String text;
 
   /// Optional unverified display name provided by sender (verified against trust bundle on receipt).
@@ -24,6 +24,21 @@ class MeshChatPayload {
   /// Optional base64-encoded compressed image attachment.
   final String? imageBase64;
 
+  /// Whether [text] / [imageBase64] is end-to-end encrypted (for 1-to-1 DMs).
+  final bool isEncrypted;
+
+  /// Optional 12-byte ChaCha20-Poly1305 nonce (base64) when [isEncrypted] is true.
+  final String? encryptionNonce;
+
+  /// Optional sender X25519 ephemeral/public key (base64) for E2EE DM decryption.
+  final String? senderE2eePublicKey;
+
+  /// Optional parent message ID when replying to another message.
+  final String? replyToMessageId;
+
+  /// Optional short quoted snippet of the replied message.
+  final String? replyToPreview;
+
   const MeshChatPayload({
     this.messageId = '',
     required this.channelId,
@@ -31,6 +46,11 @@ class MeshChatPayload {
     this.senderDisplayName = '',
     this.recipientDeviceId,
     this.imageBase64,
+    this.isEncrypted = false,
+    this.encryptionNonce,
+    this.senderE2eePublicKey,
+    this.replyToMessageId,
+    this.replyToPreview,
   });
 
   /// Maximum character length for offline BLE mesh chat messages.
@@ -38,7 +58,9 @@ class MeshChatPayload {
 
   /// Encodes payload to compact UTF-8 JSON bytes.
   Uint8List toBytes() {
-    final sanitizedText = text.length > maxTextLength ? text.substring(0, maxTextLength) : text;
+    final sanitizedText = isEncrypted
+        ? text
+        : (text.length > maxTextLength ? text.substring(0, maxTextLength) : text);
     final map = <String, dynamic>{
       if (messageId.isNotEmpty) 'mid': messageId,
       'cid': channelId,
@@ -46,6 +68,11 @@ class MeshChatPayload {
       if (senderDisplayName.isNotEmpty) 'name': senderDisplayName,
       if (recipientDeviceId != null) 'rec': recipientDeviceId,
       if (imageBase64 != null && imageBase64!.isNotEmpty) 'img': imageBase64,
+      if (isEncrypted) 'enc': true,
+      if (encryptionNonce != null && encryptionNonce!.isNotEmpty) 'nonce': encryptionNonce,
+      if (senderE2eePublicKey != null && senderE2eePublicKey!.isNotEmpty) 'ekey': senderE2eePublicKey,
+      if (replyToMessageId != null && replyToMessageId!.isNotEmpty) 'rep': replyToMessageId,
+      if (replyToPreview != null && replyToPreview!.isNotEmpty) 'rprev': replyToPreview,
     };
     return Uint8List.fromList(utf8.encode(jsonEncode(map)));
   }
@@ -62,6 +89,11 @@ class MeshChatPayload {
       senderDisplayName: map['name']?.toString() ?? '',
       recipientDeviceId: map['rec']?.toString(),
       imageBase64: map['img']?.toString(),
+      isEncrypted: map['enc'] == true,
+      encryptionNonce: map['nonce']?.toString(),
+      senderE2eePublicKey: map['ekey']?.toString(),
+      replyToMessageId: map['rep']?.toString(),
+      replyToPreview: map['rprev']?.toString(),
     );
   }
 }
@@ -113,6 +145,33 @@ class MeshChatMessage {
   /// Optional base64-encoded compressed image attachment.
   final String? imageBase64;
 
+  /// Moderation status: 'CLEAN', 'FLAGGED', 'QUARANTINED', or 'HIDDEN_BY_ADMIN'.
+  final String moderationStatus;
+
+  /// Moderation severity: 'NONE', 'MODERATE', 'HIGH', 'CRITICAL'.
+  final String moderationSeverity;
+
+  /// Moderation category: 'NONE', 'CRIME_THREAT', 'HARASSMENT', 'EXPLICIT', 'SPAM'.
+  final String? moderationCategory;
+
+  /// Human-readable reason(s) explaining why the message was flagged.
+  final String? flagReason;
+
+  /// Cloud sync status: 'PENDING', 'SYNCED', 'FAILED'.
+  final String syncStatus;
+
+  /// Whether payload was end-to-end encrypted in transit/cloud.
+  final bool isEncrypted;
+
+  /// Optional parent message ID being replied to.
+  final String? replyToMessageId;
+
+  /// Optional short snippet of the replied message.
+  final String? replyToPreview;
+
+  /// Optional Base64 signable packet bytes for backend Ed25519 verification during relay sync.
+  final String? signableBytesBase64;
+
   const MeshChatMessage({
     required this.messageId,
     required this.senderDeviceId,
@@ -129,10 +188,22 @@ class MeshChatMessage {
     this.isOutgoing = false,
     this.signature,
     this.imageBase64,
+    this.moderationStatus = 'CLEAN',
+    this.moderationSeverity = 'NONE',
+    this.moderationCategory,
+    this.flagReason,
+    this.syncStatus = 'PENDING',
+    this.isEncrypted = false,
+    this.replyToMessageId,
+    this.replyToPreview,
+    this.signableBytesBase64,
   });
 
   /// User-friendly hop telemetry description.
   String get hopDescription {
+    if (hopCount == 0 && isOutgoing) {
+      return syncStatus == 'SYNCED' ? 'Cloud Synced' : 'Local';
+    }
     if (hopCount <= 1) {
       return '1 hop · Direct';
     }
@@ -142,8 +213,17 @@ class MeshChatMessage {
   /// Whether the sender's identity was cryptographically verified against the institutional trust bundle.
   bool get isTrusted => verificationState == 'TRUSTED';
 
+  /// Whether this message belongs to a 1-to-1 direct message conversation.
+  bool get isDirectMessage => channelId.startsWith('dm:');
+
   /// Whether this message has an attached image.
   bool get hasImage => imageBase64 != null && imageBase64!.isNotEmpty;
+
+  /// Whether this message is flagged or quarantined by moderation.
+  bool get isFlagged => moderationStatus != 'CLEAN';
+
+  /// Whether this message is quarantined (high/critical severity).
+  bool get isQuarantined => moderationStatus == 'QUARANTINED';
 
   /// Serializes into a database-ready map.
   Map<String, dynamic> toMap() {
@@ -162,11 +242,36 @@ class MeshChatMessage {
       'verificationState': verificationState,
       'isOutgoing': isOutgoing ? 1 : 0,
       'imageBase64': imageBase64,
+      'moderationStatus': moderationStatus,
+      'moderationSeverity': moderationSeverity,
+      'moderationCategory': moderationCategory,
+      'flagReason': flagReason,
+      'syncStatus': syncStatus,
+      'isEncrypted': isEncrypted ? 1 : 0,
+      'replyToMessageId': replyToMessageId,
+      'replyToPreview': replyToPreview,
+      'signableBytesBase64': signableBytesBase64,
     };
   }
 
-  /// Reconstructs message from database map.
+  /// Reconstructs message from database or API JSON map.
   factory MeshChatMessage.fromMap(Map<String, dynamic> map) {
+    Uint8List? sig;
+    final rawSigB64 = map['signatureBase64']?.toString();
+    if (rawSigB64 != null && rawSigB64.isNotEmpty) {
+      try {
+        sig = Uint8List.fromList(base64Decode(rawSigB64));
+      } catch (_) {}
+    }
+
+    String? flagReason = map['flagReason']?.toString();
+    if ((flagReason == null || flagReason.isEmpty) && map['flagReasons'] is List) {
+      final list = (map['flagReasons'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      if (list.isNotEmpty) {
+        flagReason = list.join(', ');
+      }
+    }
+
     return MeshChatMessage(
       messageId: map['messageId']?.toString() ?? '',
       senderDeviceId: map['senderDeviceId']?.toString() ?? '',
@@ -183,7 +288,17 @@ class MeshChatMessage {
       deliveryState: MeshChatDeliveryState.fromString(map['deliveryState']?.toString() ?? 'received'),
       verificationState: map['verificationState']?.toString() ?? 'UNVERIFIED',
       isOutgoing: (map['isOutgoing'] == 1 || map['isOutgoing'] == true),
+      signature: sig,
       imageBase64: map['imageBase64']?.toString(),
+      moderationStatus: map['moderationStatus']?.toString() ?? 'CLEAN',
+      moderationSeverity: map['moderationSeverity']?.toString() ?? 'NONE',
+      moderationCategory: map['moderationCategory']?.toString(),
+      flagReason: flagReason,
+      syncStatus: map['syncStatus']?.toString() ?? 'PENDING',
+      isEncrypted: (map['isEncrypted'] == 1 || map['isEncrypted'] == true),
+      replyToMessageId: map['replyToMessageId']?.toString(),
+      replyToPreview: map['replyToPreview']?.toString(),
+      signableBytesBase64: map['signableBytesBase64']?.toString(),
     );
   }
 
@@ -203,6 +318,15 @@ class MeshChatMessage {
     bool? isOutgoing,
     Uint8List? signature,
     String? imageBase64,
+    String? moderationStatus,
+    String? moderationSeverity,
+    String? moderationCategory,
+    String? flagReason,
+    String? syncStatus,
+    bool? isEncrypted,
+    String? replyToMessageId,
+    String? replyToPreview,
+    String? signableBytesBase64,
   }) {
     return MeshChatMessage(
       messageId: messageId ?? this.messageId,
@@ -220,6 +344,15 @@ class MeshChatMessage {
       isOutgoing: isOutgoing ?? this.isOutgoing,
       signature: signature ?? this.signature,
       imageBase64: imageBase64 ?? this.imageBase64,
+      moderationStatus: moderationStatus ?? this.moderationStatus,
+      moderationSeverity: moderationSeverity ?? this.moderationSeverity,
+      moderationCategory: moderationCategory ?? this.moderationCategory,
+      flagReason: flagReason ?? this.flagReason,
+      syncStatus: syncStatus ?? this.syncStatus,
+      isEncrypted: isEncrypted ?? this.isEncrypted,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      replyToPreview: replyToPreview ?? this.replyToPreview,
+      signableBytesBase64: signableBytesBase64 ?? this.signableBytesBase64,
     );
   }
 
@@ -235,6 +368,6 @@ class MeshChatMessage {
 
   @override
   String toString() {
-    return 'MeshChatMessage(id: $messageId, sender: $senderDisplayName ($senderRole), channel: $channelId, hops: $hopCount, verified: $isTrusted)';
+    return 'MeshChatMessage(id: $messageId, sender: $senderDisplayName ($senderRole), channel: $channelId, hops: $hopCount, verified: $isTrusted, mod: $moderationStatus)';
   }
 }

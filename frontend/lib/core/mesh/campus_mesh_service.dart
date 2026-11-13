@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_ble_peripheral/flutter_ble_peripheral.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -161,22 +162,38 @@ class PlatformMeshBleAdapter implements MeshBleAdapter {
   @override
   Future<bool> requestPermissions() async {
     try {
-      final statuses = await [
-        Permission.bluetoothScan,
-        Permission.bluetoothAdvertise,
-        Permission.bluetoothConnect,
-        Permission.location,
-      ].request();
+      if (!kIsWeb && Platform.isAndroid) {
+        int sdkInt = 31;
+        try {
+          sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+        } catch (_) {}
 
-      final scanOk = statuses[Permission.bluetoothScan]?.isGranted ?? true;
-      final advOk = statuses[Permission.bluetoothAdvertise]?.isGranted ?? true;
-      final connOk = statuses[Permission.bluetoothConnect]?.isGranted ?? true;
-      final locOk = statuses[Permission.location]?.isGranted ?? true;
+        if (sdkInt >= 31) {
+          final statuses = await [
+            Permission.bluetoothScan,
+            Permission.bluetoothAdvertise,
+            Permission.bluetoothConnect,
+          ].request();
 
-      return (scanOk && advOk && connOk) || locOk;
+          final scanOk = (statuses[Permission.bluetoothScan]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothScan]?.isLimited ?? false);
+          final advOk = (statuses[Permission.bluetoothAdvertise]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothAdvertise]?.isLimited ?? false);
+          final connOk = (statuses[Permission.bluetoothConnect]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothConnect]?.isLimited ?? false);
+          return scanOk && advOk && connOk;
+        } else {
+          final locStatus = await Permission.locationWhenInUse.request();
+          return locStatus.isGranted || locStatus.isLimited;
+        }
+      } else if (!kIsWeb && Platform.isIOS) {
+        final btStatus = await Permission.bluetooth.request();
+        return btStatus.isGranted || btStatus.isLimited;
+      }
+      return true;
     } catch (e) {
       debugPrint('⚠️ [MESH_BLE] Permission request error: $e');
-      return true;
+      return false;
     }
   }
 
@@ -298,6 +315,7 @@ class PlatformMeshBleAdapter implements MeshBleAdapter {
 /// deduplication, and relay forwarding.
 class CampusMeshService {
   final String localDeviceId;
+  final String? localDisplayName;
   String _localRole;
   String get localRole => _localRole;
   void setLocalRole(String role) {
@@ -338,9 +356,11 @@ class CampusMeshService {
   final MeshCryptoService? _cryptoService;
   final LocalMeshSocketTransport? _socketTransport;
   LocalMeshSocketTransport? _localSocketTransport;
+  final bool allowUncertifiedChatPeers;
 
-  CampusMeshService({
-    required this.localDeviceId,
+  factory CampusMeshService({
+    required String localDeviceId,
+    String? localDisplayName,
     required String localRole,
     MeshBleAdapter? adapter,
     MeshPacketCodec? codec,
@@ -349,16 +369,46 @@ class CampusMeshService {
     MeshRelayEngine? relayEngine,
     MeshCryptoService? cryptoService,
     LocalMeshSocketTransport? socketTransport,
+    bool allowUncertifiedChatPeers = false,
+  }) {
+    final sharedDedup = deduplicationStore ?? MeshDeduplicationStore();
+    return CampusMeshService._internal(
+      localDeviceId: localDeviceId,
+      localDisplayName: localDisplayName,
+      localRole: localRole,
+      adapter: adapter,
+      codec: codec,
+      deduplicationStore: sharedDedup,
+      peerRegistry: peerRegistry,
+      relayEngine: relayEngine ??
+          MeshRelayEngine(
+            localDeviceId: localDeviceId,
+            deduplicationStore: sharedDedup,
+          ),
+      cryptoService: cryptoService,
+      socketTransport: socketTransport,
+      allowUncertifiedChatPeers: allowUncertifiedChatPeers,
+    );
+  }
+
+  CampusMeshService._internal({
+    required this.localDeviceId,
+    this.localDisplayName,
+    required String localRole,
+    MeshBleAdapter? adapter,
+    MeshPacketCodec? codec,
+    required MeshDeduplicationStore deduplicationStore,
+    MeshPeerRegistry? peerRegistry,
+    required MeshRelayEngine relayEngine,
+    MeshCryptoService? cryptoService,
+    LocalMeshSocketTransport? socketTransport,
+    this.allowUncertifiedChatPeers = false,
   })  : _localRole = localRole.trim().toLowerCase(),
         _adapter = adapter ?? (!kIsWeb && Platform.isAndroid ? CampusBleGattAdapter() : PlatformMeshBleAdapter()),
         _codec = codec ?? const MeshPacketCodec(),
-        _deduplicationStore = deduplicationStore ?? MeshDeduplicationStore(),
+        _deduplicationStore = deduplicationStore,
         _peerRegistry = peerRegistry ?? MeshPeerRegistry(),
-        _relayEngine = relayEngine ??
-            MeshRelayEngine(
-              localDeviceId: localDeviceId,
-              deduplicationStore: deduplicationStore ?? MeshDeduplicationStore(),
-            ),
+        _relayEngine = relayEngine,
         _cryptoService = cryptoService,
         _socketTransport = socketTransport;
 
@@ -399,6 +449,9 @@ class CampusMeshService {
   Stream<MeshServiceError> get errors => _errorsController.stream;
 
   /// Starts the mesh service: validates hardware & permissions, initializes scanning & advertising.
+  ///
+  /// Even if Bluetooth is unavailable or denied, initializes the local Wi-Fi/Hotspot UDP
+  /// fallback transport on physical hardware so P2P chat continues over LAN/hotspot.
   Future<bool> start() async {
     if (_isRunning) return true;
 
@@ -408,13 +461,22 @@ class CampusMeshService {
       details: 'Checking Bluetooth availability and permissions...',
     ));
 
+    // Always start offline local socket transport on physical hardware (Wi-Fi/Hotspot fallback)
+    final isPhysicalHardware = _adapter is PlatformMeshBleAdapter || _adapter is CampusBleGattAdapter;
+    if (_socketTransport == null && isPhysicalHardware) {
+      _localSocketTransport ??= LocalMeshSocketTransport(
+        onPacketReceived: (data, rssi) => handleIncomingRawData(data, rssi: rssi),
+      );
+    }
+    await (_socketTransport ?? _localSocketTransport)?.start();
+
     // 1. Bluetooth availability check
     final isBtAvailable = await _adapter.isBluetoothAvailable();
     if (!isBtAvailable) {
       _updateState(const MeshServiceState(
         status: MeshStateStatus.unavailable,
         reason: MeshStateReason.bluetoothUnavailable,
-        details: 'Bluetooth adapter is disabled or unavailable.',
+        details: 'Bluetooth adapter is disabled or unavailable. Using Wi-Fi/Hotspot & Cloud fallback.',
       ));
       return false;
     }
@@ -425,7 +487,7 @@ class CampusMeshService {
       _updateState(const MeshServiceState(
         status: MeshStateStatus.unavailable,
         reason: MeshStateReason.bluetoothPermissionDenied,
-        details: 'Bluetooth or location permissions were denied by user.',
+        details: 'Bluetooth permissions were denied. Using Wi-Fi/Hotspot & Cloud fallback.',
       ));
       return false;
     }
@@ -436,15 +498,6 @@ class CampusMeshService {
         handleIncomingRawData(rawBytes, rssi: rssi);
       },
     );
-
-    // 4. Start offline local socket transport if on physical hardware
-    final isPhysicalHardware = _adapter is PlatformMeshBleAdapter || _adapter is CampusBleGattAdapter;
-    if (_socketTransport == null && isPhysicalHardware) {
-      _localSocketTransport ??= LocalMeshSocketTransport(
-        onPacketReceived: (data, rssi) => handleIncomingRawData(data, rssi: rssi),
-      );
-    }
-    await (_socketTransport ?? _localSocketTransport)?.start();
 
     if (!scanOk) {
       _updateState(const MeshServiceState(
@@ -504,7 +557,9 @@ class CampusMeshService {
   /// Pauses background mesh advertising so high-priority operations (BLE attendance) can use advertiser hardware slots.
   Future<void> pauseAdvertising() async {
     try {
-      if (_adapter is PlatformMeshBleAdapter) {
+      if (_adapter is CampusBleGattAdapter) {
+        await (_adapter as CampusBleGattAdapter).pauseAdvertising();
+      } else if (_adapter is PlatformMeshBleAdapter) {
         await (_adapter as PlatformMeshBleAdapter).pauseAdvertising();
       }
     } catch (_) {}
@@ -513,7 +568,9 @@ class CampusMeshService {
   /// Resumes background mesh advertising after high-priority operations finish.
   Future<void> resumeAdvertising() async {
     try {
-      if (_adapter is PlatformMeshBleAdapter) {
+      if (_adapter is CampusBleGattAdapter) {
+        await (_adapter as CampusBleGattAdapter).resumeAdvertising();
+      } else if (_adapter is PlatformMeshBleAdapter) {
         await (_adapter as PlatformMeshBleAdapter).resumeAdvertising();
       }
     } catch (_) {}
@@ -525,10 +582,13 @@ class CampusMeshService {
     try {
       final now = DateTime.now();
       final packetId = MeshPacket.generatePacketId();
+      final pingName = (localDisplayName != null && localDisplayName!.isNotEmpty)
+          ? localDisplayName!
+          : localDeviceId;
       final payloadBytes = Uint8List.fromList(utf8.encode(jsonEncode({
         'cid': 'system:heartbeat',
         'txt': 'ping',
-        'name': localDeviceId,
+        'name': pingName,
       })));
 
       final pingPacket = MeshPacket(
@@ -568,11 +628,14 @@ class CampusMeshService {
       final transport = _socketTransport ?? _localSocketTransport;
       final socketOk = await transport?.broadcast(encoded) ?? false;
 
-      // 2. Broadcast via BLE adapter
-      final bleOk = await _adapter.advertisePacket(encoded);
+      // 2. Broadcast via BLE adapter (skip when BLE is explicitly unavailable/denied)
+      final bleUnavailable = _currentState.status == MeshStateStatus.unavailable &&
+          (_currentState.reason == MeshStateReason.bluetoothPermissionDenied ||
+              _currentState.reason == MeshStateReason.bluetoothUnavailable);
+      final bleOk = bleUnavailable ? false : await _adapter.advertisePacket(encoded);
 
       final ok = socketOk || bleOk;
-      if (!ok) {
+      if (!ok && !bleUnavailable) {
         _notifyError('Failed to advertise mesh packet over BLE or offline socket');
       }
       return ok;
@@ -599,23 +662,53 @@ class CampusMeshService {
       return;
     }
 
-    // Update peer registry
-    _peerRegistry.registerOrUpdatePeer(
-      deviceId: packet.senderDeviceId,
-      role: packet.senderRole,
-      packetId: packet.packetId,
-      rssi: rssi,
-      hopCount: packet.hopCount,
-    );
-    _peerUpdatesController.add(_peerRegistry.activePeers);
+    // Inspect payload for sender display name (heartbeat, digest, chat, etc.)
+    String? peerDisplayName;
+    if (packet.payload.isNotEmpty) {
+      try {
+        final decodedMap = jsonDecode(utf8.decode(packet.payload));
+        if (decodedMap is Map<String, dynamic>) {
+          final candidateName = decodedMap['name']?.toString() ??
+              decodedMap['senderDisplayName']?.toString();
+          if (candidateName != null &&
+              candidateName.trim().isNotEmpty &&
+              candidateName.trim() != packet.senderDeviceId) {
+            peerDisplayName = candidateName.trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Update peer registry (never register self as a nearby peer)
+    if (packet.senderDeviceId != localDeviceId) {
+      _peerRegistry.registerOrUpdatePeer(
+        deviceId: packet.senderDeviceId,
+        displayName: peerDisplayName,
+        role: packet.senderRole,
+        packetId: packet.packetId,
+        rssi: rssi,
+        hopCount: packet.hopCount,
+      );
+      _peerUpdatesController.add(_peerRegistry.activePeers);
+    }
 
     // Cryptographic & institutional trust verification if crypto service is configured
     if (_cryptoService != null) {
       final verifyResult = await _cryptoService!.verifyPacket(packet);
 
+      final isChatOrAck = packet.packetType == MeshPacketType.chat ||
+          packet.packetType == MeshPacketType.acknowledgement;
+      final isAirDropPacket = packet.packetType == MeshPacketType.fileOffer ||
+          packet.packetType == MeshPacketType.fileChunk ||
+          packet.packetType == MeshPacketType.acknowledgement;
+      final isUnsignedAllowed = allowUncertifiedChatPeers &&
+          (isChatOrAck || isAirDropPacket) &&
+          packet.signature.isEmpty &&
+          verifyResult.status == MeshVerificationStatus.invalidSignature;
+
       // 1. Strict security across all packet types:
       // Drop if signature is invalid/tampered, timestamp is stale, role is unauthorized, or sender is revoked
-      if (verifyResult.status == MeshVerificationStatus.invalidSignature ||
+      if ((verifyResult.status == MeshVerificationStatus.invalidSignature && !isUnsignedAllowed) ||
           verifyResult.status == MeshVerificationStatus.staleTimestamp ||
           verifyResult.status == MeshVerificationStatus.unauthorizedRole ||
           verifyResult.status == MeshVerificationStatus.revokedSender) {
@@ -624,18 +717,15 @@ class CampusMeshService {
         return;
       }
 
-      // 2. If an institutional trust bundle is present, unknown senders are dropped
+      // 2. For emergency disaster flares (or uncertified P2P chat and AirDrop when enabled), allow unknown senders
+      // to pass through as UNVERIFIED ('P2P') rather than silently dropping peer messages.
       if (verifyResult.status == MeshVerificationStatus.unknownSender) {
-        debugPrint('⚠️ [MESH_SERVICE] Dropped packet from unregistered node ${packet.senderDeviceId}');
-        _notifyError('Inbound packet from ${packet.senderDeviceId} dropped: unknown sender');
-        return;
-      }
-
-      // 3. For emergency disaster flares, allow uncertified offline peers (missing trust bundle or unknown sender)
-      // to pass through as UNVERIFIED so life-safety alerts reach offline nodes during blackouts.
-      if (packet.packetType == MeshPacketType.emergency) {
-        if (!verifyResult.isValid) {
-          debugPrint('ℹ️ [MESH_SERVICE] Processing offline uncertified emergency flare from ${packet.senderDeviceId} (${verifyResult.status.name})');
+        if (packet.packetType == MeshPacketType.emergency || (allowUncertifiedChatPeers && (isChatOrAck || isAirDropPacket))) {
+          debugPrint('ℹ️ [MESH_SERVICE] Allowing uncertified P2P ${packet.packetType.name} from ${packet.senderDeviceId} (${verifyResult.status.name})');
+        } else {
+          debugPrint('⚠️ [MESH_SERVICE] Dropped packet from unregistered node ${packet.senderDeviceId}');
+          _notifyError('Inbound packet from ${packet.senderDeviceId} dropped: unknown sender');
+          return;
         }
       }
     }
@@ -682,6 +772,37 @@ class CampusMeshService {
         cause: cause,
         stackTrace: stackTrace,
       ));
+    }
+  }
+
+  /// Checks whether Bluetooth permissions have been permanently denied on this device.
+  Future<bool> isBluetoothPermissionPermanentlyDenied() async {
+    try {
+      if (kIsWeb) return false;
+      if (Platform.isAndroid) {
+        int sdkInt = 31;
+        try {
+          sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+        } catch (_) {}
+        if (sdkInt >= 31) {
+          return await Permission.bluetoothScan.isPermanentlyDenied ||
+              await Permission.bluetoothAdvertise.isPermanentlyDenied ||
+              await Permission.bluetoothConnect.isPermanentlyDenied;
+        }
+        return await Permission.locationWhenInUse.isPermanentlyDenied;
+      } else if (Platform.isIOS) {
+        return await Permission.bluetooth.isPermanentlyDenied;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Opens the OS app settings page so the user can re-enable permanently denied permissions.
+  Future<bool> openPermissionSettings() async {
+    try {
+      return await openAppSettings();
+    } catch (_) {
+      return false;
     }
   }
 

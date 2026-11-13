@@ -80,11 +80,15 @@ class ComplaintModel {
   bool get isSyncFailed => syncState.toLowerCase() == 'failed';
 
   factory ComplaintModel.fromMap(Map<String, dynamic> map, [String? id]) {
-    final effectiveId = id ?? map['id'] ?? map['serverId'] ?? map['localId'] ?? '';
+    final serverId = map['serverId']?.toString() ?? map['id']?.toString();
+    final localId = map['localId']?.toString() ?? (id != null && id != serverId ? id : null);
+    final effectiveId = (serverId != null && serverId.isNotEmpty && !serverId.startsWith('cached_'))
+        ? serverId
+        : (id ?? map['id'] ?? localId ?? '');
     return ComplaintModel(
       id: effectiveId,
-      localId: map['localId']?.toString(),
-      serverId: map['serverId']?.toString() ?? map['id']?.toString(),
+      localId: localId,
+      serverId: serverId,
       idempotencyKey: map['idempotencyKey']?.toString() ?? map['idempotency_key']?.toString(),
       syncState: map['syncState']?.toString() ?? 'synced',
       studentId: map['studentId'] ?? '',

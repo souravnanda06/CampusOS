@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -45,22 +46,37 @@ class CampusBleGattAdapter implements MeshBleAdapter {
   Future<bool> requestPermissions() async {
     try {
       if (Platform.isAndroid) {
-        final scanStatus = await Permission.bluetoothScan.request();
-        final advertiseStatus = await Permission.bluetoothAdvertise.request();
-        final connectStatus = await Permission.bluetoothConnect.request();
-        final locationStatus = await Permission.location.request();
+        int sdkInt = 31;
+        try {
+          sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+        } catch (_) {}
 
-        final bleGranted = (scanStatus.isGranted || scanStatus.isLimited) &&
-            (advertiseStatus.isGranted || advertiseStatus.isLimited) &&
-            (connectStatus.isGranted || connectStatus.isLimited);
+        if (sdkInt >= 31) {
+          final statuses = await [
+            Permission.bluetoothScan,
+            Permission.bluetoothAdvertise,
+            Permission.bluetoothConnect,
+          ].request();
 
-        final locationGranted = locationStatus.isGranted || locationStatus.isLimited;
-
-        // On Android 12+ (API 31+), Bluetooth permissions are sufficient for BLE GATT.
-        // On older Android versions, location permission is required.
-        return bleGranted || locationGranted;
+          final scanOk = (statuses[Permission.bluetoothScan]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothScan]?.isLimited ?? false);
+          final advOk = (statuses[Permission.bluetoothAdvertise]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothAdvertise]?.isLimited ?? false);
+          final connOk = (statuses[Permission.bluetoothConnect]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothConnect]?.isLimited ?? false);
+          return scanOk && advOk && connOk;
+        } else {
+          final locationStatus = await Permission.locationWhenInUse.request();
+          return locationStatus.isGranted || locationStatus.isLimited;
+        }
+      } else if (Platform.isIOS) {
+        final btStatus = await Permission.bluetooth.request();
+        return btStatus.isGranted || btStatus.isLimited;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('⚠️ [GATT_ADAPTER] Permission request error: $e');
+      return false;
+    }
     return _fallbackAdapter.requestPermissions();
   }
 

@@ -66,7 +66,7 @@ export function ActionDocDialog({ document, action, open, onOpenChange }: Action
               : "Approve Document Request"}
           </DialogTitle>
           <DialogDescription>
-            {document.studentName} requested a {document.document_type} for: "{document.purpose}"
+            {document.studentName || "Student"} requested a {document.documentTypeName || document.documentType} for: &quot;{document.purpose}&quot;
           </DialogDescription>
         </DialogHeader>
 

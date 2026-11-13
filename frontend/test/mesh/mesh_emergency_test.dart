@@ -1007,5 +1007,156 @@ void main() {
       // Must complete without unhandled exception
       await expectLater(platformNotifier.notifyEmergency(alert), completes);
     });
+
+    // ==========================================
+    // I. SIREN SIGNALING, CANCELLATION & STUDENT SOS
+    // ==========================================
+    test('I1: Siren payload round-trip & receiver siren lifecycle (play -> ack stops siren)', () async {
+      final payload = EmergencyPayload(
+        title: 'Fire in Hostel Block B',
+        message: 'Evacuate immediately to main ground.',
+        scope: EmergencyScope.hostel,
+        severity: EmergencySeverity.critical,
+        category: EmergencyCategory.fire,
+        priority: EmergencyRelayPriority.critical,
+        expiresAt: DateTime.now().add(const Duration(hours: 2)),
+        sirenEnabled: true,
+        sirenPattern: EmergencySirenPattern.yelp,
+      );
+
+      final decoded = EmergencyPayload.fromBytes(payload.toBytes());
+      expect(decoded.sirenEnabled, isTrue);
+      expect(decoded.sirenPattern, equals(EmergencySirenPattern.yelp));
+
+      final senderMesh = CampusMeshService(
+        localDeviceId: 'dean_official',
+        localRole: 'dean',
+        adapter: FakeMeshBleAdapter(),
+        deduplicationStore: MeshDeduplicationStore(maxSize: 50),
+        peerRegistry: MeshPeerRegistry(),
+        relayEngine: MeshRelayEngine(
+          localDeviceId: 'dean_official',
+          deduplicationStore: MeshDeduplicationStore(maxSize: 50),
+        ),
+        cryptoService: deanCryptoService,
+      );
+      final senderRepo = MeshEmergencyRepository.inMemory();
+      final senderService = CampusMeshEmergencyService(
+        meshService: senderMesh,
+        repository: senderRepo,
+        cryptoService: deanCryptoService,
+        notifier: MockEmergencyNotifier(),
+      );
+
+      final receiverMesh = CampusMeshService(
+        localDeviceId: 'student_alice',
+        localRole: 'student',
+        adapter: FakeMeshBleAdapter(),
+        deduplicationStore: MeshDeduplicationStore(maxSize: 50),
+        peerRegistry: MeshPeerRegistry(),
+        relayEngine: MeshRelayEngine(
+          localDeviceId: 'student_alice',
+          deduplicationStore: MeshDeduplicationStore(maxSize: 50),
+        ),
+        cryptoService: verifierCryptoService,
+      );
+      final receiverRepo = MeshEmergencyRepository.inMemory();
+      final receiverNotifier = MockEmergencyNotifier();
+      final receiverService = CampusMeshEmergencyService(
+        meshService: receiverMesh,
+        repository: receiverRepo,
+        cryptoService: verifierCryptoService,
+        notifier: receiverNotifier,
+      );
+
+      await senderService.initialize();
+      await senderMesh.start();
+      await receiverService.initialize();
+
+      final issued = await senderService.issueEmergencyAlert(
+        title: 'Fire Evacuation Siren',
+        message: 'Proceed to assembly area.',
+        severity: EmergencySeverity.critical,
+        category: EmergencyCategory.fire,
+        scope: EmergencyScope.campus,
+        sendSiren: true,
+        sirenPattern: EmergencySirenPattern.yelp,
+      );
+
+      expect(issued.sirenEnabled, isTrue);
+      expect(issued.sirenPattern, equals(EmergencySirenPattern.yelp));
+
+      final sentPacket = const MeshPacketCodec()
+          .decode((senderMesh.adapter as FakeMeshBleAdapter).advertisedPackets.last);
+      final received = await receiverService.receiveEmergencyPacket(sentPacket);
+
+      expect(received, isNotNull);
+      expect(received!.hasSiren, isTrue);
+      expect(received.sirenPattern, equals(EmergencySirenPattern.yelp));
+      expect(receiverNotifier.activeSirenAlert.value?.alertId, equals(received.alertId));
+
+      await receiverService.acknowledgeEmergency(received.alertId);
+      expect(receiverNotifier.stopCount, equals(1));
+      expect(receiverNotifier.activeSirenAlert.value, isNull);
+
+      await receiverService.dispose();
+      await receiverMesh.dispose();
+      await receiverRepo.close();
+      await senderService.dispose();
+      await senderMesh.dispose();
+      await senderRepo.close();
+    });
+
+    test('I2: Student SOS beacon broadcasts with siren while keeping student role restricted from official flares', () async {
+      final studentMesh = CampusMeshService(
+        localDeviceId: 'student_alice',
+        localRole: 'student',
+        adapter: FakeMeshBleAdapter(),
+        deduplicationStore: MeshDeduplicationStore(maxSize: 50),
+        peerRegistry: MeshPeerRegistry(),
+        relayEngine: MeshRelayEngine(
+          localDeviceId: 'student_alice',
+          deduplicationStore: MeshDeduplicationStore(maxSize: 50),
+        ),
+      );
+      final repo = MeshEmergencyRepository.inMemory();
+      final notifier = MockEmergencyNotifier();
+      final service = CampusMeshEmergencyService(
+        meshService: studentMesh,
+        repository: repo,
+        notifier: notifier,
+      );
+
+      await service.initialize();
+      await studentMesh.start();
+
+      // Official institutional flare remains blocked for student role
+      await expectLater(
+        service.issueEmergencyAlert(
+          title: 'Campus Alert',
+          message: 'Unauthorized',
+          severity: EmergencySeverity.critical,
+          category: EmergencyCategory.security,
+          scope: EmergencyScope.campus,
+        ),
+        throwsA(isA<EmergencyUnauthorizedException>()),
+      );
+
+      // Personal Student SOS beacon + siren succeeds and restores student role
+      final sos = await service.sendStudentSosBeacon(
+        category: EmergencyCategory.hostel,
+        details: 'Medical help needed in Block B Room 204',
+        sendSiren: true,
+        sirenPattern: EmergencySirenPattern.yelp,
+      );
+
+      expect(sos.sirenEnabled, isTrue);
+      expect(sos.sirenPattern, equals(EmergencySirenPattern.yelp));
+      expect(studentMesh.localRole, equals('student'));
+
+      await service.dispose();
+      await studentMesh.dispose();
+      await repo.close();
+    });
   });
 }

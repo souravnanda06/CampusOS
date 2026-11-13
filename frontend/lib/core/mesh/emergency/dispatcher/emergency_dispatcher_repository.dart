@@ -69,9 +69,13 @@ class MeshEmergencyDispatcherRepository {
         local_delivery_count INTEGER NOT NULL DEFAULT 0,
         acknowledgement_count INTEGER NOT NULL DEFAULT 0,
         last_propagation_at INTEGER,
-        signature_verification_state TEXT NOT NULL DEFAULT 'TRUSTED'
+        signature_verification_state TEXT NOT NULL DEFAULT 'TRUSTED',
+        siren_enabled INTEGER NOT NULL DEFAULT 0,
+        siren_pattern TEXT NOT NULL DEFAULT 'none'
       );
     ''');
+
+    await _ensureIncidentSirenColumns();
 
     await _executor.runCustom('''
       CREATE INDEX IF NOT EXISTS idx_mesh_incident_status_expiry 
@@ -100,7 +104,7 @@ class MeshEmergencyDispatcherRepository {
             cancelled_by_device_id = ?, cancelled_by_role = ?, status = ?,
             hop_count = ?, relay_count = ?, local_delivery_count = ?,
             acknowledgement_count = ?, last_propagation_at = ?,
-            signature_verification_state = ?
+            signature_verification_state = ?, siren_enabled = ?, siren_pattern = ?
         WHERE incident_id = ?
         ''',
         [
@@ -122,6 +126,8 @@ class MeshEmergencyDispatcherRepository {
           incident.acknowledgementCount,
           incident.lastPropagationAt?.millisecondsSinceEpoch,
           incident.signatureVerificationState,
+          incident.sirenEnabled ? 1 : 0,
+          incident.sirenPattern.code,
           incident.incidentId,
         ],
       );
@@ -134,8 +140,9 @@ class MeshEmergencyDispatcherRepository {
           created_at, expires_at, cancelled_at, cancel_reason,
           cancelled_by_device_id, cancelled_by_role, status,
           hop_count, relay_count, local_delivery_count,
-          acknowledgement_count, last_propagation_at, signature_verification_state
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          acknowledgement_count, last_propagation_at, signature_verification_state,
+          siren_enabled, siren_pattern
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
         [
           incident.incidentId,
@@ -162,6 +169,8 @@ class MeshEmergencyDispatcherRepository {
           incident.acknowledgementCount,
           incident.lastPropagationAt?.millisecondsSinceEpoch,
           incident.signatureVerificationState,
+          incident.sirenEnabled ? 1 : 0,
+          incident.sirenPattern.code,
         ],
       );
     }
@@ -444,7 +453,31 @@ class MeshEmergencyDispatcherRepository {
           : null,
       signatureVerificationState:
           row['signature_verification_state'] as String? ?? 'TRUSTED',
+      sirenEnabled: (row['siren_enabled'] as int? ?? 0) == 1,
+      sirenPattern: EmergencySirenPattern.fromCode(
+        row['siren_pattern']?.toString(),
+      ),
     );
+  }
+
+  Future<void> _ensureIncidentSirenColumns() async {
+    try {
+      final cols = await _executor.runSelect(
+        'PRAGMA table_info(mesh_emergency_incidents)',
+        [],
+      );
+      final colNames = cols.map((c) => c['name']?.toString()).toSet();
+      if (!colNames.contains('siren_enabled')) {
+        await _executor.runCustom(
+          'ALTER TABLE mesh_emergency_incidents ADD COLUMN siren_enabled INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!colNames.contains('siren_pattern')) {
+        await _executor.runCustom(
+          "ALTER TABLE mesh_emergency_incidents ADD COLUMN siren_pattern TEXT NOT NULL DEFAULT 'none'",
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> close() async {

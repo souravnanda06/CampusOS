@@ -2,17 +2,20 @@ import { apiClient } from "@/services/api/api-client"
 
 export interface DocumentRequestItem {
   id: string
-  student_id: string
-  document_type: string
+  studentId: string
+  documentType: string
+  documentTypeName?: string
   purpose: string
-  status: "PENDING" | "APPROVED" | "REJECTED" | "ISSUED"
-  admin_notes?: string
-  document_number?: string
-  issued_at?: string | null
-  expires_at?: string | null
-  stored_in_wallet?: boolean
-  wallet_added_at?: string | null
-  created_at: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "ISSUED" | string
+  adminNotes?: string | null
+  documentNumber?: string | null
+  fileUrl?: string | null
+  issuedAt?: string | null
+  expiresAt?: string | null
+  storedInWallet?: boolean
+  walletAddedAt?: string | null
+  createdAt: string
+  updatedAt?: string | null
   studentName?: string
   registrationNumber?: string
   branch?: string

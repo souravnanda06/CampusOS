@@ -15,13 +15,46 @@ class MeshChatChannel {
   /// Participants involved if direct message (sorted deterministically).
   final List<String> participants;
 
+  /// Administrative status of the channel: 'ACTIVE', 'RESTRICTED', or 'DISMANTLED'.
+  final String status;
+
+  /// Optional administrative reason when channel is restricted/dismantled.
+  final String? restrictedReason;
+
   const MeshChatChannel({
     required this.id,
     required this.name,
     this.description,
     this.isDirectMessage = false,
     this.participants = const [],
+    this.status = 'ACTIVE',
+    this.restrictedReason,
   });
+
+  /// Whether messaging in this channel is restricted or dismantled by administrators.
+  bool get isRestricted =>
+      status.toUpperCase() == 'RESTRICTED' ||
+      status.toUpperCase() == 'DISMANTLED';
+
+  MeshChatChannel copyWith({
+    String? id,
+    String? name,
+    String? description,
+    bool? isDirectMessage,
+    List<String>? participants,
+    String? status,
+    String? restrictedReason,
+  }) {
+    return MeshChatChannel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      isDirectMessage: isDirectMessage ?? this.isDirectMessage,
+      participants: participants ?? this.participants,
+      status: status ?? this.status,
+      restrictedReason: restrictedReason ?? this.restrictedReason,
+    );
+  }
 
   /// Default broadcast channels available offline in CampusOS.
   static const MeshChatChannel general = MeshChatChannel(

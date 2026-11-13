@@ -21,6 +21,9 @@ class Session(db.Model):
     teacher_key_id = db.Column(db.String(64), nullable=True)
     teacher_id = db.Column(db.String(36), nullable=True)
     idempotency_key = db.Column(db.String(128), unique=True, nullable=True, index=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    radius_meters = db.Column(db.Float, default=20.0, nullable=True)
 
     __table_args__ = (
         db.Index('idx_sessions_active_start', 'is_active', 'start_time'),
@@ -45,7 +48,10 @@ class Session(db.Model):
             "sessionNonce": self.session_nonce,
             "teacherKeyId": self.teacher_key_id,
             "teacherId": self.teacher_id,
-            "idempotencyKey": self.idempotency_key
+            "idempotencyKey": self.idempotency_key,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "radiusMeters": self.radius_meters or 20.0,
         }
 
 class Attendance(db.Model):
@@ -62,6 +68,10 @@ class Attendance(db.Model):
     response_nonce = db.Column(db.String(64), nullable=True)
     verification_mode = db.Column(db.String(32), default='LEGACY')
     proximity_tier = db.Column(db.String(32), nullable=True)
+    router_bssid = db.Column(db.String(64), nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    distance_meters = db.Column(db.Float, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint('session_id', 'user_id', name='uq_attendance_session_user'),
@@ -86,7 +96,11 @@ class Attendance(db.Model):
             "deviceKeyId": self.device_key_id,
             "responseNonce": self.response_nonce,
             "verificationMode": self.verification_mode,
-            "proximityTier": self.proximity_tier
+            "proximityTier": self.proximity_tier,
+            "routerBssid": self.router_bssid,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "distanceMeters": self.distance_meters,
         }
 
 class Coupon(db.Model):

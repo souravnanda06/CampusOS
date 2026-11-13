@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/haptics/app_haptics.dart';
 import '../../../auth/providers/user_provider.dart';
 import '../models/leave_request_model.dart';
 import '../models/gate_pass_model.dart';
@@ -17,12 +18,15 @@ import '../widgets/requests/leave_request_form.dart';
 import '../widgets/requests/gate_pass_form.dart';
 import '../widgets/requests/complaint_form.dart';
 import '../widgets/requests/complaint_detail_sheet.dart';
-import '../widgets/requests/notice_detail_sheet.dart';
+
 import '../widgets/requests/notice_card.dart';
 import '../widgets/requests/document_requests_section.dart';
 import '../widgets/requests/hostel_requests_section.dart';
 import '../widgets/requests/visitor_requests_section.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../shared/widgets/motion/apple_bounceable.dart';
+import '../../shared/widgets/motion/apple_spring_scroll_physics.dart';
+import '../../shared/widgets/motion/apple_spring_curve.dart';
 
 class RequestsScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -374,16 +378,60 @@ class RequestsScreenState extends State<RequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.bgOf(context),
       appBar: AppBar(
-        title: Text(
-          "Requests".tr(context),
-          style: GoogleFonts.plusJakartaSans(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Requests".tr(context),
+              style: GoogleFonts.plusJakartaSans(
+                color: AppColors.textPrimaryOf(context),
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+                letterSpacing: -0.5,
+              ),
+            ),
+            Text(
+              "Transit, Documents & Campus Services",
+              style: GoogleFonts.plusJakartaSans(
+                color: AppColors.textSecondaryOf(context),
+                fontWeight: FontWeight.w500,
+                fontSize: 11.5,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: AppColors.surface,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AppleBounceable(
+              scaleFactor: 0.90,
+              onTap: () {
+                AppHaptics.lightImpact();
+                _loadAll();
+              },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAltOf(context),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                    width: 0.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.refresh_rounded,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+        backgroundColor: AppColors.surfaceOf(context),
         elevation: 0,
         centerTitle: false,
       ),
@@ -391,11 +439,16 @@ class RequestsScreenState extends State<RequestsScreen> {
         children: [
           Container(
             width: double.infinity,
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(bottom: BorderSide(color: AppColors.border)),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceOf(context),
+              border: Border(
+                bottom: BorderSide(
+                  color: AppColors.borderOf(context).withValues(alpha: 0.7),
+                  width: 0.5,
+                ),
+              ),
             ),
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
             child: _buildSegmentedControl(),
           ),
           Expanded(
@@ -404,7 +457,7 @@ class RequestsScreenState extends State<RequestsScreen> {
               onPageChanged: (index) {
                 setState(() => _selectedIndex = index);
               },
-              physics: const BouncingScrollPhysics(),
+              physics: const AppleSpringScrollPhysics(),
               children: [
                 _buildTransitSection(),
                 const DocumentRequestsSection(),
@@ -431,10 +484,10 @@ class RequestsScreenState extends State<RequestsScreen> {
     ];
 
     return SizedBox(
-      height: 42,
+      height: 40,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
+        physics: const AppleSpringScrollPhysics(),
         itemCount: tabs.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
@@ -442,30 +495,36 @@ class RequestsScreenState extends State<RequestsScreen> {
           final isSelected = _selectedIndex == index;
           final badge = item['badge'] as int;
 
-          return GestureDetector(
+          return AppleBounceable(
+            scaleFactor: 0.94,
             onTap: () {
+              AppHaptics.selectionClick();
               setState(() => _selectedIndex = index);
               _pageController.animateToPage(
                 index,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
+                duration: const Duration(milliseconds: 380),
+                curve: AppleSpringCurve.standard,
               );
             },
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              duration: const Duration(milliseconds: 240),
+              curve: AppleSpringCurve.standard,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary : AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
+                color: isSelected ? AppColors.primary : AppColors.surfaceAltOf(context),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.border,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.borderOf(context).withValues(alpha: 0.6),
+                  width: 0.5,
                 ),
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
                           color: AppColors.primary.withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         )
                       ]
                     : null,
@@ -475,22 +534,23 @@ class RequestsScreenState extends State<RequestsScreen> {
                 children: [
                   Icon(
                     item['icon'] as IconData,
-                    size: 16,
-                    color: isSelected ? Colors.white : AppColors.textSecondary,
+                    size: 15,
+                    color: isSelected ? Colors.white : AppColors.textSecondaryOf(context),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     item['title'] as String,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected ? Colors.white : AppColors.textPrimary,
+                      fontSize: 12.5,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: isSelected ? Colors.white : AppColors.textPrimaryOf(context),
+                      letterSpacing: -0.2,
                     ),
                   ),
                   if (badge > 0) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                       decoration: BoxDecoration(
                         color: isSelected ? Colors.white : AppColors.primary,
                         borderRadius: BorderRadius.circular(10),
@@ -500,7 +560,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                         style: GoogleFonts.plusJakartaSans(
                           color: isSelected ? AppColors.primary : Colors.white,
                           fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
@@ -517,14 +577,26 @@ class RequestsScreenState extends State<RequestsScreen> {
   Widget _buildTransitSection() {
     return Column(
       children: [
-        // Sub-filter tabs
+        // Sub-filter segmented pill
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceAltOf(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppColors.borderOf(context).withValues(alpha: 0.6),
+              width: 0.5,
+            ),
+          ),
           child: Row(
             children: [
-              _buildSubFilterTab(0, "Leave Requests".tr(context), _leaveRequests.length),
-              const SizedBox(width: 10),
-              _buildSubFilterTab(1, "Gate Passes".tr(context), _gatePasses.length),
+              Expanded(
+                child: _buildSubFilterTab(0, "Leave Requests".tr(context), _leaveRequests.length),
+              ),
+              Expanded(
+                child: _buildSubFilterTab(1, "Gate Passes".tr(context), _gatePasses.length),
+              ),
             ],
           ),
         ),
@@ -537,42 +609,62 @@ class RequestsScreenState extends State<RequestsScreen> {
 
   Widget _buildSubFilterTab(int index, String label, int count) {
     final isSelected = _subTabIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _subTabIndex = index),
+    return AppleBounceable(
+      scaleFactor: 0.96,
+      onTap: () {
+        AppHaptics.selectionClick();
+        setState(() => _subTabIndex = index);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        curve: AppleSpringCurve.standard,
+        padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surface,
+          color: isSelected ? AppColors.surfaceOf(context) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.border,
-          ),
+          border: isSelected
+              ? Border.all(
+                  color: AppColors.borderOf(context).withValues(alpha: 0.4),
+                  width: 0.5,
+                )
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               label,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 12.5,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                color: isSelected ? Colors.white : AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? AppColors.textPrimaryOf(context) : AppColors.textSecondaryOf(context),
+                letterSpacing: -0.2,
               ),
             ),
             const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white.withValues(alpha: 0.25) : AppColors.bg,
+                color: isSelected
+                    ? AppColors.primary.withValues(alpha: 0.12)
+                    : AppColors.borderOf(context).withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 "$count",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? AppColors.primary : AppColors.textSecondaryOf(context),
                 ),
               ),
             ),
@@ -646,7 +738,7 @@ class RequestsScreenState extends State<RequestsScreen> {
       color: AppColors.primary,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: AppleSpringScrollPhysics.always,
         itemCount: _leaveRequests.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
@@ -692,23 +784,23 @@ class RequestsScreenState extends State<RequestsScreen> {
     String statusText = req.status;
 
     if (req.isApproved) {
-      statusColor = AppColors.success;
-      statusBg = AppColors.success.withValues(alpha: 0.1);
+      statusColor = AppColors.emerald;
+      statusBg = AppColors.emerald.withValues(alpha: 0.12);
       statusIcon = Icons.check_circle_rounded;
       statusText = "Approved";
     } else if (req.isRejected) {
       statusColor = AppColors.danger;
-      statusBg = AppColors.danger.withValues(alpha: 0.1);
+      statusBg = AppColors.danger.withValues(alpha: 0.12);
       statusIcon = Icons.cancel_rounded;
       statusText = "Rejected";
     } else if (req.isCancelled) {
-      statusColor = AppColors.textSecondary;
-      statusBg = AppColors.border.withValues(alpha: 0.5);
+      statusColor = AppColors.textSecondaryOf(context);
+      statusBg = AppColors.borderOf(context).withValues(alpha: 0.4);
       statusIcon = Icons.block_rounded;
       statusText = "Cancelled";
     } else {
       statusColor = AppColors.warning;
-      statusBg = AppColors.warning.withValues(alpha: 0.12);
+      statusBg = AppColors.warning.withValues(alpha: 0.14);
       statusIcon = Icons.schedule_rounded;
       statusText = "Pending Review";
     }
@@ -716,16 +808,21 @@ class RequestsScreenState extends State<RequestsScreen> {
     final dateFormat = DateFormat('MMM dd, yyyy');
     final startStr = dateFormat.format(req.startDate);
     final endStr = dateFormat.format(req.endDate);
+    final durationDays = req.endDate.difference(req.startDate).inDays + 1;
+    final durationLabel = "$durationDays ${durationDays == 1 ? 'day' : 'days'}";
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+        border: Border.all(
+          color: AppColors.borderOf(context).withValues(alpha: 0.7),
+          width: 0.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
@@ -740,8 +837,8 @@ class RequestsScreenState extends State<RequestsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -752,7 +849,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                       req.leaveType,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.primary,
                       ),
                     ),
@@ -769,12 +866,12 @@ class RequestsScreenState extends State<RequestsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(statusIcon, size: 13, color: statusColor),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                     Text(
                       statusText,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: statusColor,
                       ),
                     ),
@@ -784,27 +881,54 @@ class RequestsScreenState extends State<RequestsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 6),
-              Text(
-                "$startStr — $endStr",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAltOf(context),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.borderOf(context).withValues(alpha: 0.5),
+                width: 0.5,
               ),
-            ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  "$startStr — $endStr",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimaryOf(context),
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    durationLabel,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             req.reason,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              color: AppColors.textPrimary.withValues(alpha: 0.85),
-              height: 1.4,
+              fontSize: 13.5,
+              color: AppColors.textPrimaryOf(context).withValues(alpha: 0.88),
+              height: 1.45,
             ),
           ),
           if (req.reviewRemarks != null && req.reviewRemarks!.isNotEmpty) ...[
@@ -814,8 +938,11 @@ class RequestsScreenState extends State<RequestsScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: statusBg.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.25),
+                  width: 0.5,
+                ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -827,7 +954,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                       "Review: ${req.reviewRemarks}",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         color: statusColor,
                       ),
                     ),
@@ -837,7 +964,11 @@ class RequestsScreenState extends State<RequestsScreen> {
             ),
           ],
           const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(
+            height: 1,
+            color: AppColors.borderOf(context).withValues(alpha: 0.6),
+            thickness: 0.5,
+          ),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -846,39 +977,62 @@ class RequestsScreenState extends State<RequestsScreen> {
                 "Submitted ${dateFormat.format(req.createdAt)}",
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondaryOf(context),
                 ),
               ),
               if (req.isPending)
-                InkWell(
-                  onTap: () => _cancelLeave(req),
-                  borderRadius: BorderRadius.circular(6),
+                AppleBounceable(
+                  scaleFactor: 0.94,
+                  onTap: () {
+                    AppHaptics.selectionClick();
+                    _cancelLeave(req);
+                  },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     child: Text(
                       "Cancel Request",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.danger,
                       ),
                     ),
                   ),
                 )
               else if (req.isApproved)
-                ElevatedButton.icon(
-                  onPressed: () => _showGatePassForm(initialLeaveId: req.id),
-                  icon: const Icon(Icons.vpn_key_outlined, size: 14),
-                  label: const Text("Request Gate Pass"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                    textStyle: GoogleFonts.plusJakartaSans(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
+                AppleBounceable(
+                  scaleFactor: 0.95,
+                  onTap: () {
+                    AppHaptics.lightImpact();
+                    _showGatePassForm(initialLeaveId: req.id);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.25),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.vpn_key_outlined, size: 13, color: Colors.white),
+                        const SizedBox(width: 5),
+                        Text(
+                          "Request Gate Pass",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -908,7 +1062,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                  color: AppColors.textPrimaryOf(context),
                 ),
               ),
               const SizedBox(height: 8),
@@ -916,7 +1070,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                 _gatePassError!,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 13,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondaryOf(context),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -955,7 +1109,7 @@ class RequestsScreenState extends State<RequestsScreen> {
       color: AppColors.primary,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: AppleSpringScrollPhysics.always,
         itemCount: _gatePasses.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
@@ -968,12 +1122,15 @@ class RequestsScreenState extends State<RequestsScreen> {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textSecondary,
+                    color: AppColors.textSecondaryOf(context),
                     letterSpacing: 0.5,
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: () => _showGatePassForm(),
+                  onPressed: () {
+                    AppHaptics.lightImpact();
+                    _showGatePassForm();
+                  },
                   icon: const Icon(Icons.add_rounded, size: 18),
                   label: const Text("New Pass"),
                   style: TextButton.styleFrom(
@@ -1001,33 +1158,33 @@ class RequestsScreenState extends State<RequestsScreen> {
     String statusText = pass.status;
 
     if (pass.isIssued) {
-      statusColor = AppColors.success;
-      statusBg = AppColors.success.withValues(alpha: 0.1);
+      statusColor = AppColors.emerald;
+      statusBg = AppColors.emerald.withValues(alpha: 0.12);
       statusIcon = Icons.check_circle_rounded;
       statusText = "ISSUED • Ready";
     } else if (pass.isExited) {
       statusColor = AppColors.warning;
-      statusBg = AppColors.warning.withValues(alpha: 0.15);
+      statusBg = AppColors.warning.withValues(alpha: 0.14);
       statusIcon = Icons.departure_board_rounded;
       statusText = "EXITED • Off Campus";
     } else if (pass.isReturned) {
       statusColor = Colors.indigo;
-      statusBg = Colors.indigo.withValues(alpha: 0.1);
+      statusBg = Colors.indigo.withValues(alpha: 0.12);
       statusIcon = Icons.keyboard_return_rounded;
       statusText = "RETURNED";
     } else if (pass.isApproved) {
       statusColor = AppColors.primary;
-      statusBg = AppColors.primary.withValues(alpha: 0.1);
+      statusBg = AppColors.primary.withValues(alpha: 0.12);
       statusIcon = Icons.verified_outlined;
       statusText = "APPROVED";
     } else if (pass.isExpired) {
-      statusColor = AppColors.textSecondary;
-      statusBg = AppColors.border.withValues(alpha: 0.5);
+      statusColor = AppColors.textSecondaryOf(context);
+      statusBg = AppColors.borderOf(context).withValues(alpha: 0.5);
       statusIcon = Icons.timelapse_rounded;
       statusText = "EXPIRED";
     } else if (pass.isRejected) {
       statusColor = AppColors.danger;
-      statusBg = AppColors.danger.withValues(alpha: 0.1);
+      statusBg = AppColors.danger.withValues(alpha: 0.12);
       statusIcon = Icons.cancel_rounded;
       statusText = "REJECTED";
     } else {
@@ -1041,15 +1198,18 @@ class RequestsScreenState extends State<RequestsScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: pass.isActive ? statusColor.withValues(alpha: 0.5) : AppColors.border.withValues(alpha: 0.8),
+          color: pass.isActive
+              ? statusColor.withValues(alpha: 0.5)
+              : AppColors.borderOf(context).withValues(alpha: 0.7),
+          width: pass.isActive ? 1.0 : 0.5,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
@@ -1063,14 +1223,21 @@ class RequestsScreenState extends State<RequestsScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     pass.destination,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimaryOf(context),
                     ),
                   ),
                 ],
@@ -1090,7 +1257,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                       statusText,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: statusColor,
                       ),
                     ),
@@ -1099,58 +1266,93 @@ class RequestsScreenState extends State<RequestsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.access_time_rounded, size: 13, color: AppColors.textSecondary),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  "${timeFormat.format(pass.expectedExitTime)} → ${timeFormat.format(pass.expectedReturnTime)}",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAltOf(context),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.borderOf(context).withValues(alpha: 0.5),
+                width: 0.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.access_time_rounded, size: 13, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "${timeFormat.format(pass.expectedExitTime)} → ${timeFormat.format(pass.expectedReturnTime)}",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimaryOf(context),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             pass.reason,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13.5,
-              color: AppColors.textPrimary.withValues(alpha: 0.85),
+              color: AppColors.textPrimaryOf(context).withValues(alpha: 0.88),
+              height: 1.45,
             ),
           ),
           const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(
+            height: 1,
+            color: AppColors.borderOf(context).withValues(alpha: 0.6),
+            thickness: 0.5,
+          ),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "Pass #${pass.id.substring(0, 8)}",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAltOf(context),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  "Pass #${pass.id.substring(0, 8)}",
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondaryOf(context),
+                  ),
                 ),
               ),
               if (pass.isActive)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    "Active in Passport",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.success,
+                    color: AppColors.emerald.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.emerald.withValues(alpha: 0.3),
+                      width: 0.5,
                     ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.shield_rounded, size: 12, color: AppColors.emerald),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Active in Passport",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.emerald,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -1223,7 +1425,7 @@ class RequestsScreenState extends State<RequestsScreen> {
       color: AppColors.primary,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: AppleSpringScrollPhysics.always,
         itemCount: _complaints.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
@@ -1298,26 +1500,26 @@ class RequestsScreenState extends State<RequestsScreen> {
     Color statusColor;
     Color statusBg;
     if (c.isResolved) {
-      statusColor = AppColors.success;
-      statusBg = AppColors.success.withValues(alpha: 0.1);
+      statusColor = AppColors.emerald;
+      statusBg = AppColors.emerald.withValues(alpha: 0.12);
     } else if (c.isClosed) {
-      statusColor = AppColors.textSecondary;
-      statusBg = AppColors.border.withValues(alpha: 0.5);
+      statusColor = AppColors.textSecondaryOf(context);
+      statusBg = AppColors.borderOf(context).withValues(alpha: 0.5);
     } else if (c.isInProgress) {
       statusColor = AppColors.primary;
-      statusBg = AppColors.primary.withValues(alpha: 0.1);
+      statusBg = AppColors.primary.withValues(alpha: 0.12);
     } else if (c.isAssigned) {
       statusColor = Colors.teal;
-      statusBg = Colors.teal.withValues(alpha: 0.1);
+      statusBg = Colors.teal.withValues(alpha: 0.12);
     } else if (c.isReopened) {
       statusColor = Colors.deepOrange;
-      statusBg = Colors.deepOrange.withValues(alpha: 0.1);
+      statusBg = Colors.deepOrange.withValues(alpha: 0.12);
     } else if (c.isRejected) {
       statusColor = AppColors.danger;
-      statusBg = AppColors.danger.withValues(alpha: 0.1);
+      statusBg = AppColors.danger.withValues(alpha: 0.12);
     } else {
       statusColor = AppColors.warning;
-      statusBg = AppColors.warning.withValues(alpha: 0.12);
+      statusBg = AppColors.warning.withValues(alpha: 0.14);
     }
 
     Color priorityColor;
@@ -1328,23 +1530,29 @@ class RequestsScreenState extends State<RequestsScreen> {
     } else if (c.priority == 'MEDIUM') {
       priorityColor = AppColors.primary;
     } else {
-      priorityColor = AppColors.textSecondary;
+      priorityColor = AppColors.textSecondaryOf(context);
     }
 
     final dateFormat = DateFormat('MMM dd, yyyy');
 
-    return InkWell(
-      onTap: () => _showComplaintDetails(c),
-      borderRadius: BorderRadius.circular(20),
+    return AppleBounceable(
+      scaleFactor: 0.98,
+      onTap: () {
+        AppHaptics.lightImpact();
+        _showComplaintDetails(c);
+      },
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.surfaceOf(context),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+          border: Border.all(
+            color: AppColors.borderOf(context).withValues(alpha: 0.7),
+            width: 0.5,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
@@ -1359,16 +1567,16 @@ class RequestsScreenState extends State<RequestsScreen> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight.withValues(alpha: 0.5),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         c.category,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.primary,
                         ),
                       ),
@@ -1377,14 +1585,14 @@ class RequestsScreenState extends State<RequestsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: priorityColor.withValues(alpha: 0.1),
+                        color: priorityColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         c.priority,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                           color: priorityColor,
                         ),
                       ),
@@ -1399,9 +1607,12 @@ class RequestsScreenState extends State<RequestsScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                            width: 0.5,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1412,7 +1623,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                               "Saved locally",
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 color: const Color(0xFFD97706),
                               ),
                             ),
@@ -1425,8 +1636,11 @@ class RequestsScreenState extends State<RequestsScreen> {
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(
                           color: AppColors.danger.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.danger, width: 0.8),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.danger.withValues(alpha: 0.4),
+                            width: 0.5,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1437,7 +1651,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                               "Sync failed",
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.danger,
                               ),
                             ),
@@ -1452,7 +1666,10 @@ class RequestsScreenState extends State<RequestsScreen> {
                         decoration: BoxDecoration(
                           color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.4), width: 0.9),
+                          border: Border.all(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                            width: 0.5,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1461,10 +1678,10 @@ class RequestsScreenState extends State<RequestsScreen> {
                             const SizedBox(width: 4),
                             Text(
                               "PIN: ${c.closureOtp}",
-                              style: GoogleFonts.spaceMono(
+                              style: GoogleFonts.jetBrainsMono(
                                 fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.2,
                                 color: const Color(0xFF1E40AF),
                               ),
                             ),
@@ -1473,7 +1690,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                       ),
                     ],
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
                         color: statusBg,
                         borderRadius: BorderRadius.circular(20),
@@ -1482,7 +1699,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                         c.status,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
                           color: statusColor,
                         ),
                       ),
@@ -1496,20 +1713,21 @@ class RequestsScreenState extends State<RequestsScreen> {
               c.title,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimaryOf(context),
               ),
             ),
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(Icons.location_on_outlined, size: 13, color: AppColors.textSecondary),
+                const Icon(Icons.location_on_outlined, size: 13, color: AppColors.primary),
                 const SizedBox(width: 4),
                 Text(
                   c.location,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
-                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondaryOf(context),
                   ),
                 ),
               ],
@@ -1521,8 +1739,8 @@ class RequestsScreenState extends State<RequestsScreen> {
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
-                color: AppColors.textPrimary.withValues(alpha: 0.8),
-                height: 1.4,
+                color: AppColors.textPrimaryOf(context).withValues(alpha: 0.82),
+                height: 1.45,
               ),
             ),
             if (c.resolutionRemarks != null && c.resolutionRemarks!.isNotEmpty) ...[
@@ -1531,13 +1749,16 @@ class RequestsScreenState extends State<RequestsScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.08),
+                  color: AppColors.emerald.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
+                  border: Border.all(
+                    color: AppColors.emerald.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_outline_rounded, size: 14, color: AppColors.success),
+                    const Icon(Icons.check_circle_outline_rounded, size: 14, color: AppColors.emerald),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -1546,7 +1767,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          color: AppColors.success,
+                          color: AppColors.emerald,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1556,7 +1777,11 @@ class RequestsScreenState extends State<RequestsScreen> {
               ),
             ],
             const SizedBox(height: 12),
-            const Divider(height: 1, color: AppColors.border),
+            Divider(
+              height: 1,
+              color: AppColors.borderOf(context).withValues(alpha: 0.6),
+              thickness: 0.5,
+            ),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1565,7 +1790,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                   "Reported ${dateFormat.format(c.createdAt)}",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
-                    color: AppColors.textSecondary,
+                    color: AppColors.textSecondaryOf(context),
                   ),
                 ),
                 Row(
@@ -1574,7 +1799,7 @@ class RequestsScreenState extends State<RequestsScreen> {
                       "Details & Timeline",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.primary,
                       ),
                     ),
@@ -1590,38 +1815,6 @@ class RequestsScreenState extends State<RequestsScreen> {
     );
   }
 
-  void _showNoticeDetails(NoticeModel notice) {
-    final studentId = Provider.of<UserProvider>(context, listen: false).user?.id;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => NoticeDetailSheet(
-        notice: notice,
-        studentId: studentId,
-        onNoticeRead: () {
-          if (mounted) {
-            setState(() {
-              final idx = _notices.indexWhere((n) => n.id == notice.id);
-              if (idx != -1) {
-                _notices[idx] = _notices[idx].copyWith(isRead: true, readAt: DateTime.now());
-              }
-            });
-          }
-        },
-        onViewComplaint: (complaintId) {
-          setState(() {
-            _selectedIndex = 1;
-            _pageController.jumpToPage(1);
-          });
-          final matching = _complaints.where((c) => c.id == complaintId).toList();
-          if (matching.isNotEmpty) {
-            _showComplaintDetails(matching.first);
-          }
-        },
-      ),
-    );
-  }
 
   Widget _buildNoticesSection() {
     if (_isLoadingNotices && _notices.isEmpty) {
@@ -1653,7 +1846,7 @@ class RequestsScreenState extends State<RequestsScreen> {
       color: AppColors.primary,
       backgroundColor: AppColors.surface,
       child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: AppleSpringScrollPhysics.always,
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
         itemCount: _notices.length + 1,
         itemBuilder: (context, index) {
@@ -1695,7 +1888,25 @@ class RequestsScreenState extends State<RequestsScreen> {
           final notice = _notices[index - 1];
           return NoticeCard(
             notice: notice,
-            onTap: () => _showNoticeDetails(notice),
+            onTap: () {
+              if (!notice.isRead) {
+                final studentId =
+                    Provider.of<UserProvider>(context, listen: false).user?.id;
+                if (studentId != null) {
+                  _noticeService.markNoticeRead(notice.id,
+                      requesterId: studentId);
+                }
+                if (mounted) {
+                  setState(() {
+                    final idx = _notices.indexWhere((n) => n.id == notice.id);
+                    if (idx != -1) {
+                      _notices[idx] = _notices[idx]
+                          .copyWith(isRead: true, readAt: DateTime.now());
+                    }
+                  });
+                }
+              }
+            },
           );
         },
       ),
@@ -1775,91 +1986,119 @@ class RequestsScreenState extends State<RequestsScreen> {
     VoidCallback? onSecondaryAction,
   }) {
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(32.0),
+      physics: AppleSpringScrollPhysics.always,
+      padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 40.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 40),
+          const SizedBox(height: 24),
           Container(
-            padding: const EdgeInsets.all(28),
+            width: 88,
+            height: 88,
             decoration: BoxDecoration(
-              color: AppColors.primaryLight.withValues(alpha: 0.15),
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.2),
+                width: 1,
+              ),
             ),
-            child: Icon(
-              icon,
-              size: 56,
-              color: AppColors.primary,
+            child: Center(
+              child: Icon(
+                icon,
+                size: 42,
+                color: AppColors.primary,
+              ),
             ),
-          ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-          const SizedBox(height: 32),
+          ).animate().scale(duration: 400.ms, curve: AppleSpringCurve.bouncy),
+          const SizedBox(height: 24),
           Text(
             headline,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimaryOf(context),
+              letterSpacing: -0.4,
             ),
             textAlign: TextAlign.center,
           ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             explanation,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 15,
-              color: AppColors.textSecondary,
+              fontSize: 14,
+              color: AppColors.textSecondaryOf(context),
               height: 1.5,
             ),
             textAlign: TextAlign.center,
-          ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
-          const SizedBox(height: 48),
+          ).animate().fadeIn(delay: 180.ms).slideY(begin: 0.1),
+          const SizedBox(height: 36),
           if (primaryActionLabel != null && onPrimaryAction != null)
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: onPrimaryAction,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
+            AppleBounceable(
+              scaleFactor: 0.96,
+              onTap: () {
+                AppHaptics.lightImpact();
+                onPrimaryAction();
+              },
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  primaryActionLabel,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                child: Center(
+                  child: Text(
+                    primaryActionLabel,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                 ),
               ),
-            ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1),
+            ).animate().fadeIn(delay: 260.ms).slideY(begin: 0.1),
           if (secondaryActionLabel != null && onSecondaryAction != null) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: OutlinedButton(
-                onPressed: onSecondaryAction,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3), width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            const SizedBox(height: 12),
+            AppleBounceable(
+              scaleFactor: 0.96,
+              onTap: () {
+                AppHaptics.selectionClick();
+                onSecondaryAction();
+              },
+              child: Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAltOf(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.borderOf(context).withValues(alpha: 0.7),
+                    width: 0.5,
                   ),
                 ),
-                child: Text(
-                  secondaryActionLabel,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                child: Center(
+                  child: Text(
+                    secondaryActionLabel,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                 ),
               ),
-            ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1),
+            ).animate().fadeIn(delay: 320.ms).slideY(begin: 0.1),
           ],
         ],
       ),

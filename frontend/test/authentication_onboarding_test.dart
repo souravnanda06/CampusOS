@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,18 +55,28 @@ class MockAuthService extends AuthService {
     String? branch,
     String? year,
     String? deviceId,
+    String? phone,
+    String? parentPhone,
+    String? parentName,
+    Uint8List? photoBytes,
+    String? photoFilename,
   }) async {
     lastRegisteredRole = role;
     lastRegisteredPayload = {
       'email': email,
       'password': password,
       'name': name,
+      'phone': phone,
+      'parentPhone': parentPhone,
+      'parentName': parentName,
       'role': role,
       'registrationNumber': registrationNumber,
       'course': course,
       'branch': branch,
       'year': year,
       'deviceId': deviceId,
+      'photoBytesLength': photoBytes?.length,
+      'photoFilename': photoFilename,
     };
 
     if (shouldFail) {
@@ -386,9 +397,18 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
+      final samplePng = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      );
       final mockAuth = MockAuthService()..mockUser = testStudent;
 
-      await tester.pumpWidget(createTestWidget(StudentRegistrationScreen(authService: mockAuth)));
+      await tester.pumpWidget(createTestWidget(StudentRegistrationScreen(
+        authService: mockAuth,
+        photoPickerOverride: () async => (bytes: samplePng, filename: 'portrait.png'),
+      )));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Upload Portrait Photo'));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextFormField).at(0), 'Charlie Student');
@@ -400,10 +420,12 @@ void main() {
       await tester.tap(find.text('Create Account'));
       await tester.pumpAndSettle();
 
-      // Ensure the registered role passed to backend is strictly 'student'
+      // Ensure the registered role passed to backend is strictly 'student' and photo bytes are forwarded
       expect(mockAuth.lastRegisteredRole, equals('student'));
       expect(mockAuth.lastRegisteredRole, isNot(equals('admin')));
       expect(mockAuth.lastRegisteredRole, isNot(equals('teacher')));
+      expect(mockAuth.lastRegisteredPayload?['photoFilename'], equals('portrait.png'));
+      expect(mockAuth.lastRegisteredPayload?['photoBytesLength'], equals(samplePng.length));
     });
 
     testWidgets('16. Passport and device attendance queue survive normal logout', (tester) async {
@@ -425,6 +447,91 @@ void main() {
       expect(prefs.getStringList('passport_queue_session_777'), isNotNull);
       expect(prefs.getStringList('passport_queue_session_777')!.length, equals(2));
       expect(prefs.getString('app_dark_mode_preference'), equals('true'));
+    });
+
+    testWidgets('17. Student registration requires photo before submission', (tester) async {
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final mockAuth = MockAuthService()..mockUser = testStudent;
+
+      await tester.pumpWidget(createTestWidget(StudentRegistrationScreen(authService: mockAuth)));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextFormField).at(0), 'No Photo Student');
+      await tester.enterText(find.byType(TextFormField).at(1), '21BCSE088');
+      await tester.enterText(find.byType(TextFormField).at(2), 'nophoto@campus.edu');
+      await tester.enterText(find.byType(TextFormField).at(3), 'secret123');
+      await tester.enterText(find.byType(TextFormField).at(4), 'secret123');
+
+      await tester.tap(find.text('Create Account'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Photo is required for admin verification'), findsOneWidget);
+      expect(mockAuth.lastRegisteredPayload, isNull);
+    });
+
+    testWidgets('18. Pending student registration displays Pending Admin Approval dialog', (tester) async {
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final samplePng = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      );
+      final pendingStudent = UserModel(
+        id: 'pending_1',
+        email: 'pending@campus.edu',
+        name: 'Pending Student',
+        role: 'student',
+        registrationNumber: '26BCSE001',
+        approvalStatus: 'PENDING',
+        photoUrl: '/uploads/photos/test.png',
+      );
+      final mockAuth = MockAuthService()..mockUser = pendingStudent;
+
+      await tester.pumpWidget(createTestWidget(StudentRegistrationScreen(
+        authService: mockAuth,
+        photoPickerOverride: () async => (bytes: samplePng, filename: 'selfie.png'),
+      )));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Upload Portrait Photo'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextFormField).at(0), 'Pending Student');
+      await tester.enterText(find.byType(TextFormField).at(1), '26BCSE001');
+      await tester.enterText(find.byType(TextFormField).at(2), 'pending@campus.edu');
+      await tester.enterText(find.byType(TextFormField).at(3), 'secret123');
+      await tester.enterText(find.byType(TextFormField).at(4), 'secret123');
+
+      await tester.tap(find.text('Create Account'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pending Admin Approval'), findsOneWidget);
+      expect(find.text('Back to Sign In'), findsOneWidget);
+      expect(find.text('Home Destination'), findsNothing);
+    });
+
+    testWidgets('19. LoginScreen displays Approval Pending dialog when student awaits approval', (tester) async {
+      final mockAuth = MockAuthService()
+        ..shouldFail = true
+        ..failureMessage =
+            'Your account is pending administrator approval. Please wait for an admin to verify and activate your account.';
+
+      await tester.pumpWidget(createTestWidget(LoginScreen(authService: mockAuth)));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextFormField).at(0), 'pending@campus.edu');
+      await tester.enterText(find.byType(TextFormField).at(1), 'secret123');
+      await tester.tap(find.text('Sign In'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Approval Pending'), findsOneWidget);
+      expect(find.textContaining('pending administrator approval'), findsOneWidget);
     });
   });
 }

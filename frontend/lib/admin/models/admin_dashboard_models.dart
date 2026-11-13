@@ -11,6 +11,7 @@ class AdminDashboardSummaryModel {
   final int rejectedComplaints;
   final int ageingComplaints;
   final double averageResolutionHours;
+  final int pendingStudentApprovals;
 
   AdminDashboardSummaryModel({
     required this.totalComplaints,
@@ -23,6 +24,7 @@ class AdminDashboardSummaryModel {
     required this.rejectedComplaints,
     required this.ageingComplaints,
     required this.averageResolutionHours,
+    this.pendingStudentApprovals = 0,
   });
 
   factory AdminDashboardSummaryModel.fromMap(Map<String, dynamic> map) {
@@ -37,6 +39,7 @@ class AdminDashboardSummaryModel {
       rejectedComplaints: (map['rejectedComplaints'] as num?)?.toInt() ?? 0,
       ageingComplaints: (map['ageingComplaints'] as num?)?.toInt() ?? 0,
       averageResolutionHours: (map['averageResolutionHours'] as num?)?.toDouble() ?? 0.0,
+      pendingStudentApprovals: (map['pendingStudentApprovals'] as num?)?.toInt() ?? 0,
     );
   }
 }

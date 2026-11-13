@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/models/expansion_models.dart';
 import '../../../core/services/expansion_api_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/copilot/copilot_sheet.dart';
 import '../widgets/passport/fee_details_sheet.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
@@ -100,6 +101,20 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Ask Campus AI',
+            icon: const Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
+            onPressed: () {
+              final q = _searchController.text.trim();
+              CopilotSheet.show(
+                context,
+                user: null,
+                role: 'student',
+                screenContext: 'global_search',
+                initialPrompt: q.length >= 2 ? q : null,
+              );
+            },
+          ),
           if (_searchController.text.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.clear_rounded, color: AppColors.textSecondary),

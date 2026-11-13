@@ -737,7 +737,7 @@ class _MessTodayScreenState extends State<MessTodayScreen> {
           ),
         ),
         Text(
-          'Today',
+          'Live',
           style: GoogleFonts.plusJakartaSans(
             fontSize: 12,
             fontWeight: FontWeight.w500,

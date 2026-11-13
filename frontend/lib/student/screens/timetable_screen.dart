@@ -8,6 +8,11 @@ import '../../auth/models/user_model.dart';
 import '../../auth/providers/user_provider.dart';
 import '../../data/syllabus/syllabus_data.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/motion/apple_bounceable.dart';
+import '../../shared/widgets/motion/apple_spring_scroll_physics.dart';
+import '../../shared/widgets/motion/apple_spring_curve.dart';
+import '../../shared/widgets/motion/apple_context_menu.dart';
+import 'package:flutter/services.dart';
 
 
 /// CampusOS Class Schedule Item Model
@@ -236,11 +241,12 @@ class _TimetableScreenState extends State<TimetableScreen>
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (Navigator.canPop(context)) ...[
-            GestureDetector(
+            AppleBounceable(
               onTap: () {
                 AppHaptics.lightImpact();
                 Navigator.pop(context);
               },
+              scaleFactor: 0.90,
               child: Container(
                 width: 42,
                 height: 42,
@@ -313,13 +319,14 @@ class _TimetableScreenState extends State<TimetableScreen>
             ),
           ),
           if (!_isWeekly && _selectedDayIndex != _currentDayIdx) ...[
-            GestureDetector(
+            AppleBounceable(
               onTap: () {
                 AppHaptics.lightImpact();
                 setState(() {
                   _selectedDayIndex = _currentDayIdx;
                 });
               },
+              scaleFactor: 0.94,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -391,14 +398,15 @@ class _TimetableScreenState extends State<TimetableScreen>
 
   Widget _buildToggleOption(String text, IconData icon, bool isSelected) {
     return Expanded(
-      child: GestureDetector(
+      child: AppleBounceable(
         onTap: () {
           AppHaptics.selectionClick();
           setState(() => _isWeekly = text == "Weekly");
         },
+        scaleFactor: 0.95,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOutCubic,
+          duration: const Duration(milliseconds: 260),
+          curve: AppleSpringCurve.standard,
           padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
@@ -445,7 +453,7 @@ class _TimetableScreenState extends State<TimetableScreen>
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: _days.length,
-        physics: const BouncingScrollPhysics(),
+        physics: const AppleSpringScrollPhysics(),
         itemBuilder: (context, index) {
           final isSelected = _selectedDayIndex == index;
           final date = _getDateForDayIndex(index);
@@ -526,7 +534,7 @@ class _TimetableScreenState extends State<TimetableScreen>
     }
 
     return ListView.builder(
-      physics: const BouncingScrollPhysics(),
+      physics: AppleSpringScrollPhysics.always,
       padding: const EdgeInsets.only(left: 18, right: 18, top: 4, bottom: 90),
       itemCount: dayClasses.length,
       itemBuilder: (context, index) {
@@ -544,14 +552,53 @@ class _TimetableScreenState extends State<TimetableScreen>
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: ClassCard(
-                    title: item.title,
-                    room: item.room,
-                    prof: item.prof,
-                    color: item.color,
-                    isNow: item.isNow,
-                    time: item.time,
+                  child: AppleContextMenu(
+                    actions: [
+                      AppleContextMenuItem(
+                        title: "Class Details",
+                        icon: Icons.info_outline_rounded,
+                        onTap: () => _showClassDetails(context, item),
+                      ),
+                      AppleContextMenuItem(
+                        title: "Copy Room & Prof",
+                        icon: Icons.copy_rounded,
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(
+                              text: "${item.title} · ${item.room} · ${item.prof}"));
+                          AppHaptics.selectionClick();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Copied ${item.title} details to clipboard"),
+                              behavior: SnackBarBehavior.floating,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
+                      AppleContextMenuItem(
+                        title: "Directions to Room",
+                        icon: Icons.navigation_outlined,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Guidance: Navigate to ${item.room}"),
+                              behavior: SnackBarBehavior.floating,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                     onTap: () => _showClassDetails(context, item),
+                    child: ClassCard(
+                      title: item.title,
+                      room: item.room,
+                      prof: item.prof,
+                      color: item.color,
+                      isNow: item.isNow,
+                      time: item.time,
+                      onTap: () => _showClassDetails(context, item),
+                    ),
                   ),
                 ),
               ),
@@ -638,7 +685,7 @@ class _TimetableScreenState extends State<TimetableScreen>
     }
 
     return ListView.builder(
-      physics: const BouncingScrollPhysics(),
+      physics: AppleSpringScrollPhysics.always,
       padding: const EdgeInsets.only(left: 18, right: 18, top: 4, bottom: 90),
       itemCount: activeDayIndices.length,
       itemBuilder: (context, index) {
@@ -1270,13 +1317,11 @@ class DayPill extends StatelessWidget {
                 ),
               ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+      child: AppleBounceable(
+        onTap: onTap,
+        scaleFactor: 0.94,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1326,8 +1371,7 @@ class DayPill extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

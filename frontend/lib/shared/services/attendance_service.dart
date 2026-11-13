@@ -18,6 +18,8 @@ class AttendanceService {
     String? responseNonce,
     String? verificationMode,
     String? proximityTier,
+    double? latitude,
+    double? longitude,
   }) async {
     final response = await _apiClient.post(
       '/attendance/mark',
@@ -31,6 +33,8 @@ class AttendanceService {
         'responseNonce': responseNonce,
         'verificationMode': verificationMode ?? 'LEGACY',
         'proximityTier': proximityTier,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       },
     );
     if (response.statusCode == 200 || response.statusCode == 201) {

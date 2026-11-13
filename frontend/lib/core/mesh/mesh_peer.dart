@@ -25,6 +25,9 @@ class MeshPeer {
   /// Last observed protocol hop count when available.
   final int? observedHopCount;
 
+  /// Optional display name or user name of the peer.
+  final String? displayName;
+
   /// Whether this peer is currently considered active.
   final bool isActive;
 
@@ -33,6 +36,7 @@ class MeshPeer {
     required this.role,
     required this.firstSeen,
     required this.lastSeen,
+    this.displayName,
     this.lastPacketId,
     this.observedRssi,
     this.observedHopCount,
@@ -45,6 +49,7 @@ class MeshPeer {
     String? role,
     DateTime? firstSeen,
     DateTime? lastSeen,
+    String? displayName,
     Uint8List? lastPacketId,
     int? observedRssi,
     int? observedHopCount,
@@ -55,6 +60,7 @@ class MeshPeer {
       role: role ?? this.role,
       firstSeen: firstSeen ?? this.firstSeen,
       lastSeen: lastSeen ?? this.lastSeen,
+      displayName: displayName ?? this.displayName,
       lastPacketId: lastPacketId ?? this.lastPacketId,
       observedRssi: observedRssi ?? this.observedRssi,
       observedHopCount: observedHopCount ?? this.observedHopCount,
@@ -68,6 +74,7 @@ class MeshPeer {
     if (other is! MeshPeer) return false;
     return deviceId == other.deviceId &&
         role == other.role &&
+        displayName == other.displayName &&
         firstSeen.millisecondsSinceEpoch == other.firstSeen.millisecondsSinceEpoch &&
         lastSeen.millisecondsSinceEpoch == other.lastSeen.millisecondsSinceEpoch &&
         observedRssi == other.observedRssi &&
@@ -80,6 +87,7 @@ class MeshPeer {
     return Object.hash(
       deviceId,
       role,
+      displayName,
       firstSeen.millisecondsSinceEpoch,
       lastSeen.millisecondsSinceEpoch,
       observedRssi,
@@ -90,6 +98,6 @@ class MeshPeer {
 
   @override
   String toString() {
-    return 'MeshPeer(id: $deviceId, role: $role, rssi: $observedRssi, hops: $observedHopCount, active: $isActive, lastSeen: $lastSeen)';
+    return 'MeshPeer(id: $deviceId, name: $displayName, role: $role, rssi: $observedRssi, hops: $observedHopCount, active: $isActive, lastSeen: $lastSeen)';
   }
 }

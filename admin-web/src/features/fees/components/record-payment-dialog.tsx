@@ -27,7 +27,7 @@ export function RecordPaymentDialog({ fee, open, onOpenChange }: RecordPaymentDi
 
   React.useEffect(() => {
     if (fee) {
-      const remaining = Math.max(0, fee.amount - fee.amount_paid)
+      const remaining = Math.max(0, fee.amount - fee.amountPaid)
       setAmount(remaining)
     }
   }, [fee])
@@ -37,13 +37,13 @@ export function RecordPaymentDialog({ fee, open, onOpenChange }: RecordPaymentDi
     onSuccess: (data) => {
       toast({
         title: "Payment Recorded",
-        description: `Receipt #${data.fee.receipt_number} generated for ${data.fee.studentName || "student"}.`,
+        description: `Receipt #${data.fee.receiptNumber || "ISSUED"} generated for ${data.fee.studentName || "student"}.`,
         type: "success",
       })
       queryClient.invalidateQueries({ queryKey: ["fees"] })
       onOpenChange(false)
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({
         title: "Payment Recording Failed",
         description: err.message || "Failed to record payment",
@@ -54,7 +54,7 @@ export function RecordPaymentDialog({ fee, open, onOpenChange }: RecordPaymentDi
 
   if (!fee) return null
 
-  const remaining = Math.max(0, fee.amount - fee.amount_paid)
+  const remaining = Math.max(0, fee.amount - fee.amountPaid)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,7 +75,7 @@ export function RecordPaymentDialog({ fee, open, onOpenChange }: RecordPaymentDi
             <div className="flex justify-between">
               <span className="text-muted-foreground">Already Paid:</span>
               <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">
-                {formatCurrency(fee.amount_paid)}
+                {formatCurrency(fee.amountPaid)}
               </span>
             </div>
             <div className="flex justify-between border-t border-border/40 pt-1.5">

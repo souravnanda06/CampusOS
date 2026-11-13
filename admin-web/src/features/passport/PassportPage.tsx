@@ -2,10 +2,9 @@ import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   passportApi,
-  type InstitutionPublicKey,
-  type TrustBundle,
-  type TrustBundleCertificate,
+  type TrustBundleIdentity,
   type CertificateVerificationResult,
+  type PresentationVerificationResult,
 } from './api/passport-api';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
@@ -27,6 +26,7 @@ import {
   FileCheck,
   Layers,
   Lock,
+  QrCode,
 } from 'lucide-react';
 
 export const PassportPage: React.FC = () => {
@@ -37,7 +37,16 @@ export const PassportPage: React.FC = () => {
   const [certIdInput, setCertIdInput] = React.useState('');
   const [verifying, setVerifying] = React.useState(false);
   const [verifyResult, setVerifyResult] = React.useState<CertificateVerificationResult | null>(null);
-  const [keyToRevoke, setKeyToRevoke] = React.useState<{ id: string; userId: string } | null>(null);
+
+  const [presentationJson, setPresentationJson] = React.useState('');
+  const [verifyingPres, setVerifyingPres] = React.useState(false);
+  const [presResult, setPresResult] = React.useState<PresentationVerificationResult | null>(null);
+
+  const [keyToRevoke, setKeyToRevoke] = React.useState<{
+    keyId: string;
+    userId: string;
+    userName?: string;
+  } | null>(null);
 
   const {
     data: caKey,
@@ -109,14 +118,18 @@ export const PassportPage: React.FC = () => {
 
   const handleVerifyCert = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!certIdInput.trim()) return;
+    const raw = certIdInput.trim();
+    if (!raw) return;
 
     setVerifying(true);
     setVerifyResult(null);
     try {
-      const res = await passportApi.verifyCertificate({
-        certificateId: certIdInput.trim(),
-      });
+      let res: CertificateVerificationResult;
+      if (raw.startsWith('{')) {
+        res = await passportApi.verifyCertificate({ certificate: JSON.parse(raw) });
+      } else {
+        res = await passportApi.verifyCertificate({ certificateId: raw });
+      }
       setVerifyResult(res);
     } catch (err: unknown) {
       setVerifyResult({
@@ -128,11 +141,40 @@ export const PassportPage: React.FC = () => {
     }
   };
 
+  const handleVerifyPresentation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = presentationJson.trim();
+    if (!raw) return;
+
+    setVerifyingPres(true);
+    setPresResult(null);
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const payload = (parsed.payload || parsed.p || parsed) as Record<string, unknown>;
+      const signature = String(parsed.signature || parsed.s || '');
+      const res = await passportApi.verifyPresentation({ payload, signature });
+      setPresResult(res);
+    } catch (err: unknown) {
+      setPresResult({
+        valid: false,
+        reason: err instanceof Error ? err.message : 'Invalid presentation JSON or signature',
+      });
+    } finally {
+      setVerifyingPres(false);
+    }
+  };
+
+  const identities = trustBundle?.payload?.identities || [];
+  const revokedKeyIds = trustBundle?.payload?.revokedKeyIds || [];
+  const expiresIso = trustBundle?.payload?.expiresAt
+    ? new Date(trustBundle.payload.expiresAt * 1000).toISOString()
+    : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Passport Cryptographic Trust Mesh"
-        subtitle="Institutional Ed25519 Certificate Authority (CA), device binding registry, and offline verifier trust bundles."
+        subtitle="Institutional Ed25519 Certificate Authority (CA), device binding registry, presentation verifier, and offline trust bundles."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -159,7 +201,6 @@ export const PassportPage: React.FC = () => {
 
       {/* Top 2 Cards: CA Anchor & Bundle Info */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Institutional Root CA Card */}
         <div className="rounded-lg border border-border bg-card p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-primary">
@@ -239,18 +280,25 @@ export const PassportPage: React.FC = () => {
             </div>
           ) : trustBundle ? (
             <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="rounded border border-border/60 p-2.5 bg-muted/20">
                   <div className="text-[11px] text-muted-foreground">Certified Devices</div>
                   <div className="text-xl font-bold font-mono mt-0.5">
-                    {trustBundle.certificates.length}
+                    {identities.length}
+                  </div>
+                </div>
+
+                <div className="rounded border border-border/60 p-2.5 bg-muted/20">
+                  <div className="text-[11px] text-muted-foreground">Revoked Keys</div>
+                  <div className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
+                    {revokedKeyIds.length}
                   </div>
                 </div>
 
                 <div className="rounded border border-border/60 p-2.5 bg-muted/20">
                   <div className="text-[11px] text-muted-foreground">Bundle Valid Until</div>
-                  <div className="text-xs font-semibold mt-1">
-                    {formatDate(trustBundle.expiresAt)}
+                  <div className="text-[11px] font-semibold mt-1">
+                    {formatDate(expiresIso)}
                   </div>
                 </div>
               </div>
@@ -266,71 +314,129 @@ export const PassportPage: React.FC = () => {
 
               <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Signed by CampusOS Ed25519 Root Authority</span>
+                <span>Signed by CampusOS Ed25519 Root Authority (v{trustBundle.payload?.version || 1})</span>
               </div>
             </div>
           ) : null}
         </div>
       </div>
 
-      {/* Certificate Verification Utility */}
-      <div className="rounded-lg border border-border bg-card p-5 shadow-xs space-y-4">
-        <div className="flex items-center gap-2 text-primary">
-          <FileCheck className="h-5 w-5" />
-          <h3 className="font-semibold text-sm">10-Rule Certificate Verifier Diagnostic</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Audit any device certificate against the 10 institutional verification rules (structural validity, root cryptographic signature, issuer key ID, expiration window, database matching, active status).
-        </p>
+      {/* Diagnostic Verifiers Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 10-Rule Certificate Verification Utility */}
+        <div className="rounded-lg border border-border bg-card p-5 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-primary">
+            <FileCheck className="h-5 w-5" />
+            <h3 className="font-semibold text-sm">10-Rule Certificate Verifier Diagnostic</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Audit any device certificate ID (UUID) or full JSON payload against the 10 institutional verification rules.
+          </p>
 
-        <form onSubmit={handleVerifyCert} className="flex gap-2">
-          <Input
-            placeholder="Enter Device Certificate ID (UUID) or certificate payload..."
-            value={certIdInput}
-            onChange={(e) => setCertIdInput(e.target.value)}
-            className="text-xs font-mono"
-          />
-          <Button type="submit" disabled={verifying || !certIdInput.trim()} className="shrink-0 gap-1.5">
-            <KeyRound className="h-4 w-4" />
-            <span>{verifying ? 'Verifying...' : 'Verify Certificate'}</span>
-          </Button>
-        </form>
+          <form onSubmit={handleVerifyCert} className="flex gap-2">
+            <Input
+              placeholder="Certificate UUID or JSON payload..."
+              value={certIdInput}
+              onChange={(e) => setCertIdInput(e.target.value)}
+              className="text-xs font-mono"
+            />
+            <Button type="submit" disabled={verifying || !certIdInput.trim()} className="shrink-0 gap-1.5">
+              <KeyRound className="h-4 w-4" />
+              <span>{verifying ? 'Verifying...' : 'Verify Cert'}</span>
+            </Button>
+          </form>
 
-        {verifyResult && (
-          <div
-            className={`rounded-md border p-4 text-xs space-y-2 ${
-              verifyResult.valid
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200'
-                : 'border-destructive/40 bg-destructive/10 text-destructive'
-            }`}
-          >
-            <div className="flex items-center gap-2 font-semibold">
-              {verifyResult.valid ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Certificate is Cryptographically Valid & Active</span>
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                  <span>Certificate Verification Failed</span>
-                </>
+          {verifyResult && (
+            <div
+              className={`rounded-md border p-4 text-xs space-y-2 ${
+                verifyResult.valid
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200'
+                  : 'border-destructive/40 bg-destructive/10 text-destructive'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold">
+                {verifyResult.valid ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Certificate is Cryptographically Valid &amp; Active</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <span>Certificate Verification Failed</span>
+                  </>
+                )}
+              </div>
+              {verifyResult.reason && (
+                <p className="text-[11px] font-mono">Reason: {verifyResult.reason}</p>
+              )}
+              {verifyResult.details && (
+                <pre className="mt-2 rounded bg-black/5 dark:bg-black/40 p-2 font-mono text-[10px] overflow-x-auto">
+                  {JSON.stringify(verifyResult.details, null, 2)}
+                </pre>
               )}
             </div>
+          )}
+        </div>
 
-            {verifyResult.reason && (
-              <p className="text-[11px] font-mono">
-                Reason: {verifyResult.reason}
-              </p>
-            )}
-
-            {verifyResult.details && (
-              <pre className="mt-2 rounded bg-black/5 dark:bg-black/40 p-2 font-mono text-[10px] overflow-x-auto">
-                {JSON.stringify(verifyResult.details, null, 2)}
-              </pre>
-            )}
+        {/* Live Passport Presentation Verifier (mirrors Flutter PassportVerifierScreen) */}
+        <div className="rounded-lg border border-border bg-card p-5 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-primary">
+            <QrCode className="h-5 w-5" />
+            <h3 className="font-semibold text-sm">Passport Presentation Verifier</h3>
           </div>
-        )}
+          <p className="text-xs text-muted-foreground">
+            Verify a student&apos;s rotating Ed25519 QR/BLE Passport presentation envelope (`&#123; payload, signature &#125;` or compact `&#123; p, s &#125;`).
+          </p>
+
+          <form onSubmit={handleVerifyPresentation} className="space-y-2">
+            <textarea
+              rows={3}
+              placeholder='{"payload": {...}, "signature": "..."}'
+              value={presentationJson}
+              onChange={(e) => setPresentationJson(e.target.value)}
+              className="w-full rounded-lg border border-input bg-background p-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={verifyingPres || !presentationJson.trim()}
+              className="gap-1.5"
+            >
+              <QrCode className="h-3.5 w-3.5" />
+              <span>{verifyingPres ? 'Verifying...' : 'Verify Presentation'}</span>
+            </Button>
+          </form>
+
+          {presResult && (
+            <div
+              className={`rounded-md border p-4 text-xs space-y-1.5 ${
+                presResult.valid
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200'
+                  : 'border-destructive/40 bg-destructive/10 text-destructive'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold">
+                {presResult.valid ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Passport Presentation Authentic</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <span>Presentation Rejected ({presResult.reason})</span>
+                  </>
+                )}
+              </div>
+              {presResult.user && (
+                <p className="text-[11px]">
+                  Identity: <strong>{presResult.user.name}</strong> ({presResult.user.registrationNumber || presResult.userId}) • {presResult.user.branch} Yr {presResult.user.year}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Certified Devices Registry Table */}
@@ -339,7 +445,7 @@ export const PassportPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <Lock className="h-4 w-4 text-primary" />
             <h3 className="font-semibold text-sm">
-              Certified Device Public Key Registry ({trustBundle?.certificates.length || 0})
+              Certified Device Public Key Registry ({identities.length})
             </h3>
           </div>
           <span className="text-xs text-muted-foreground font-mono">
@@ -353,7 +459,7 @@ export const PassportPage: React.FC = () => {
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
-        ) : !trustBundle?.certificates || trustBundle.certificates.length === 0 ? (
+        ) : identities.length === 0 ? (
           <div className="p-8 text-center text-xs text-muted-foreground">
             No student devices currently enrolled in the institutional trust bundle.
           </div>
@@ -363,28 +469,34 @@ export const PassportPage: React.FC = () => {
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground uppercase text-[10px] font-mono tracking-wider">
                   <th className="py-2.5 px-4 font-semibold">Certificate ID</th>
-                  <th className="py-2.5 px-4 font-semibold">User ID</th>
+                  <th className="py-2.5 px-4 font-semibold">Student / Key ID</th>
                   <th className="py-2.5 px-4 font-semibold">Public Key</th>
-                  <th className="py-2.5 px-4 font-semibold">Algorithm</th>
                   <th className="py-2.5 px-4 font-semibold">Valid Period</th>
                   <th className="py-2.5 px-4 font-semibold">Status</th>
                   <th className="py-2.5 px-4 font-semibold text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {trustBundle.certificates.map((cert: TrustBundleCertificate) => (
+                {identities.map((cert: TrustBundleIdentity) => (
                   <tr key={cert.certificateId} className="hover:bg-muted/30 transition-colors">
                     <td className="py-3 px-4 font-mono font-medium text-foreground">
-                      {cert.certificateId.substring(0, 8)}...
+                      <button
+                        type="button"
+                        onClick={() => setCertIdInput(cert.certificateId)}
+                        className="hover:text-primary hover:underline"
+                        title="Load into Certificate Verifier"
+                      >
+                        {cert.certificateId.substring(0, 10)}...
+                      </button>
                     </td>
-                    <td className="py-3 px-4 font-mono text-muted-foreground">
-                      {cert.userId.substring(0, 13)}...
+                    <td className="py-3 px-4">
+                      <p className="font-medium text-foreground">{cert.userName || cert.userId.substring(0, 12)}</p>
+                      <p className="font-mono text-[10px] text-muted-foreground">
+                        Key: {cert.keyId.substring(0, 10)}...
+                      </p>
                     </td>
                     <td className="py-3 px-4 font-mono text-muted-foreground max-w-[160px] truncate" title={cert.publicKey}>
                       {cert.publicKey}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[11px]">
-                      {cert.keyType || 'ED25519'}
                     </td>
                     <td className="py-3 px-4 text-muted-foreground">
                       {formatDate(cert.validFrom)} - {formatDate(cert.validTo)}
@@ -402,7 +514,13 @@ export const PassportPage: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setKeyToRevoke({ id: cert.certificateId, userId: cert.userId })}
+                          onClick={() =>
+                            setKeyToRevoke({
+                              keyId: cert.keyId,
+                              userId: cert.userId,
+                              userName: cert.userName,
+                            })
+                          }
                           className="h-7 text-xs text-destructive hover:bg-destructive/10"
                         >
                           Revoke Key
@@ -422,11 +540,11 @@ export const PassportPage: React.FC = () => {
         open={!!keyToRevoke}
         onOpenChange={(open) => !open && setKeyToRevoke(null)}
         title="Revoke Device Identity Key"
-        description={`Are you sure you want to revoke the identity key for User ID ${keyToRevoke?.userId}? All associated institutional certificates will be permanently invalidated and the user must re-enroll their device.`}
+        description={`Are you sure you want to revoke the identity key for ${keyToRevoke?.userName || keyToRevoke?.userId}? All associated institutional certificates will be permanently invalidated and the user must re-enroll their device.`}
         confirmLabel="Revoke Key"
         variant="destructive"
         onConfirm={() => {
-          if (keyToRevoke) revokeMutation.mutate(keyToRevoke.id);
+          if (keyToRevoke) revokeMutation.mutate(keyToRevoke.keyId);
         }}
         isLoading={revokeMutation.isPending}
       />

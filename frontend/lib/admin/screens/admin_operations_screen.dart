@@ -16,6 +16,7 @@ import '../models/admin_dashboard_models.dart';
 import '../services/admin_dashboard_service.dart';
 import 'admin_complaints_screen.dart';
 import '../widgets/admin_document_review_sheet.dart';
+import '../widgets/admin_student_approval_sheet.dart';
 import '../../core/services/expansion_api_service.dart';
 
 /// CampusOS Admin Operations Hub.
@@ -276,6 +277,31 @@ class _AdminOperationsScreenState extends State<AdminOperationsScreen> {
                     ),
                   )
                 else ...[
+                  // 0. Student Registration Approvals Card
+                  _buildOperationCard(
+                    icon: Icons.how_to_reg_rounded,
+                    iconColor: AppColors.primary,
+                    title: 'Student Approvals',
+                    statusBadge: '${_summary?.pendingStudentApprovals ?? 0} pending',
+                    statusBadgeColor: (_summary?.pendingStudentApprovals ?? 0) > 0
+                        ? const Color(0xFFF59E0B)
+                        : AppColors.success,
+                    details: [
+                      'Photo verification & account activation',
+                      'Approve or reject first-time signups',
+                    ],
+                    primaryActionText: 'Review Queue',
+                    onPrimaryAction: () {
+                      AppHaptics.selectionClick();
+                      AdminStudentApprovalSheet.show(
+                        context,
+                        adminId: widget.user?.id,
+                        onUpdated: _loadOperationsData,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
                   // 1. Complaints Operations Card
                   _buildOperationCard(
                   icon: Icons.assignment_outlined,

@@ -72,13 +72,21 @@ class LocalWifiCapabilityDetector {
             name.contains('wi-fi') ||
             name.contains('wifi') ||
             name.contains('p2p') ||
-            name.contains('ap');
+            name.contains('ap') ||
+            name.contains('softap') ||
+            name.contains('swlan') ||
+            name.contains('rndis') ||
+            name.contains('tether') ||
+            name.contains('bridge');
 
         for (final addr in iface.addresses) {
           if (addr.type == InternetAddressType.IPv4 &&
               !addr.isLoopback &&
-              !addr.address.startsWith('169.254.')) {
-            if (isWifiOrWlan) {
+              !addr.address.startsWith('169.254.') &&
+              !addr.address.startsWith('0.')) {
+            final isHotspotSubnet = addr.address.startsWith('192.168.43.') ||
+                addr.address.startsWith('192.168.49.');
+            if (isWifiOrWlan || isHotspotSubnet) {
               return LocalWifiCapabilityResult(
                 status: LocalWifiCapabilityStatus.supported,
                 ipAddress: addr.address,

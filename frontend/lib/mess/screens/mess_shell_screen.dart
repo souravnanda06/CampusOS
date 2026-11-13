@@ -7,7 +7,7 @@ import '../../shared/screens/mess/mess_management_screen.dart';
 import 'mess_today_screen.dart';
 import 'mess_analytics_screen.dart';
 import 'mess_profile_screen.dart';
-import '../../shared/widgets/dock/apple_glass_dock.dart';
+import '../../shared/widgets/dock/app_dock.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/localization/language_provider.dart';
 
@@ -102,26 +102,26 @@ class _MessShellScreenState extends State<MessShellScreen> {
             ),
           ),
           bottomNavigationBar: RepaintBoundary(
-            child: AppleGlassDock(
+            child: AppDock(
               currentIndex: _currentIndex,
               onTap: (index) => _onNavigateToTab(index),
               items: [
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.calendar_today_rounded,
                   activeIcon: Icons.calendar_today_rounded,
                   label: 'Today'.tr(context),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.restaurant_menu_outlined,
                   activeIcon: Icons.restaurant_menu_rounded,
                   label: 'Menus'.tr(context),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.bar_chart_outlined,
                   activeIcon: Icons.bar_chart_rounded,
                   label: 'Analytics'.tr(context),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
                   label: 'Profile'.tr(context),

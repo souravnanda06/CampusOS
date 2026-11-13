@@ -12,7 +12,9 @@ import '../../core/models/expansion_models.dart';
 import '../../core/services/expansion_api_service.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/haptics/app_haptics.dart';
+import '../../shared/widgets/motion/apple_bounceable.dart';
 import 'settings_screen.dart';
+import 'smart_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserModel? user;
@@ -74,6 +76,9 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                     const SizedBox(height: 24),
                     _buildDeviceSection(user, surface, textPrimary, textSecondary, border)
                         ._animateAdaptive(isReduced, delay: 180.ms, duration: motion.standard, slide: true),
+                    const SizedBox(height: 24),
+                    _buildCareerSection(user, surface, textPrimary, textSecondary, border)
+                        ._animateAdaptive(isReduced, delay: 210.ms, duration: motion.standard, slide: true),
                     const SizedBox(height: 32),
                     _buildQuickActions(motion, isReduced, surface, textPrimary, textSecondary, border)
                         ._animateAdaptive(isReduced, delay: 240.ms, duration: motion.standard, slide: true),
@@ -527,6 +532,178 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                   ),
                 ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Career & Placement Profile ───────────────────────────────
+  Widget _buildCareerSection(
+    UserModel? user,
+    Color surface,
+    Color textPrimary,
+    Color textSecondary,
+    Color border,
+  ) {
+    return _buildSection(
+      title: 'Career & Professional Profile'.tr(context),
+      icon: Icons.business_center_outlined,
+      surface: surface,
+      border: border,
+      textSecondary: textSecondary,
+      children: [
+        // 1. Smart Profile Studio (Skills, Projects, Certifications)
+        AppleBounceable(
+          onTap: () {
+            AppHaptics.selectionClick();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SmartProfileScreen()),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.badge_outlined,
+                    color: Color(0xFF10B981),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Smart Profile Studio',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Manage skills, projects, certifications & academic records',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '94% Ready',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF4F46E5),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: textSecondary,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Apple-style Hairline Divider
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Divider(height: 1, color: border.withValues(alpha: 0.5)),
+        ),
+
+        // 2. Career Hub & Placement Drives
+        AppleBounceable(
+          onTap: () {
+            AppHaptics.selectionClick();
+            Navigator.of(context).pushNamed(AppRoutes.careerHub);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F46E5).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.school_rounded,
+                    color: Color(0xFF6366F1),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Career Hub & Placement Drives',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'On-campus drives, off-campus jobs & ATS resume score',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Active',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: textSecondary,
+                  size: 20,
+                ),
+              ],
+            ),
           ),
         ),
       ],

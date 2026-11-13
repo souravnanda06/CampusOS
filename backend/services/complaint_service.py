@@ -15,7 +15,7 @@ COMPLAINT_TRANSITIONS = {
     'START': (['ASSIGNED', 'REOPENED'], 'IN_PROGRESS'),
     'RESOLVE': (['IN_PROGRESS'], 'RESOLVED'),
     'CLOSE': (['RESOLVED'], 'CLOSED'),
-    'REOPEN': (['RESOLVED'], 'REOPENED'),
+    'REOPEN': (['RESOLVED', 'CLOSED'], 'REOPENED'),
 }
 
 def _format_admin_complaint(complaint, now_dt=None):

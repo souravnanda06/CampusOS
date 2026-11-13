@@ -14,6 +14,7 @@ class ApiClient {
 
   static ApiClient? _instance;
   static ApiClient get instance => _instance ??= ApiClient();
+  static set instance(ApiClient? value) => _instance = value;
 
   /// In-memory token cache — populated on first authenticated request.
   String? _cachedToken;
@@ -86,13 +87,27 @@ class ApiClient {
     return uri;
   }
 
-  /// Builds the final headers, automatically injecting the auth token.
+  /// Builds the final headers, automatically injecting the auth token and fallback identity.
   Future<Map<String, String>> _buildHeaders(
       Map<String, String>? customHeaders) async {
     final token = await _getToken();
+    String? userId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userStr = prefs.getString('user_data');
+      if (userStr != null) {
+        final decoded = jsonDecode(userStr);
+        if (decoded is Map<String, dynamic> && decoded['id'] != null) {
+          userId = decoded['id'].toString();
+        }
+      }
+    } catch (_) {}
+
     final headers = <String, String>{
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
+      if (userId != null) 'X-User-Id': userId,
       ...?customHeaders,
     };
     return headers;
@@ -150,6 +165,56 @@ class ApiClient {
             body: _encodeBody(body),
           )
           .timeout(timeout ?? defaultTimeout);
+    } on TimeoutException {
+      throw ApiException(
+        message: 'Request timed out for $uri',
+        uri: uri,
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: e.toString(),
+        uri: uri,
+      );
+    }
+  }
+
+  Future<http.Response> postMultipart(
+    String path, {
+    Map<String, String>? headers,
+    Map<String, String>? fields,
+    String fileField = 'photo',
+    Uint8List? fileBytes,
+    String filename = 'photo.jpg',
+    Duration? timeout,
+  }) async {
+    final uri = _buildUri(path);
+    final token = await _getToken();
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    if (headers != null) {
+      request.headers.addAll(headers);
+    }
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+    if (fileBytes != null) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          fileField,
+          fileBytes,
+          filename: filename,
+        ),
+      );
+    }
+
+    try {
+      final streamed = await _client
+          .send(request)
+          .timeout(timeout ?? const Duration(seconds: 30));
+      return await http.Response.fromStream(streamed);
     } on TimeoutException {
       throw ApiException(
         message: 'Request timed out for $uri',

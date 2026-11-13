@@ -17,10 +17,21 @@ GoogleService-Info.plist
 *.zip
 *.tar.gz
 
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
 # Nested reference repositories (external open source clones)
 bitchat/
 bitchat-android/
 localsend/
+OpenWA/
+openwa_data/
+whatsapp_gateway/baileys_auth_info/
+whatsapp_gateway/node_modules/
 
 # Browser & PDF generator profiles/cache
 .edge_pdf_profile/

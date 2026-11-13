@@ -28,7 +28,7 @@ export function ActionAssetDialog({ issue, open, onOpenChange }: ActionAssetDial
   React.useEffect(() => {
     if (issue) {
       setStatus(issue.status === "REPORTED" ? "ACKNOWLEDGED" : "IN_REPAIR")
-      setResolutionNotes(issue.resolution_notes || "")
+      setResolutionNotes(issue.resolutionNotes || "")
     }
   }, [issue])
 

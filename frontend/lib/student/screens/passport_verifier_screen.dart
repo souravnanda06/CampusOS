@@ -17,6 +17,7 @@ import '../services/passport_trust_bundle_service.dart';
 import '../services/passport_offline_verifier_service.dart';
 import '../../core/performance/performance.dart';
 import '../../shared/widgets/campus_scanner_overlay.dart';
+import '../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 /// CampusOS Passport Verifier Terminal (Phase 1E & 1F).
 ///
@@ -1030,7 +1031,7 @@ class _PassportVerifierScreenState extends State<PassportVerifierScreen> {
       label: "Passport valid. Identity certificate active for student $studentName.",
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        physics: const BouncingScrollPhysics(),
+        physics: AppleSpringScrollPhysics.always,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1336,7 +1337,7 @@ class _PassportVerifierScreenState extends State<PassportVerifierScreen> {
       label: "Passport verification failed. ${result.displayTitle}. ${result.displayMessage}",
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        physics: const BouncingScrollPhysics(),
+        physics: AppleSpringScrollPhysics.always,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Sheet,
   SheetContent,
@@ -9,7 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
-import { noticesApi, type NoticeDeliveryMetrics, type Notice } from '../api/notices-api';
+import { noticesApi, type Notice } from '../api/notices-api';
 import { Send, CheckCircle2, Eye, AlertCircle, Clock, Smartphone } from 'lucide-react';
 
 interface NoticeDeliverySheetProps {
@@ -23,23 +24,11 @@ export const NoticeDeliverySheet: React.FC<NoticeDeliverySheetProps> = ({
   open,
   onOpenChange,
 }) => {
-  const [data, setData] = React.useState<NoticeDeliveryMetrics | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (open && notice) {
-      setLoading(true);
-      setError(null);
-      noticesApi
-        .getNoticeDelivery(notice.id)
-        .then((res) => setData(res))
-        .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load delivery analytics'))
-        .finally(() => setLoading(false));
-    } else {
-      setData(null);
-    }
-  }, [open, notice]);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['notices', 'delivery', notice?.id],
+    queryFn: () => noticesApi.getNoticeDelivery(notice!.id),
+    enabled: open && Boolean(notice?.id),
+  });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -57,7 +46,7 @@ export const NoticeDeliverySheet: React.FC<NoticeDeliverySheetProps> = ({
           </SheetDescription>
         </SheetHeader>
 
-        {loading ? (
+        {isLoading ? (
           <div className="space-y-4 py-6">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-32 w-full" />
@@ -66,7 +55,9 @@ export const NoticeDeliverySheet: React.FC<NoticeDeliverySheetProps> = ({
         ) : error ? (
           <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-4 text-xs text-destructive my-6">
             <AlertCircle className="h-5 w-5 shrink-0" />
-            <span>{error}</span>
+            <span>
+              {error instanceof Error ? error.message : 'Failed to load delivery analytics'}
+            </span>
           </div>
         ) : data ? (
           <div className="space-y-6 py-4">
@@ -77,9 +68,7 @@ export const NoticeDeliverySheet: React.FC<NoticeDeliverySheetProps> = ({
                   <Send className="h-3.5 w-3.5 text-blue-500" />
                   <span>Recipients</span>
                 </div>
-                <div className="mt-1 text-xl font-bold font-mono">
-                  {data.metrics.recipients}
-                </div>
+                <div className="mt-1 text-xl font-bold font-mono">{data.metrics.recipients}</div>
               </div>
 
               <div className="rounded-lg border border-border bg-card p-3 shadow-xs">
@@ -165,10 +154,10 @@ export const NoticeDeliverySheet: React.FC<NoticeDeliverySheetProps> = ({
                               d.status === 'READ' || d.status === 'ACTIONED'
                                 ? 'default'
                                 : d.status === 'DELIVERED'
-                                ? 'secondary'
-                                : d.status === 'FAILED'
-                                ? 'destructive'
-                                : 'outline'
+                                  ? 'secondary'
+                                  : d.status === 'FAILED'
+                                    ? 'destructive'
+                                    : 'outline'
                             }
                             className="text-[10px] uppercase px-1.5 py-0"
                           >

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -43,7 +44,11 @@ class NotificationService {
         onDidReceiveNotificationResponse: (NotificationResponse response) {
           final payload = response.payload;
           if (payload != null && payload.isNotEmpty) {
-            handleNoticeTap(payload);
+            if (payload.startsWith('emergency:')) {
+              handleEmergencyNotificationTap();
+            } else {
+              handleNoticeTap(payload);
+            }
           }
         },
       );
@@ -66,8 +71,11 @@ class NotificationService {
       const AndroidNotificationChannel emergencyChannel = AndroidNotificationChannel(
         'emergency_flares',
         'Emergency Disaster Flares',
-        description: 'Offline BLE Mesh Life-Safety Emergency Alarms',
+        description: 'Offline BLE Mesh Life-Safety Emergency Alarms & Sirens',
         importance: Importance.max,
+        enableLights: true,
+        ledColor: Color(0xFFEF4444),
+        enableVibration: true,
       );
 
       final androidImpl = _localNotifications
@@ -226,29 +234,67 @@ class NotificationService {
     required String title,
     required String message,
     required bool isCritical,
+    bool sirenEnabled = false,
+    String? alertId,
   }) async {
     try {
       final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
         'emergency_flares',
         'Emergency Disaster Flares',
-        channelDescription: 'Offline BLE Mesh Life-Safety Emergency Alarms',
+        channelDescription: 'Offline BLE Mesh Life-Safety Emergency Alarms & Sirens',
         importance: Importance.max,
         priority: Priority.max,
         playSound: true,
         enableVibration: true,
-        fullScreenIntent: isCritical,
+        vibrationPattern: (isCritical || sirenEnabled)
+            ? Int64List.fromList([0, 500, 200, 500, 200, 800])
+            : Int64List.fromList([0, 300, 150, 300]),
+        enableLights: true,
+        ledColor: const Color(0xFFEF4444),
+        ledOnMs: 400,
+        ledOffMs: 250,
+        color: const Color(0xFFEF4444),
+        colorized: true,
+        category: AndroidNotificationCategory.alarm,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        ongoing: sirenEnabled && isCritical,
+        fullScreenIntent: isCritical || sirenEnabled,
       );
       final NotificationDetails notificationDetails =
           NotificationDetails(android: androidDetails);
 
       await _localNotifications.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        (alertId ?? title).hashCode & 0x7fffffff,
         title,
         message,
         notificationDetails,
+        payload: 'emergency:${alertId ?? 'active'}',
       );
     } catch (e) {
       debugPrint('ℹ️ [NOTIFICATION_SERVICE] Offline emergency notification error: $e');
+    }
+  }
+
+  static Future<void> cancelEmergencyNotification(String? alertId) async {
+    try {
+      if (alertId != null && alertId.isNotEmpty) {
+        await _localNotifications.cancel(alertId.hashCode & 0x7fffffff);
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> handleEmergencyNotificationTap() async {
+    final nav = navigatorKey?.currentState;
+    if (nav == null) return;
+    try {
+      final user = await AuthService().getUserDataFromStorage();
+      if (user != null && user.role.toLowerCase() == 'student') {
+        nav.pushNamed(AppRoutes.studentEmergency);
+      } else {
+        nav.pushNamed(AppRoutes.meshEmergency);
+      }
+    } catch (_) {
+      nav.pushNamed(AppRoutes.meshEmergency);
     }
   }
 

@@ -1,3 +1,6 @@
+import 'campus_scanner_screen.dart';
+import '../../shared/models/session_model.dart';
+import '../../shared/services/session_service.dart';
 import 'dart:async';
 import 'package:attendance_app/core/haptics/app_haptics.dart';
 
@@ -24,8 +27,6 @@ import '../services/passport_challenge_scanner_service.dart';
 import '../services/passport_crypto_service.dart';
 import '../services/passport_identity_service.dart';
 import '../services/passport_presentation_service.dart';
-import '../../shared/models/session_model.dart';
-import '../../shared/services/session_service.dart';
 import '../services/passport_student_attendance_service.dart';
 import '../services/passport_trust_bundle_service.dart';
 import '../widgets/passport/campus_wallet.dart';
@@ -119,6 +120,8 @@ class _PassportScreenState extends State<PassportScreen>
     if (mounted) {
       setState(() {
         _isExpandedActiveView = false;
+        _walletState = PassportWalletState.locked;
+        _currentPresentation = null;
       });
       widget.isFullScreenActive.value = false;
       _isReversingToWallet = false;
@@ -140,6 +143,7 @@ class _PassportScreenState extends State<PassportScreen>
   StreamSubscription? _bluetoothSub;
   StreamSubscription? _attendanceStateSub;
   StreamSubscription? _attendanceMsgSub;
+  DateTime? _lastPausedAt;
 
   /// Resets the 90-second inactivity lock timer whenever the user interacts with the screen
   void _resetInactivityTimer() {
@@ -185,7 +189,7 @@ class _PassportScreenState extends State<PassportScreen>
     _studentAttendanceService =
         widget.studentAttendanceService ?? PassportStudentAttendanceService();
     _biometricService =
-        widget.biometricService ?? PassportBiometricService();
+        widget.biometricService ?? PassportFaceAuthService();
     _presentationService = PassportPresentationService(
       cryptoService: _cryptoService,
       identityService: _identityService,
@@ -214,30 +218,56 @@ class _PassportScreenState extends State<PassportScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed &&
-        _walletState == PassportWalletState.active) {
-      if (_currentPresentation == null || _currentPresentation!.isExpired()) {
-        _rotatePresentation();
+    if (state == AppLifecycleState.resumed) {
+      if (_lastPausedAt != null) {
+        final elapsed = DateTime.now().difference(_lastPausedAt!);
+        _lastPausedAt = null;
+        if (elapsed > _inactivityTimeout) {
+          debugPrint("🔒 [PASSPORT_SCREEN] Backgrounded for > 90s: Automatically locking Passport.");
+          _stopInactivityTimer();
+          _stopAttendanceFlow(notify: false, clearVerified: true);
+          if (mounted) {
+            setState(() {
+              _walletState = PassportWalletState.locked;
+              _isExpandedActiveView = false;
+              _currentPresentation = null;
+            });
+            widget.isFullScreenActive.value = false;
+          }
+          return;
+        }
       }
-      _resetInactivityTimer();
-      _startAttendanceFlowIfNeeded();
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      _stopInactivityTimer();
-      _stopAttendanceFlow(notify: false);
+      if (_walletState == PassportWalletState.active) {
+        if (_currentPresentation == null || _currentPresentation!.isExpired()) {
+          _rotatePresentation();
+        }
+        _resetInactivityTimer();
+        _startAttendanceFlowIfNeeded();
+      }
+    } else if (state == AppLifecycleState.paused) {
+      _lastPausedAt = DateTime.now();
+      // NOTE: Do not immediately lock _walletState or reset _isExpandedActiveView here.
+      // On Android, system permission dialogs and Bluetooth enable dialogs (FlutterBluePlus.turnOn)
+      // cause the host Activity to pause. Instantly locking here kicks students out of the active
+      // passport before they can accept or deny the prompt.
+      // If the student actually leaves the app for longer than _inactivityTimeout, it locks upon resume.
     }
+    // NOTE: On AppLifecycleState.inactive, do nothing. Inactive represents transient system overlays
+    // (notification drawer, permission dialogs, biometric sheets) and must never lock the passport.
   }
 
   @override
   void didUpdateWidget(covariant PassportScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.isActiveTab && oldWidget.isActiveTab) {
-      // User switched away from Passport tab (e.g. to Home tab): stop all BLE loops immediately
-      _stopAttendanceFlow(notify: false);
+      // User switched away from Passport tab: stop all BLE loops immediately and relock
+      _stopInactivityTimer();
+      _stopAttendanceFlow(notify: false, clearVerified: true);
+      _walletState = PassportWalletState.locked;
+      _isExpandedActiveView = false;
+      _currentPresentation = null;
     } else if (widget.isActiveTab && !oldWidget.isActiveTab) {
-      // User switched to Passport tab: only start attendance if currently inside the expanded active card
-      if (_walletState == PassportWalletState.active && _isExpandedActiveView) {
-        _startAttendanceFlowIfNeeded();
-      }
+      // User switched to Passport tab: keep in locked state until face verification
     }
   }
 
@@ -256,9 +286,16 @@ class _PassportScreenState extends State<PassportScreen>
           });
           _bluetoothSub = FlutterBluePlus.adapterState.listen((state) {
             if (mounted) {
+              final isOn = state == BluetoothAdapterState.on;
               setState(() {
-                _isBluetoothActive = state == BluetoothAdapterState.on;
+                _isBluetoothActive = isOn;
               });
+              if (isOn) {
+                _studentAttendanceService.resetBluetoothDeclinedSession();
+                if (_isExpandedActiveView && _walletState == PassportWalletState.active) {
+                  _startAttendanceFlowIfNeeded();
+                }
+              }
             }
           }, onError: (e) {
             debugPrint("⚠️ [PASSPORT] Bluetooth stream error: $e");
@@ -309,7 +346,10 @@ class _PassportScreenState extends State<PassportScreen>
 
   Future<void> _loadTrustBundle() async {
     try {
-      final trustBundleService = PassportTrustBundleService();
+      final trustBundleService = PassportTrustBundleService(
+        storage: _cryptoService.storage,
+        cryptoService: _cryptoService,
+      );
       final hasBundle = await trustBundleService.hasValidLocalBundle();
       if (!hasBundle) {
         await trustBundleService.downloadAndSaveBundle();
@@ -485,6 +525,44 @@ class _PassportScreenState extends State<PassportScreen>
   }
 }
 
+  /// CampusOS Face ID authentication engine (Aadhaar-style face verification).
+  /// Strictly requires live face verification to prevent proxy attendance (no fingerprint/PIN bypass).
+  Future<BiometricAuthResult> _authenticateUser({
+    required String reason,
+    required String studentId,
+    bool biometricOnly = false,
+  }) async {
+    // If an explicit mock provider was injected for testing, respect it
+    if (widget.biometricService != null) {
+      return await _biometricService.authenticate(
+        reason: reason,
+        biometricOnly: biometricOnly,
+      );
+    }
+
+    // CampusOS Face ID Authentication Engine
+    final sId = PassportFaceAuthService.resolveActiveStudentId(studentId);
+    final faceService = PassportFaceAuthService();
+    final isEnrolled = await faceService.isFaceEnrolled(sId);
+    if (!isEnrolled) {
+      if (!mounted) return BiometricAuthResult.cancelled;
+      final enrolled = await Navigator.of(context).pushNamed(
+        AppRoutes.faceEnrollment,
+        arguments: sId,
+      );
+      if (enrolled != true) {
+        return BiometricAuthResult.cancelled;
+      }
+    }
+
+    if (!mounted) return BiometricAuthResult.cancelled;
+    return await faceService.verifyFaceIdentity(
+      studentId: sId,
+      context: context,
+      reason: reason,
+    );
+  }
+
   Future<void> _unlockPassport() async {
     if (_walletState == PassportWalletState.uninitialized ||
         _walletState == PassportWalletState.keyMissing) {
@@ -504,46 +582,16 @@ class _PassportScreenState extends State<PassportScreen>
     });
 
     try {
-      final studentId = widget.user?.id ??
-          (mounted ? Provider.of<UserProvider>(context, listen: false).user?.id : null) ??
-          'default_student';
+      final studentId = PassportFaceAuthService.resolveActiveStudentId(
+        widget.user?.id ??
+            (mounted ? Provider.of<UserProvider>(context, listen: false).user?.id : null),
+      );
 
-      BiometricAuthResult bioResult;
-      if (widget.biometricService != null) {
-        bioResult = await _biometricService.authenticate(
-          reason: 'Authenticate to unlock your Campus Passport',
-          biometricOnly: false,
-        );
-      } else {
-        final faceService = PassportFaceAuthService();
-        final isEnrolled = await faceService.isFaceEnrolled(studentId);
-        if (!isEnrolled) {
-          if (mounted) {
-            final enrolled = await Navigator.of(context).pushNamed(
-              AppRoutes.faceEnrollment,
-              arguments: studentId,
-            );
-            if (enrolled != true) {
-              if (mounted) {
-                setState(() {
-                  _walletState = PassportWalletState.locked;
-                });
-              }
-              return;
-            }
-          }
-        }
-
-        if (mounted) {
-          bioResult = await faceService.verifyFaceIdentity(
-            studentId: studentId,
-            context: context,
-            reason: 'Verify face to unlock Campus Passport',
-          );
-        } else {
-          bioResult = BiometricAuthResult.cancelled;
-        }
-      }
+      final bioResult = await _authenticateUser(
+        reason: 'Verify face to unlock Campus Passport',
+        studentId: studentId,
+        biometricOnly: false,
+      );
 
       if (!bioResult.isSuccess) {
         if (mounted) {
@@ -591,16 +639,19 @@ class _PassportScreenState extends State<PassportScreen>
   }
 
   Future<void> _activatePassport() async {
-    final studentId = widget.user?.id ??
-        (mounted ? Provider.of<UserProvider>(context, listen: false).user?.id : null);
+    final studentId = PassportFaceAuthService.resolveActiveStudentId(
+      widget.user?.id ??
+          (mounted ? Provider.of<UserProvider>(context, listen: false).user?.id : null),
+    );
     setState(() {
       _isActivatingPassport = true;
     });
 
     try {
-      // 1. Authenticate user intent with biometric / device PIN
-      final bioResult = await _biometricService.authenticate(
+      // 1. Authenticate user intent with biometric / Face ID
+      final bioResult = await _authenticateUser(
         reason: 'Authenticate to generate secure device identity for Campus Passport',
+        studentId: studentId,
         biometricOnly: false,
       );
 
@@ -806,8 +857,13 @@ class _PassportScreenState extends State<PassportScreen>
   }
 
   Future<void> _unlockGatePass() async {
-    final bioResult = await _biometricService.authenticate(
+    final studentId = PassportFaceAuthService.resolveActiveStudentId(
+      widget.user?.id ??
+          (mounted ? Provider.of<UserProvider>(context, listen: false).user?.id : null),
+    );
+    final bioResult = await _authenticateUser(
       reason: 'Verify biometric identity to access Gate Pass credential',
+      studentId: studentId,
       biometricOnly: false,
     );
 
@@ -1000,116 +1056,66 @@ class _PassportScreenState extends State<PassportScreen>
     }
 
     try {
-      while (mounted &&
-          widget.isActiveTab &&
-          _isExpandedActiveView &&
-          _walletState == PassportWalletState.active &&
-          _isScanningLoopActive) {
-        
+      if (mounted) {
+        setState(() {
+          _isAttendanceActive = true;
+        });
+      }
+
+      final hasAlreadyVerified = _verifiedSessionId != null &&
+          _attendanceFlowState == StudentAttendanceFlowState.completed;
+
+      // Run attendance scan window (15 seconds, prevents Android OS scan rate limiting)
+      final response = await _studentAttendanceService.startAttendance(
+        currentUser: user,
+        alreadyAuthenticated: true,
+        scanTimeout: const Duration(seconds: 15),
+        activeSessions: const [],
+        ignoredSessionIds: _verifiedSessionIds,
+        preserveCompletedState: hasAlreadyVerified,
+      );
+
+      if (response != null && mounted) {
+        // Attendance verified and recorded!
+        _verifiedSessionId = response.sessionId;
+        _verifiedSessionIds.add(response.sessionId);
+        _isAttendanceActive = false;
+        AppHaptics.heavyImpact();
+
         if (mounted) {
-          setState(() {
-            _isAttendanceActive = true;
-          });
-        }
-
-        List<SessionModel> cachedSessions = [];
-        try {
-          cachedSessions = await SessionService()
-              .getActiveSessions(
-                course: user.course,
-                branch: user.branch,
-                year: user.year,
-              )
-              .timeout(const Duration(milliseconds: 600), onTimeout: () => []);
-          if (cachedSessions.isEmpty) {
-            cachedSessions = await SessionService()
-                .getActiveSessions()
-                .timeout(const Duration(milliseconds: 400), onTimeout: () => []);
-          }
-        } catch (_) {}
-
-        final hasAlreadyVerified = _verifiedSessionId != null &&
-            _attendanceFlowState == StudentAttendanceFlowState.completed;
-
-        // Run attendance scan window (15 seconds, prevents Android OS scan rate limiting)
-        final response = await _studentAttendanceService.startAttendance(
-          currentUser: user,
-          alreadyAuthenticated: true,
-          scanTimeout: const Duration(seconds: 15),
-          activeSessions: cachedSessions,
-          ignoredSessionIds: _verifiedSessionIds,
-          preserveCompletedState: hasAlreadyVerified,
-        );
-
-        if (response != null && mounted) {
-          // Attendance verified and recorded!
-          _verifiedSessionId = response.sessionId;
-          _verifiedSessionIds.add(response.sessionId);
-          _isAttendanceActive = false;
-          AppHaptics.heavyImpact();
-
-          if (mounted) {
-            try {
-              context.read<AttendanceProvider>().recordAttendanceLocally(
-                sessionId: response.sessionId,
-                studentId: user.id,
-              );
-            } catch (_) {}
-            setState(() {
-              _attendanceFlowState = StudentAttendanceFlowState.completed;
-              _attendanceStatusMessage = 'Attendance Verified · Tap to re-send';
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline_rounded, color: Colors.white),
-                    SizedBox(width: 8),
-                    Expanded(child: Text("Attendance broadcasted to teacher!")),
-                  ],
-                ),
-                backgroundColor: AppColors.success,
-                behavior: SnackBarBehavior.floating,
-                duration: Duration(seconds: 2),
-              ),
+          try {
+            context.read<AttendanceProvider>().recordAttendanceLocally(
+              sessionId: response.sessionId,
+              studentId: user.id,
             );
-          }
-
-          // Breather pause after successfully verifying attendance before quietly listening for next session
-          await Future.delayed(const Duration(seconds: 8));
-          continue;
-        }
-
-        // Breather pause between scan windows
-        if (!mounted ||
-            _walletState != PassportWalletState.active ||
-            !_isScanningLoopActive) {
-          break;
-        }
-
-        // If an explicit error occurred (e.g. GPS off or Bluetooth off), preserve error message on screen
-        if (_attendanceFlowState == StudentAttendanceFlowState.error) {
-          if (mounted) {
-            setState(() {
-              _isAttendanceActive = false;
-            });
-          }
-          await Future.delayed(const Duration(seconds: 3));
-          continue;
-        }
-
-        // Keep status calm and ambient while waiting for next scan burst
-        if (mounted) {
+          } catch (_) {}
           setState(() {
-            _isAttendanceActive = false;
-            if (_attendanceFlowState != StudentAttendanceFlowState.completed) {
-              _attendanceFlowState = StudentAttendanceFlowState.scanningForTeacherBeacon;
-              _attendanceStatusMessage = 'Looking for class session...';
-            }
+            _attendanceFlowState = StudentAttendanceFlowState.completed;
+            _attendanceStatusMessage = 'Attendance Verified · Tap to re-send';
           });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle_outline_rounded, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(child: Text("Attendance broadcasted to teacher!")),
+                ],
+              ),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
         }
-
-        await Future.delayed(const Duration(milliseconds: 1500));
+      } else if (mounted) {
+        setState(() {
+          _isAttendanceActive = false;
+          if (_attendanceFlowState != StudentAttendanceFlowState.completed) {
+            _attendanceFlowState = StudentAttendanceFlowState.scanningForTeacherBeacon;
+            _attendanceStatusMessage = 'Looking for class session...';
+          }
+        });
       }
     } catch (e) {
       debugPrint("⚠️ [PASSPORT] Ambient attendance loop notice: $e");
@@ -1184,20 +1190,24 @@ class _PassportScreenState extends State<PassportScreen>
           child: PassportActiveView(
             key: _activePassportViewKey,
             studentName: studentName,
-          department: department,
-          semester: semester,
-          registrationNumber: rollNumber,
-          qrData: _currentPresentation?.toQrPayload() ??
-              'CAMPUS_PASSPORT:v1:${rollNumber ?? studentName}:${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
-          remainingSecondsNotifier: _qrRemainingSecondsNotifier,
-          isBluetoothActive: _isBluetoothActive,
-          onClose: _handleBackToWallet,
-          onRefreshQr: _rotatePresentation,
-          onStartAttendance: _handleManualAttendanceTrigger,
-          isAttendanceActive: _isAttendanceActive,
-          attendanceState: _attendanceFlowState,
-          attendanceStatusMessage: _attendanceStatusMessage,
-        ),
+            department: department,
+            semester: semester,
+            registrationNumber: rollNumber,
+            qrData: _currentPresentation?.toQrPayload() ??
+                'CAMPUS_PASSPORT:v1:${rollNumber ?? studentName}:${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+            remainingSecondsNotifier: _qrRemainingSecondsNotifier,
+            isBluetoothActive: _isBluetoothActive,
+            onClose: _handleBackToWallet,
+            onRefreshQr: _rotatePresentation,
+            onStartAttendance: _handleManualAttendanceTrigger,
+            onScanWifiHotspot: _openClassroomQrScanner,
+            onScanClassroomQr: _openClassroomQrScanner,
+            onEnterRoomPin: _openRoomPinSheet,
+            onMarkGpsLocation: _handleGpsAttendanceTrigger,
+            isAttendanceActive: _isAttendanceActive,
+            attendanceState: _attendanceFlowState,
+            attendanceStatusMessage: _attendanceStatusMessage,
+          ),
       ),
     ),
   );
@@ -1211,17 +1221,14 @@ class _PassportScreenState extends State<PassportScreen>
     required String? rollNumber,
     required UserModel? user,
   }) {
-    return Scaffold(
+    return Container(
       key: key,
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadAll,
-          color: AppColors.primary,
-          child: Column(
-            children: [
-              if (_errorMessage != null &&
-                  _walletState == PassportWalletState.error) ...[
+      color: AppColors.bg,
+      child: SafeArea(
+        child: Column(
+          children: [
+            if (_errorMessage != null &&
+                _walletState == PassportWalletState.error) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
                   child: Container(
@@ -1298,10 +1305,516 @@ class _PassportScreenState extends State<PassportScreen>
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
 
 
+
+  // --- Apple-Grade Zero-BLE Room PIN Bottom Sheet ---
+  void _openRoomPinSheet() {
+    AppHaptics.selectionClick();
+    final user = widget.user ??
+        (mounted ? Provider.of<UserProvider>(context, listen: false).user : null);
+    if (user == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _RoomPinEntrySheet(
+          onPinSubmitted: (pin) async {
+            return await _handleRoomPinSubmit(pin, user);
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _handleRoomPinSubmit(String pin, UserModel user) async {
+    try {
+      // 1. Resolve active session
+      SessionModel? targetSession;
+      final beacon = _studentAttendanceService.lastDiscoveredTeacherBeacon;
+      if (beacon != null && beacon.sessionId.isNotEmpty) {
+        targetSession = SessionModel(
+          id: beacon.sessionId,
+          name: beacon.subject ?? 'Class Session',
+          course: beacon.course ?? user.course,
+          branch: beacon.branch ?? user.branch,
+          year: beacon.year ?? user.year,
+          instructorName: beacon.teacherId,
+          startTime: DateTime.now(),
+          endTime: DateTime.now().add(const Duration(hours: 1)),
+          location: 'Classroom',
+          isActive: true,
+        );
+      } else {
+        final activeList = await SessionService().getActiveSessions(
+          course: user.course,
+          branch: user.branch,
+          year: user.year,
+        );
+        if (activeList.isNotEmpty) {
+          targetSession = activeList.first;
+        } else {
+          final allActive = await SessionService().getActiveSessions();
+          if (allActive.isNotEmpty) {
+            targetSession = allActive.first;
+          }
+        }
+      }
+
+      targetSession ??= SessionModel(
+          id: 'manual_session_${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+          name: 'Class Attendance',
+          instructorName: 'Instructor',
+          startTime: DateTime.now(),
+          endTime: DateTime.now().add(const Duration(hours: 1)),
+          location: 'Classroom',
+          isActive: true,
+        );
+
+      final result = await _studentAttendanceService.submitRollingPin(
+        pin: pin,
+        session: targetSession,
+        currentUser: user,
+      );
+
+      if (result != null && result.valid && mounted) {
+        _verifiedSessionId = targetSession.id;
+        _verifiedSessionIds.add(targetSession.id);
+        _isAttendanceActive = false;
+        AppHaptics.heavyImpact();
+
+        try {
+          context.read<AttendanceProvider>().recordAttendanceLocally(
+            sessionId: targetSession.id,
+            studentId: user.id,
+          );
+        } catch (_) {}
+
+        setState(() {
+          _attendanceFlowState = StudentAttendanceFlowState.completed;
+          _attendanceStatusMessage = 'Attendance verified with Room PIN · ${targetSession!.name}';
+        });
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT] PIN submit error: $e');
+      return false;
+    }
+  }
+
+  // --- Direct GPS Location Verification (20m Radius) ---
+  Future<void> _handleGpsAttendanceTrigger() async {
+    AppHaptics.selectionClick();
+    final user = widget.user ??
+        (mounted ? Provider.of<UserProvider>(context, listen: false).user : null);
+    if (user == null) return;
+
+    setState(() {
+      _isAttendanceActive = true;
+      _attendanceFlowState = StudentAttendanceFlowState.scanningForTeacherBeacon;
+      _attendanceStatusMessage = 'Verifying GPS coordinates (20m radius)...';
+    });
+
+    final success = await _studentAttendanceService.markAttendanceByGpsLocation(
+      currentUser: user,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isAttendanceActive = false;
+      if (success) {
+        _attendanceFlowState = StudentAttendanceFlowState.completed;
+      }
+    });
+
+    if (success) {
+      AppHaptics.heavyImpact();
+      context.read<AttendanceProvider>().refreshAttendance();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_outline_rounded, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(child: Text("Attendance verified via GPS Location (20m)!")),
+            ],
+          ),
+          backgroundColor: Color(0xFF0D9488),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } else {
+      AppHaptics.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_attendanceStatusMessage.isNotEmpty
+              ? _attendanceStatusMessage
+              : 'GPS verification failed. Make sure you are within 20m of teacher.'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  // --- Student Campus QR Scanner for Classroom Session ---
+  void _openClassroomQrScanner() {
+    AppHaptics.selectionClick();
+    final user = widget.user ??
+        (mounted ? Provider.of<UserProvider>(context, listen: false).user : null);
+    if (user == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => CampusScannerScreen(
+          user: user,
+          title: 'Scan Teacher Wi-Fi',
+          subtitle: "Align the Wi-Fi or classroom QR on your teacher's screen within the box.",
+          onQrDetected: (qrCode) async {
+            await _handleScannedQrSubmit(qrCode, user);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleScannedQrSubmit(String qrCode, UserModel user) async {
+    try {
+      final result = await _studentAttendanceService.submitScannedTeacherQr(
+        qrData: qrCode,
+        currentUser: user,
+      );
+
+      if (result != null && result.valid && mounted) {
+        _verifiedSessionId = result.sessionId;
+        if (result.sessionId != null) {
+          _verifiedSessionIds.add(result.sessionId!);
+        }
+        _isAttendanceActive = false;
+        AppHaptics.heavyImpact();
+
+        try {
+          if (result.sessionId != null) {
+            context.read<AttendanceProvider>().recordAttendanceLocally(
+              sessionId: result.sessionId!,
+              studentId: user.id,
+            );
+          }
+        } catch (_) {}
+
+        final isWifi = qrCode.startsWith('WIFI:') || qrCode.contains('WIFI:S:');
+        setState(() {
+          _attendanceFlowState = StudentAttendanceFlowState.completed;
+          _attendanceStatusMessage = isWifi
+              ? 'Attendance verified via Teacher Wi-Fi'
+              : 'Attendance verified via Screen QR';
+        });
+      } else if (mounted) {
+        AppHaptics.vibrate();
+        final msg = result?.reason ?? 'Could not verify classroom QR. Try again.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    msg,
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT] Scanned QR error: $e');
+    }
+  }
+
+}
+
+
+/// Apple-Grade 4-Digit Rolling PIN Bottom Sheet
+class _RoomPinEntrySheet extends StatefulWidget {
+  final Future<bool> Function(String pin) onPinSubmitted;
+
+  const _RoomPinEntrySheet({Key? key, required this.onPinSubmitted}) : super(key: key);
+
+  @override
+  State<_RoomPinEntrySheet> createState() => _RoomPinEntrySheetState();
+}
+
+class _RoomPinEntrySheetState extends State<_RoomPinEntrySheet> {
+  String _enteredPin = '';
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  void _handleKeyPress(String val) {
+    if (_isSubmitting) return;
+    AppHaptics.selectionClick();
+    if (_enteredPin.length < 4) {
+      setState(() {
+        _enteredPin += val;
+        _errorMessage = null;
+      });
+      if (_enteredPin.length == 4) {
+        _submitPin();
+      }
+    }
+  }
+
+  void _handleBackspace() {
+    if (_isSubmitting) return;
+    AppHaptics.selectionClick();
+    if (_enteredPin.isNotEmpty) {
+      setState(() {
+        _enteredPin = _enteredPin.substring(0, _enteredPin.length - 1);
+        _errorMessage = null;
+      });
+    }
+  }
+
+  Future<void> _submitPin() async {
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    final success = await widget.onPinSubmitted(_enteredPin);
+
+    if (mounted) {
+      if (success) {
+        Navigator.pop(context);
+      } else {
+        setState(() {
+          _isSubmitting = false;
+          _enteredPin = '';
+          _errorMessage = 'Invalid or expired PIN. Check screen.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        12,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 28,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // iOS Grabber pill
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Classroom Room PIN",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    "15-second rotating zero-BLE verification",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 4 Digit Boxes
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(4, (index) {
+              final isFilled = index < _enteredPin.length;
+              final isCurrent = index == _enteredPin.length;
+              final digit = isFilled ? _enteredPin[index] : '';
+
+              return Container(
+                width: 52,
+                height: 60,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isCurrent
+                        ? const Color(0xFF818CF8)
+                        : (isFilled ? AppColors.textPrimary : AppColors.border),
+                    width: isCurrent ? 2.0 : 1.2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    digit,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 12),
+          if (_errorMessage != null)
+            Text(
+              _errorMessage!,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.danger,
+              ),
+            ),
+          if (_isSubmitting) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Authenticating Face ID & submitting...",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 20),
+
+          // Apple-style Tactile 10-Key Keypad
+          _buildNumericKeypad(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNumericKeypad() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildKeypadButton('1'),
+            _buildKeypadButton('2'),
+            _buildKeypadButton('3'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildKeypadButton('4'),
+            _buildKeypadButton('5'),
+            _buildKeypadButton('6'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildKeypadButton('7'),
+            _buildKeypadButton('8'),
+            _buildKeypadButton('9'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const SizedBox(width: 64, height: 50),
+            _buildKeypadButton('0'),
+            GestureDetector(
+              onTap: _handleBackspace,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 64,
+                height: 50,
+                alignment: Alignment.center,
+                child: const Icon(Icons.backspace_outlined, size: 22, color: AppColors.textPrimary),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKeypadButton(String digit) {
+    return GestureDetector(
+      onTap: () => _handleKeyPress(digit),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 64,
+        height: 50,
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          digit,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
 }

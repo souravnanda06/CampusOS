@@ -105,6 +105,10 @@ class PassportAttendanceLedgerService {
         'proximityTier': result.proximityTier.code,
         'checkInTime': result.verifiedAt.toIso8601String(),
         'status': 'present',
+        if (result.routerBssid != null) 'routerBssid': result.routerBssid,
+        if (result.gpsDistanceMeters != null)
+          'gpsDistanceMeters': result.gpsDistanceMeters,
+        if (result.gpsStatus != null) 'gpsStatus': result.gpsStatus,
       };
 
       existingJsonList.add(jsonEncode(recordMap));

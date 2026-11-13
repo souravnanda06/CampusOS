@@ -17,6 +17,10 @@ from routes.visitors import visitors_bp
 from routes.notifications import notifications_bp
 from routes.search import search_bp
 from routes.face import face_bp
+from routes.mesh_chat import mesh_chat_bp
+from routes.copilot import copilot_bp
+from routes.whatsapp import whatsapp_bp
+from routes.career import career_bp
 
 def register_routes(app):
     """
@@ -42,3 +46,7 @@ def register_routes(app):
     app.register_blueprint(visitors_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(search_bp)
+    app.register_blueprint(mesh_chat_bp)
+    app.register_blueprint(copilot_bp)
+    app.register_blueprint(whatsapp_bp)
+    app.register_blueprint(career_bp)

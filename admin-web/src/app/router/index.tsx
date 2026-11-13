@@ -7,6 +7,7 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { StudentsPage } from '@/features/students/StudentsPage';
 import { ComplaintsPage } from '@/features/complaints/ComplaintsPage';
+import { LeavesPage } from '@/features/leaves/LeavesPage';
 import { AttendancePage } from '@/features/attendance/AttendancePage';
 import { AcademicPage } from '@/features/academic/AcademicPage';
 import { HostelPage } from '@/features/hostel/HostelPage';
@@ -16,10 +17,12 @@ import { VisitorsPage } from '@/features/visitors/VisitorsPage';
 import { MessPage } from '@/features/mess/MessPage';
 import { NoticesPage } from '@/features/notices/NoticesPage';
 import { NotificationsPage } from '@/features/notifications/NotificationsPage';
+import { MeshCommandPage } from '@/features/mesh/MeshCommandPage';
 import { SecurityPage } from '@/features/security/SecurityPage';
 import { PassportPage } from '@/features/passport/PassportPage';
 import { AuditPage } from '@/features/audit/AuditPage';
 import { SearchPage } from '@/features/search/SearchPage';
+import { PlacementsPage } from '@/features/career/PlacementsPage';
 
 export const router = createBrowserRouter([
   {
@@ -59,12 +62,20 @@ export const router = createBrowserRouter([
         element: <ComplaintsPage />,
       },
       {
+        path: 'leaves',
+        element: <LeavesPage />,
+      },
+      {
         path: 'attendance',
         element: <AttendancePage />,
       },
       {
         path: 'academic',
         element: <AcademicPage />,
+      },
+      {
+        path: 'placements',
+        element: <PlacementsPage />,
       },
       {
         path: 'hostel',
@@ -93,6 +104,10 @@ export const router = createBrowserRouter([
       {
         path: 'notifications',
         element: <NotificationsPage />,
+      },
+      {
+        path: 'mesh',
+        element: <MeshCommandPage />,
       },
       {
         path: 'security',

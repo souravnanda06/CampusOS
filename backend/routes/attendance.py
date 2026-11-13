@@ -1,4 +1,5 @@
 import io
+import math
 import threading
 import datetime
 from datetime import timedelta, timezone
@@ -8,6 +9,19 @@ from extensions import db, send_fcm_message
 import extensions
 from models.attendance import Session, Attendance, Coupon, SavedClass
 from models.user import User
+
+def _haversine_distance(lat1, lon1, lat2, lon2):
+    R = 6371000.0  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_phi / 2.0) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lambda / 2.0) ** 2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
 
 try:
     from firebase_admin import messaging
@@ -40,6 +54,10 @@ def create_session():
 
         now_str = datetime.datetime.now().isoformat()
         end_str = (datetime.datetime.now() + datetime.timedelta(hours=1)).isoformat()
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        radius_meters = data.get('radiusMeters') or data.get('radius') or 20.0
+
         new_session = Session(
             name=data.get('name') or data.get('subject') or 'Attendance Session',
             subject=data.get('subject', 'General'),
@@ -54,7 +72,10 @@ def create_session():
             session_nonce=data.get('sessionNonce'),
             teacher_key_id=data.get('teacherKeyId'),
             teacher_id=teacher_id,
-            idempotency_key=idempotency_key
+            idempotency_key=idempotency_key,
+            latitude=float(latitude) if latitude is not None else None,
+            longitude=float(longitude) if longitude is not None else None,
+            radius_meters=float(radius_meters) if radius_meters is not None else 20.0,
         )
         db.session.add(new_session)
         db.session.commit()
@@ -126,6 +147,15 @@ def session_beacon_info(session_id):
         if data.get('sessionNonce'): session.session_nonce = data['sessionNonce']
         if data.get('teacherKeyId'): session.teacher_key_id = data['teacherKeyId']
         if data.get('teacherId'): session.teacher_id = data['teacherId']
+        if 'latitude' in data and data['latitude'] is not None:
+            try: session.latitude = float(data['latitude'])
+            except (ValueError, TypeError): pass
+        if 'longitude' in data and data['longitude'] is not None:
+            try: session.longitude = float(data['longitude'])
+            except (ValueError, TypeError): pass
+        if 'radiusMeters' in data and data['radiusMeters'] is not None:
+            try: session.radius_meters = float(data['radiusMeters'])
+            except (ValueError, TypeError): pass
         db.session.commit()
     return jsonify({
         "sessionId": session.id,
@@ -133,7 +163,10 @@ def session_beacon_info(session_id):
         "sessionNonce": session.session_nonce,
         "teacherKeyId": session.teacher_key_id,
         "teacherId": session.teacher_id,
-        "isActive": session.is_active
+        "isActive": session.is_active,
+        "latitude": session.latitude,
+        "longitude": session.longitude,
+        "radiusMeters": session.radius_meters or 20.0,
     }), 200
 
 @attendance_bp.route('/sessions/stop/<session_id>', methods=['POST'])
@@ -299,6 +332,10 @@ def mark_attendance():
     if not session_id or not student_id:
         return jsonify({"message": "sessionId and studentId are required"}), 400
 
+    session = Session.query.get(session_id)
+    if not session:
+        return jsonify({"message": "Session not found"}), 404
+
     # Idempotent check by idempotencyKey if provided
     if idempotency_key:
         existing_by_key = Attendance.query.filter_by(idempotency_key=idempotency_key).first()
@@ -311,6 +348,38 @@ def mark_attendance():
             return jsonify(existing.to_dict()), 200
         return jsonify({"message": "Attendance already marked"}), 400
 
+    # GPS + Internet Location Validation (20m radius)
+    student_lat = data.get('latitude')
+    student_lng = data.get('longitude')
+    verification_mode = data.get('verificationMode', 'LEGACY')
+    proximity_tier = data.get('proximityTier')
+    distance_meters = None
+
+    if student_lat is not None and student_lng is not None:
+        try:
+            s_lat = float(student_lat)
+            s_lng = float(student_lng)
+            if session.latitude is not None and session.longitude is not None:
+                t_lat = float(session.latitude)
+                t_lng = float(session.longitude)
+                dist = _haversine_distance(t_lat, t_lng, s_lat, s_lng)
+                distance_meters = round(dist, 1)
+                max_radius = float(session.radius_meters or 20.0)
+
+                # Reject if outside 20m radius
+                if dist > max_radius:
+                    return jsonify({
+                        "message": f"GPS verification failed: You are {distance_meters}m away from the teacher/classroom (maximum allowed radius is {int(max_radius)}m).",
+                        "resultCode": "OUT_OF_RADIUS",
+                        "distanceMeters": distance_meters,
+                        "maxRadiusMeters": max_radius,
+                    }), 400
+
+                verification_mode = "GPS_LOCATION"
+                proximity_tier = "NEAR"
+        except (ValueError, TypeError):
+            pass
+
     try:
         new_attendance = Attendance(
             session_id=session_id,
@@ -319,8 +388,12 @@ def mark_attendance():
             idempotency_key=idempotency_key,
             device_key_id=data.get('deviceKeyId'),
             response_nonce=data.get('responseNonce'),
-            verification_mode=data.get('verificationMode', 'LEGACY'),
-            proximity_tier=data.get('proximityTier')
+            verification_mode=verification_mode,
+            proximity_tier=proximity_tier,
+            router_bssid=data.get('routerBssid'),
+            latitude=float(student_lat) if student_lat is not None else None,
+            longitude=float(student_lng) if student_lng is not None else None,
+            distance_meters=distance_meters,
         )
         db.session.add(new_attendance)
 
@@ -390,7 +463,8 @@ def batch_sync_attendance():
                 device_key_id=r.get('deviceKeyId'),
                 response_nonce=r.get('responseNonce'),
                 verification_mode=r.get('verificationMode', 'BLE_BATCH'),
-                proximity_tier=r.get('proximityTier', 'NEAR')
+                proximity_tier=r.get('proximityTier', 'NEAR'),
+                router_bssid=r.get('routerBssid')
             )
             db.session.add(new_att)
             # V2 FIX: Atomic SQL-level increment prevents lost updates under concurrency
@@ -443,8 +517,13 @@ def get_students_with_stats():
     course = request.args.get('course')
     branch = request.args.get('branch')
     year = request.args.get('year')
+    approval_status = (request.args.get('approvalStatus') or 'APPROVED').strip().upper()
 
     query = User.query.filter_by(role='student')
+    if approval_status == 'APPROVED':
+        query = query.filter(db.or_(User.approval_status == 'APPROVED', User.approval_status.is_(None)))
+    elif approval_status != 'ALL':
+        query = query.filter(User.approval_status == approval_status)
     if course: query = query.filter_by(course=course)
     if branch and branch != 'null': query = query.filter_by(branch=branch)
     if year: query = query.filter_by(year=year)

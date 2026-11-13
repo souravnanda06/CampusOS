@@ -431,6 +431,7 @@ class SyncManager extends ChangeNotifier with WidgetsBindingObserver {
             : null;
 
         if (serverComplaintId != null && serverComplaintId.isNotEmpty) {
+          complaintData['localId'] = localComplaintId;
           ComplaintService.recordServerComplaint(complaintData);
           // Transactional server acknowledgement
           await _dbService.db.transaction(() async {

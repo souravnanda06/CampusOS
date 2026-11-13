@@ -1,25 +1,26 @@
-import { apiClient } from "@/services/api/api-client"
+import { apiClient, ApiError } from "@/services/api/api-client"
 
 export interface VisitorRequestItem {
   id: string
-  student_id: string
-  visitor_name: string
-  visitor_phone: string
+  studentId: string
+  visitorName: string
+  visitorPhone: string
   relation: string
   purpose: string
-  visit_date: string
-  expected_entry_time: string
-  expected_exit_time: string
-  status: "PENDING" | "APPROVED" | "REJECTED" | "CHECKED_IN" | "CHECKED_OUT" | "EXPIRED"
-  pass_code?: string
-  entered_at?: string | null
-  exited_at?: string | null
-  warden_remarks?: string
+  visitDate: string
+  expectedEntryTime: string
+  expectedExitTime: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CHECKED_IN" | "CHECKED_OUT" | "EXPIRED" | string
+  passCode?: string | null
+  enteredAt?: string | null
+  exitedAt?: string | null
+  wardenRemarks?: string | null
+  securityRemarks?: string | null
   studentName?: string
   registrationNumber?: string
   branch?: string
   year?: string | number
-  created_at: string
+  createdAt: string
 }
 
 export interface VisitorKpisData {
@@ -32,6 +33,23 @@ export interface VisitorKpisData {
 
 export const visitorsApi = {
   getKpis: () => apiClient.get<VisitorKpisData>("/visitors/admin/kpis"),
+
+  getAllRequests: async (status?: string) => {
+    try {
+      return await apiClient.get<VisitorRequestItem[]>("/visitors/admin/all", {
+        params: status && status !== "ALL" ? { status } : undefined,
+      })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        const pending = await apiClient.get<VisitorRequestItem[]>("/visitors/warden/pending")
+        if (status && status !== "ALL") {
+          return pending.filter((v) => v.status === status)
+        }
+        return pending
+      }
+      throw err
+    }
+  },
 
   getPendingRequests: () =>
     apiClient.get<VisitorRequestItem[]>("/visitors/warden/pending"),

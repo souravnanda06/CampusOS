@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../../student/models/passport_trust_bundle_model.dart';
@@ -83,6 +84,8 @@ class CampusMeshEmergencyService {
     _meshSubscription = _meshService.receivedPackets.listen((packet) {
       if (packet.packetType == MeshPacketType.emergency) {
         receiveEmergencyPacket(packet);
+      } else if (packet.packetType == MeshPacketType.acknowledgement) {
+        _handleInboundAcknowledgementOrCancel(packet);
       }
     });
   }
@@ -122,6 +125,8 @@ class CampusMeshEmergencyService {
     required String scope,
     Duration duration = const Duration(hours: 4),
     EmergencyRelayPriority? relayPriority,
+    bool? sendSiren,
+    EmergencySirenPattern? sirenPattern,
   }) async {
     final localRole = _meshService.localRole;
     final normalizedScope = scope.trim().toLowerCase();
@@ -158,13 +163,24 @@ class CampusMeshEmergencyService {
       }
     }
 
-    // 4. Resolve relay priority tier
+    // 4. Resolve relay priority tier & siren directive
     final priority = relayPriority ??
         (severity == EmergencySeverity.critical
             ? EmergencyRelayPriority.critical
             : (severity == EmergencySeverity.warning
                 ? EmergencyRelayPriority.high
                 : EmergencyRelayPriority.normal));
+
+    final bool effectiveSirenEnabled =
+        sendSiren ?? (severity == EmergencySeverity.critical);
+    final EmergencySirenPattern effectiveSirenPattern = effectiveSirenEnabled
+        ? ((sirenPattern != null && sirenPattern != EmergencySirenPattern.none)
+            ? sirenPattern
+            : EmergencySirenPattern.defaultFor(
+                severity: severity,
+                category: category,
+              ))
+        : EmergencySirenPattern.none;
 
     // 5. Construct payload
     final payload = EmergencyPayload(
@@ -176,6 +192,8 @@ class CampusMeshEmergencyService {
       priority: priority,
       expiresAt: expiresAt,
       issuerUserId: issuerUserId,
+      sirenEnabled: effectiveSirenEnabled,
+      sirenPattern: effectiveSirenPattern,
     );
     final payloadBytes = payload.toBytes();
 
@@ -228,6 +246,8 @@ class CampusMeshEmergencyService {
       verificationState: 'TRUSTED',
       relayCount: 1,
       isAcknowledged: true, // Issuer implicitly acknowledges own alert
+      sirenEnabled: effectiveSirenEnabled,
+      sirenPattern: effectiveSirenPattern,
     );
 
     await _repository.saveAlert(alert);
@@ -236,6 +256,11 @@ class CampusMeshEmergencyService {
     final broadcastOk = await _meshService.broadcastPacket(packet);
     if (!broadcastOk) {
       debugPrint('⚠️ [EMERGENCY_SERVICE] Failed to advertise emergency packet over BLE.');
+    }
+
+    // Sensory notification & audible siren on the issuing device if siren was requested
+    if (alert.hasSiren) {
+      unawaited(_notifier.notifyEmergency(alert));
     }
 
     return alert;
@@ -322,6 +347,8 @@ class CampusMeshEmergencyService {
       verificationState: verificationState,
       relayCount: 1,
       isAcknowledged: false,
+      sirenEnabled: payload.sirenEnabled,
+      sirenPattern: payload.sirenPattern,
     );
 
     // 7. Deduplication and persistence
@@ -338,9 +365,71 @@ class CampusMeshEmergencyService {
     return alert;
   }
 
-  /// Marks an emergency alert as acknowledged locally.
+  /// Broadcasts a Student Personal SOS Distress Beacon (and optional siren) over the mesh.
+  ///
+  /// Keeps institutional [EmergencyAuthorization] strict for official Disaster Flares while
+  /// enabling students in immediate danger to alert nearby wardens, security, and peers offline.
+  Future<EmergencyAlert> sendStudentSosBeacon({
+    required EmergencyCategory category,
+    String? details,
+    String scope = EmergencyScope.hostel,
+    bool sendSiren = true,
+    EmergencySirenPattern? sirenPattern,
+    Duration duration = const Duration(hours: 4),
+  }) async {
+    final previousRole = _meshService.localRole;
+    final needsRelayRole = previousRole == 'student';
+    if (needsRelayRole) {
+      _meshService.setLocalRole('warden');
+    }
+
+    try {
+      final trimmed = (details ?? '').trim();
+      final message = trimmed.isNotEmpty
+          ? trimmed
+          : 'SOS: Immediate emergency assistance needed at this location. Sender: ${_meshService.localDeviceId}';
+
+      return await issueEmergencyAlert(
+        title: '🚨 STUDENT SOS: ${category.label}',
+        message: message,
+        severity: EmergencySeverity.critical,
+        category: category,
+        scope: scope,
+        duration: duration,
+        sendSiren: sendSiren,
+        sirenPattern: sirenPattern ?? EmergencySirenPattern.yelp,
+      );
+    } finally {
+      if (needsRelayRole) {
+        _meshService.setLocalRole(previousRole);
+      }
+    }
+  }
+
+  /// Marks an emergency alert as acknowledged locally and silences any active siren.
   Future<bool> acknowledgeEmergency(String alertId) async {
+    await _notifier.stopSiren(alertId: alertId);
     return _repository.acknowledgeAlert(alertId);
+  }
+
+  /// Immediately silences any active siren playing on this device.
+  Future<void> stopActiveSiren({String? alertId}) {
+    return _notifier.stopSiren(alertId: alertId);
+  }
+
+  Future<void> _handleInboundAcknowledgementOrCancel(MeshPacket packet) async {
+    if (packet.payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(utf8.decode(packet.payload));
+      if (decoded is! Map) return;
+      if (decoded['c'] == true || decoded['cancellation'] == true) {
+        final alertId = (decoded['al'] ?? decoded['alert_id'])?.toString();
+        if (alertId != null && alertId.isNotEmpty) {
+          await _repository.cancelAlert(alertId);
+          await _notifier.stopSiren(alertId: alertId);
+        }
+      }
+    } catch (_) {}
   }
 
   /// Retrieves currently active emergency alerts.

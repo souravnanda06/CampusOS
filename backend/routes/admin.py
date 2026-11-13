@@ -1,11 +1,12 @@
 import datetime
 from sqlalchemy import func
 from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash
 from extensions import db
 from models.user import User
 from models.complaint import Complaint
 from models.audit import ComplaintStatusHistory, RequestAudit
-from middleware.auth import verify_admin_access
+from middleware.auth import verify_admin_access, get_authenticated_user_from_token
 from services.complaint_service import (
     COMPLAINT_AGEING_HOURS,
     _format_admin_complaint,
@@ -13,6 +14,13 @@ from services.complaint_service import (
 )
 
 admin_bp = Blueprint('admin_bp', __name__)
+
+ALLOWED_USER_ROLES = {
+    'admin', 'dean', 'administrator', 'superadmin', 'warden', 'staff',
+    'teacher', 'faculty', 'security', 'guard', 'security_guard',
+    'mess_staff', 'mess', 'student'
+}
+
 
 @admin_bp.route('/admin/dashboard/summary', methods=['GET'])
 def get_admin_dashboard_summary():
@@ -64,6 +72,11 @@ def get_admin_dashboard_summary():
     else:
         average_resolution_hours = 0
 
+    pending_student_approvals = User.query.filter(
+        User.role == 'student',
+        User.approval_status == 'PENDING'
+    ).count()
+
     return jsonify({
         "totalComplaints": total_complaints,
         "pendingComplaints": pending_complaints,
@@ -74,7 +87,8 @@ def get_admin_dashboard_summary():
         "reopenedComplaints": reopened_complaints,
         "rejectedComplaints": rejected_complaints,
         "ageingComplaints": ageing_complaints,
-        "averageResolutionHours": average_resolution_hours
+        "averageResolutionHours": average_resolution_hours,
+        "pendingStudentApprovals": pending_student_approvals
     }), 200
 
 
@@ -437,5 +451,346 @@ SUPPORTED_NOTICE_CATEGORIES = {
 }
 SUPPORTED_NOTICE_TARGET_TYPES = {'ALL', 'BRANCH', 'YEAR', 'HOSTEL', 'STUDENT'}
 SUPPORTED_NOTICE_STATUSES = {'DRAFT', 'PUBLISHED', 'ARCHIVED', 'EXPIRED'}
+
+
+# --- STUDENT REGISTRATION APPROVAL ROUTES ---
+
+@admin_bp.route('/admin/students', methods=['GET'])
+def get_admin_students():
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    approval_status = (request.args.get('approvalStatus') or 'ALL').strip().upper()
+    branch = request.args.get('branch')
+    year = request.args.get('year')
+    course = request.args.get('course')
+    search = request.args.get('search')
+
+    query = User.query.filter(User.role == 'student')
+
+    if approval_status == 'APPROVED':
+        query = query.filter(db.or_(User.approval_status == 'APPROVED', User.approval_status.is_(None)))
+    elif approval_status in ('PENDING', 'REJECTED'):
+        query = query.filter(User.approval_status == approval_status)
+
+    if branch and branch.upper() != 'ALL':
+        query = query.filter(User.branch == branch.strip())
+    if year and year.upper() != 'ALL':
+        query = query.filter(User.year == year.strip())
+    if course and course.upper() != 'ALL':
+        query = query.filter(User.course == course.strip())
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.filter(
+            db.or_(
+                User.name.ilike(term),
+                User.email.ilike(term),
+                User.registration_number.ilike(term),
+            )
+        )
+
+    students = query.order_by(User.created_at.desc()).all()
+    return jsonify([s.to_dict() for s in students]), 200
+
+
+@admin_bp.route('/admin/students/pending', methods=['GET'])
+def get_pending_students():
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    students = User.query.filter(
+        User.role == 'student',
+        User.approval_status == 'PENDING'
+    ).order_by(User.created_at.desc()).all()
+    return jsonify([s.to_dict() for s in students]), 200
+
+
+@admin_bp.route('/admin/students/<student_id>/approve', methods=['POST'])
+def approve_student_registration(student_id):
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    admin_user, _, _ = get_authenticated_user_from_token()
+    student = User.query.filter_by(id=student_id, role='student').first()
+    if not student:
+        return jsonify({"message": "Student account not found"}), 404
+
+    now_iso = datetime.datetime.now().isoformat()
+    student.approval_status = 'APPROVED'
+    student.approved_by = admin_user.id if admin_user else None
+    student.approved_at = now_iso
+    student.rejection_reason = None
+
+    audit = RequestAudit(
+        entity_type='STUDENT_REGISTRATION',
+        entity_id=student.id,
+        actor_id=admin_user.id if admin_user else 'admin',
+        action='APPROVED',
+        remarks=f"Student account activated for {student.name} ({student.registration_number or student.email}).",
+        ip_address=request.remote_addr,
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Student account for {student.name} has been approved and activated.",
+        "student": student.to_dict()
+    }), 200
+
+
+@admin_bp.route('/admin/students/<student_id>/reject', methods=['POST'])
+def reject_student_registration(student_id):
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    admin_user, _, _ = get_authenticated_user_from_token()
+    student = User.query.filter_by(id=student_id, role='student').first()
+    if not student:
+        return jsonify({"message": "Student account not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip() or None
+
+    now_iso = datetime.datetime.now().isoformat()
+    student.approval_status = 'REJECTED'
+    student.approved_by = admin_user.id if admin_user else None
+    student.approved_at = now_iso
+    student.rejection_reason = reason
+
+    audit = RequestAudit(
+        entity_type='STUDENT_REGISTRATION',
+        entity_id=student.id,
+        actor_id=admin_user.id if admin_user else 'admin',
+        action='REJECTED',
+        remarks=f"Student registration rejected for {student.name}. Reason: {reason or 'Not specified'}.",
+        ip_address=request.remote_addr,
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Student registration for {student.name} has been rejected.",
+        "student": student.to_dict()
+    }), 200
+
+
+@admin_bp.route('/admin/students/bulk-approve', methods=['POST'])
+def bulk_approve_students():
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    admin_user, _, _ = get_authenticated_user_from_token()
+    data = request.get_json(silent=True) or {}
+    student_ids = data.get('studentIds') or []
+    if not isinstance(student_ids, list) or not student_ids:
+        return jsonify({"message": "studentIds array is required"}), 400
+
+    now_iso = datetime.datetime.now().isoformat()
+    students = User.query.filter(
+        User.id.in_(student_ids),
+        User.role == 'student'
+    ).all()
+
+    approved_ids = []
+    for student in students:
+        student.approval_status = 'APPROVED'
+        student.approved_by = admin_user.id if admin_user else None
+        student.approved_at = now_iso
+        student.rejection_reason = None
+        approved_ids.append(student.id)
+        db.session.add(RequestAudit(
+            entity_type='STUDENT_REGISTRATION',
+            entity_id=student.id,
+            actor_id=admin_user.id if admin_user else 'admin',
+            action='APPROVED',
+            remarks=f"Bulk approved student account for {student.name}.",
+            ip_address=request.remote_addr,
+        ))
+
+    db.session.commit()
+    return jsonify({
+        "message": f"Approved {len(approved_ids)} student account(s).",
+        "approvedCount": len(approved_ids),
+        "approvedIds": approved_ids
+    }), 200
+
+
+@admin_bp.route('/admin/users', methods=['POST'])
+def create_admin_user():
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    admin_user, _, _ = get_authenticated_user_from_token()
+    data = request.get_json(silent=True) or {}
+
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    role = (data.get('role') or 'staff').strip().lower()
+
+    if not name or not email or not password:
+        return jsonify({"message": "name, email, and password are required"}), 400
+    if role not in ALLOWED_USER_ROLES:
+        return jsonify({"message": f"Invalid role '{role}'"}), 400
+    if User.query.filter(User.email.ilike(email)).first():
+        return jsonify({"message": "A user with this email already exists"}), 409
+
+    user = User(
+        name=name,
+        email=email,
+        password=generate_password_hash(password),
+        role=role,
+        registration_number=(data.get('registrationNumber') or '').strip() or None,
+        course=(data.get('course') or '').strip() or None,
+        branch=(data.get('branch') or '').strip() or None,
+        year=(str(data.get('year')).strip() if data.get('year') is not None else None) or None,
+        approval_status='APPROVED',
+        approved_by=admin_user.id if admin_user else None,
+        approved_at=datetime.datetime.now().isoformat(),
+    )
+    db.session.add(user)
+    db.session.flush()
+
+    db.session.add(RequestAudit(
+        entity_type='USER_MANAGEMENT',
+        entity_id=user.id,
+        actor_id=admin_user.id if admin_user else 'admin',
+        action='CREATED',
+        remarks=f"Provisioned {role} account for {name} ({email}).",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Account created for {user.name} ({user.role})",
+        "user": user.to_dict()
+    }), 201
+
+
+@admin_bp.route('/admin/users/<user_id>', methods=['PATCH'])
+def update_admin_user(user_id):
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    admin_user, _, _ = get_authenticated_user_from_token()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    changes = []
+
+    if 'name' in data and (data.get('name') or '').strip():
+        user.name = data['name'].strip()
+        changes.append('name')
+    if 'role' in data and (data.get('role') or '').strip():
+        new_role = data['role'].strip().lower()
+        if new_role not in ALLOWED_USER_ROLES:
+            return jsonify({"message": f"Invalid role '{new_role}'"}), 400
+        user.role = new_role
+        changes.append(f"role={new_role}")
+    if 'branch' in data:
+        user.branch = (data.get('branch') or '').strip() or None
+        changes.append('branch')
+    if 'course' in data:
+        user.course = (data.get('course') or '').strip() or None
+        changes.append('course')
+    if 'year' in data:
+        user.year = (str(data.get('year')).strip() if data.get('year') is not None else None) or None
+        changes.append('year')
+    if 'registrationNumber' in data:
+        user.registration_number = (data.get('registrationNumber') or '').strip() or None
+        changes.append('registrationNumber')
+    if data.get('resetDeviceId') is True:
+        user.device_id = None
+        changes.append('resetDeviceId')
+    if data.get('password'):
+        user.password = generate_password_hash(str(data['password']))
+        changes.append('passwordReset')
+
+    db.session.add(RequestAudit(
+        entity_type='USER_MANAGEMENT',
+        entity_id=user.id,
+        actor_id=admin_user.id if admin_user else 'admin',
+        action='UPDATED',
+        remarks=f"Updated user {user.name}: {', '.join(changes) or 'no-op'}",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Updated user {user.name}",
+        "user": user.to_dict()
+    }), 200
+
+
+@admin_bp.route('/admin/users/<user_id>', methods=['DELETE'])
+def delete_admin_user(user_id):
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    admin_user, _, _ = get_authenticated_user_from_token()
+    if admin_user and admin_user.id == user_id:
+        return jsonify({"message": "Cannot delete your own active administrator account"}), 400
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    name = user.name
+    email = user.email
+    db.session.add(RequestAudit(
+        entity_type='USER_MANAGEMENT',
+        entity_id=user.id,
+        actor_id=admin_user.id if admin_user else 'admin',
+        action='DELETED',
+        remarks=f"Deleted user {name} ({email}, role={user.role}).",
+        ip_address=request.remote_addr,
+    ))
+    db.session.delete(user)
+    db.session.commit()
+
+    return jsonify({"message": f"User {name} deleted"}), 200
+
+
+@admin_bp.route('/admin/audit-logs', methods=['GET'])
+def get_unified_admin_audit_logs():
+    authorized, err_resp = verify_admin_access()
+    if not authorized:
+        return err_resp
+
+    entity_type = (request.args.get('entityType') or 'ALL').strip().upper()
+    limit = min(max(int(request.args.get('limit', 200) or 200), 1), 500)
+
+    query = RequestAudit.query
+    if entity_type and entity_type != 'ALL':
+        query = query.filter(func.upper(RequestAudit.entity_type) == entity_type)
+
+    audits = query.order_by(RequestAudit.timestamp.desc()).limit(limit).all()
+
+    actor_ids = {a.actor_id for a in audits if a.actor_id}
+    actors_by_id = {}
+    if actor_ids:
+        for u in User.query.filter(User.id.in_(actor_ids)).all():
+            actors_by_id[u.id] = u
+
+    results = []
+    for a in audits:
+        actor = actors_by_id.get(a.actor_id)
+        item = a.to_dict()
+        item["actorName"] = actor.name if actor else ("System" if a.actor_id == "system" else "Staff / User")
+        item["actorRole"] = actor.role if actor else "system"
+        results.append(item)
+
+    return jsonify(results), 200
+
 
 

@@ -246,17 +246,11 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
                     serverConnectedDevices[device.address] = device
                     Log.i(TAG, "🟢 GATT Server: Client connected: ${device.address}")
 
-                    // CRITICAL FIX FOR BIDIRECTIONAL CHAT:
-                    // If we are not already connected as a GATT Client to this peer, connect immediately.
-                    // This establishes symmetric two-way Client-Write connections between A and B!
-                    if (!clientConnections.containsKey(device.address)) {
-                        Log.i(TAG, "🔄 Auto-connecting mutual reverse GATT client to ${device.address}")
-                        mainHandler.postDelayed({
-                            if (isRunning && !clientConnections.containsKey(device.address)) {
-                                handleDiscoveredDevice(device)
-                            }
-                        }, 200L)
-                    }
+                    // Device connected to our GATT Server. Dual-role symmetry:
+                    // This peer can WRITE to us, and we can NOTIFY this peer.
+                    // Avoid racing reverse GATT Client connections to the same MAC address,
+                    // which causes Android status 133 (GATT_CONN_L2C_FAILURE) collisions.
+                    pendingConnections.remove(device.address)
 
                     flushPendingOutbound()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -536,11 +530,21 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
         }
 
         try {
-            scanner.startScan(null, scanSettings, scanCallback)
+            val scanFilter = ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(SERVICE_UUID))
+                .build()
+            scanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
             mainHandler.postDelayed(maintenancePulseRunnable, 15000L)
             Log.i(TAG, "🟢 BLE Scanning for BitChat GATT Service started")
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting BLE scanner: ${e.message}")
+            Log.w(TAG, "Filtered BLE scan start note ($e), trying unfiltered scan...")
+            try {
+                scanner.startScan(null, scanSettings, scanCallback)
+                mainHandler.postDelayed(maintenancePulseRunnable, 15000L)
+                Log.i(TAG, "🟢 BLE Scanning for BitChat GATT Service started (unfiltered)")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Error starting BLE scanner: ${e2.message}")
+            }
         }
     }
 
@@ -580,8 +584,8 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
     @SuppressLint("MissingPermission")
     private fun handleDiscoveredDevice(device: BluetoothDevice) {
         val addr = device.address
-        // 1. Skip if already actively connected as client
-        if (clientConnections.containsKey(addr)) {
+        // 1. Skip if already actively connected as client or server
+        if (clientConnections.containsKey(addr) || serverConnectedDevices.containsKey(addr)) {
             return
         }
 
@@ -888,13 +892,15 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
         for ((addr, gatt) in clientConnections) {
             val char = clientCharacteristics[addr]
             if (char != null) {
-                val clientMtu = clientDeviceMtus[addr] ?: 517
-                val maxPayload = maxOf(20, clientMtu - 3)
+                val confirmedMtu = clientDeviceMtus[addr]
+                // If MTU has not yet been confirmed by onMtuChanged, assume safe BLE MTU 23 (payload 20)
+                val clientMtu = confirmedMtu ?: 23
+                val maxPayload = maxOf(14, clientMtu - 3)
 
                 if (data.size <= maxPayload) {
                     var written = writeSingleClientPacket(gatt, char, data)
                     if (!written) {
-                        try { Thread.sleep(20) } catch (_: Exception) {}
+                        try { Thread.sleep(25) } catch (_: Exception) {}
                         written = writeSingleClientPacket(gatt, char, data)
                     }
                     if (written) {
@@ -903,13 +909,13 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
                         Log.i(TAG, "🟢 GATT Client wrote ${data.size} bytes (single) to $addr")
                     } else {
                         Log.w(TAG, "⚠️ GATT Client single write failed for $addr, falling back to chunked writes")
-                        val chunkPayload = maxOf(14, maxPayload - 6)
+                        val chunkPayload = if (confirmedMtu != null) maxOf(14, maxPayload - 6) else 14
                         sendChunkedClientPacket(gatt, char, addr, data, chunkPayload)
                         sentAddresses.add(addr)
                         sendsCount++
                     }
                 } else {
-                    val chunkPayload = maxOf(14, maxPayload - 6)
+                    val chunkPayload = if (confirmedMtu != null) maxOf(14, maxPayload - 6) else 14
                     sendChunkedClientPacket(gatt, char, addr, data, chunkPayload)
                     sentAddresses.add(addr)
                     sendsCount++
@@ -1000,7 +1006,7 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
                     for (attempt in 0..3) {
                         written = writeSingleClientPacket(gatt, char, chunkData)
                         if (written) break
-                        try { Thread.sleep(25) } catch (_: Exception) {}
+                        try { Thread.sleep(35) } catch (_: Exception) {}
                     }
 
                     if (!written) {
@@ -1008,7 +1014,7 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
                         allChunksSent = false
                         break
                     }
-                    try { Thread.sleep(20) } catch (_: Exception) {}
+                    try { Thread.sleep(35) } catch (_: Exception) {}
                 }
 
                 if (allChunksSent) {
@@ -1052,7 +1058,7 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
                     for (attempt in 0..3) {
                         notified = sendSingleNotification(server, device, char, chunkData)
                         if (notified) break
-                        try { Thread.sleep(25) } catch (_: Exception) {}
+                        try { Thread.sleep(35) } catch (_: Exception) {}
                     }
 
                     if (!notified) {
@@ -1060,7 +1066,7 @@ class CampusGattMeshManager(private val context: Context) : MethodChannel.Method
                         allChunksSent = false
                         break
                     }
-                    try { Thread.sleep(20) } catch (_: Exception) {}
+                    try { Thread.sleep(35) } catch (_: Exception) {}
                 }
 
                 if (allChunksSent) {

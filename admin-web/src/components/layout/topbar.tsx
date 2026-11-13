@@ -1,4 +1,3 @@
-import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Search,
@@ -9,6 +8,7 @@ import {
   User as UserIcon,
   Shield,
   Menu,
+  Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,16 +21,25 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useTheme } from "@/components/theme-provider"
+import { normalizeRole } from "@/types/auth"
 
 interface TopbarProps {
   onOpenCommandPalette: () => void
+  onOpenCopilot?: () => void
   onToggleMobileSidebar?: () => void
 }
 
-export function Topbar({ onOpenCommandPalette, onToggleMobileSidebar }: TopbarProps) {
+const COPILOT_ROLES = ["admin", "administrator", "superadmin", "dean", "teacher", "faculty"]
+
+export function Topbar({
+  onOpenCommandPalette,
+  onOpenCopilot,
+  onToggleMobileSidebar,
+}: TopbarProps) {
   const { user, logout } = useAuth()
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
+  const canUseCopilot = COPILOT_ROLES.includes(normalizeRole(user?.role))
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -49,6 +58,7 @@ export function Topbar({ onOpenCommandPalette, onToggleMobileSidebar }: TopbarPr
         )}
 
         <button
+          type="button"
           onClick={onOpenCommandPalette}
           className="flex items-center gap-2 rounded-lg border border-border/70 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground shadow-sm hover:border-border hover:bg-card transition-colors w-52 sm:w-64"
         >
@@ -60,9 +70,20 @@ export function Topbar({ onOpenCommandPalette, onToggleMobileSidebar }: TopbarPr
         </button>
       </div>
 
-      {/* Right side: Notifications, Theme toggle, Profile menu */}
+      {/* Right side: Campus AI Copilot, Notifications, Theme toggle, Profile menu */}
       <div className="flex items-center gap-1.5">
-        {/* Quick Link to Notifications */}
+        {canUseCopilot && onOpenCopilot && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOpenCopilot}
+            className="h-8 gap-1.5 text-xs border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 mr-1"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Campus AI</span>
+          </Button>
+        )}
+
         <Button
           variant="ghost"
           size="icon-sm"
@@ -73,7 +94,6 @@ export function Topbar({ onOpenCommandPalette, onToggleMobileSidebar }: TopbarPr
           <Bell className="h-4 w-4" />
         </Button>
 
-        {/* Theme toggle */}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -86,7 +106,6 @@ export function Topbar({ onOpenCommandPalette, onToggleMobileSidebar }: TopbarPr
 
         <div className="h-4 w-px bg-border/60 mx-1" />
 
-        {/* User Account / Profile Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -112,13 +131,13 @@ export function Topbar({ onOpenCommandPalette, onToggleMobileSidebar }: TopbarPr
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/people/" + (user?.id || ""))}>
+            <DropdownMenuItem onClick={() => navigate("/people?tab=staff")}>
               <UserIcon className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-              My Profile
+              Staff Directory
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/audit")}>
               <Shield className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-              Audit Log
+              Audit Ledger
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem destructive onClick={logout}>

@@ -121,12 +121,12 @@ export function SecurityPage() {
       ),
     },
     {
-      accessorKey: "expected_exit_time",
+      accessorKey: "expectedExitTime",
       header: "Validity Window",
       cell: ({ row }) => (
         <div className="text-[11px] text-muted-foreground font-mono space-y-0.5">
-          <p>Out: {formatDate(row.original.expected_exit_time)}</p>
-          <p>Return: {formatDate(row.original.expected_return_time)}</p>
+          <p>Out: {formatDate(row.original.expectedExitTime)}</p>
+          <p>Return: {formatDate(row.original.expectedReturnTime)}</p>
         </div>
       ),
     },
@@ -267,8 +267,7 @@ export function SecurityPage() {
             isLoading={isPassesLoading}
             error={passesError}
             onRetry={refetchPasses}
-            searchPlaceholder="Search by student name or destination..."
-            searchColumnId="destination"
+            searchPlaceholder="Search by student name, reg number, or destination..."
             emptyTitle="No Gate Passes Found"
             emptyDescription="There are no gate passes currently active or matching the selected status."
             toolbarSlot={

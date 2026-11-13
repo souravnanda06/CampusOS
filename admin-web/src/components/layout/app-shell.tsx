@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom"
 import { Sidebar } from "./sidebar"
 import { Topbar } from "./topbar"
 import { CommandPalette } from "./command-palette"
+import { CopilotDrawer } from "@/features/copilot/CopilotDrawer"
 
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
@@ -13,6 +14,7 @@ export function AppShell() {
     }
   })
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState<boolean>(false)
+  const [copilotOpen, setCopilotOpen] = React.useState<boolean>(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState<boolean>(false)
 
   const toggleSidebar = React.useCallback(() => {
@@ -20,7 +22,9 @@ export function AppShell() {
       const next = !prev
       try {
         localStorage.setItem("campusos_sidebar_collapsed", String(next))
-      } catch {}
+      } catch {
+        // ignore storage failure
+      }
       return next
     })
   }, [])
@@ -55,6 +59,7 @@ export function AppShell() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onOpenCopilot={() => setCopilotOpen(true)}
           onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
         />
 
@@ -67,6 +72,12 @@ export function AppShell() {
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
+      />
+
+      {/* Campus AI Copilot Drawer */}
+      <CopilotDrawer
+        open={copilotOpen}
+        onOpenChange={setCopilotOpen}
       />
     </div>
   )

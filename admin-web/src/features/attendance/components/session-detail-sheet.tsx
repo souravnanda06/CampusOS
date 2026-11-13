@@ -3,9 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,9 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { ConfirmDialog } from "@/components/feedback/confirm-dialog"
 import { useToast } from "@/components/ui/toast"
-import { attendanceApi, LectureSession, SessionAttendee } from "../api/attendance-api"
-import { formatDate, formatRelativeTime } from "@/lib/utils"
-import { CalendarCheck, Clock, MapPin, StopCircle, User, Radio, Users } from "lucide-react"
+import { attendanceApi, LectureSession } from "../api/attendance-api"
+import { formatDate } from "@/lib/utils"
+import { Download, MapPin, StopCircle, User, Radio, Users } from "lucide-react"
 
 interface SessionDetailSheetProps {
   session: LectureSession | null
@@ -41,23 +38,49 @@ export function SessionDetailSheet({ session, open, onOpenChange }: SessionDetai
     onSuccess: () => {
       toast({
         title: "Lecture Session Concluded",
-        description: `Attendance recording closed for ${session?.subject}.`,
+        description: `Attendance recording closed for ${session?.subject || session?.name}.`,
         type: "success",
       })
       queryClient.invalidateQueries({ queryKey: ["attendance"] })
       setStopConfirmOpen(false)
       onOpenChange(false)
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
       toast({
         title: "Action Failed",
-        description: err.message || "Failed to conclude session",
+        description: err instanceof Error ? err.message : "Failed to conclude session",
         type: "error",
       })
     },
   })
 
   if (!session) return null
+
+  const isActive = !!(session.isActive ?? session.is_active)
+  const nonce = session.sessionNonce || session.session_nonce
+  const instructor = session.instructorName || session.instructor_name
+  const startTime = session.startTime || session.start_time
+  const count = attendees.length || session.attendanceCount || session.attendance_count || 0
+
+  const handleExportCsv = () => {
+    if (!attendees.length) return
+    const headers = ["Student Name", "User ID", "Status", "Verification Mode", "Check-in Time"]
+    const rows = attendees.map((a) => [
+      `"${a.studentName || ""}"`,
+      `"${a.userId || ""}"`,
+      `"${a.status || ""}"`,
+      `"${a.verificationMode || "LEGACY"}"`,
+      `"${a.checkInTime || ""}"`,
+    ])
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `attendance-${(session.subject || session.name || session.id).replace(/\s+/g, "-")}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <>
@@ -68,26 +91,24 @@ export function SessionDetailSheet({ session, open, onOpenChange }: SessionDetai
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base font-semibold text-foreground">
-                    {session.subject}
+                    {session.subject || session.name}
                   </h2>
-                  <Badge variant={session.is_active ? "success" : "secondary"} className="text-[10px]">
-                    {session.is_active ? "LIVE RECORDING" : "CONCLUDED"}
+                  <Badge variant={isActive ? "success" : "secondary"} className="text-[10px]">
+                    {isActive ? "LIVE RECORDING" : "CONCLUDED"}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{session.name}</p>
               </div>
 
               <div className="text-right">
-                <span className="text-xl font-bold font-mono text-foreground">
-                  {attendees.length || session.attendance_count || 0}
-                </span>
+                <span className="text-xl font-bold font-mono text-foreground">{count}</span>
                 <p className="text-[10px] text-muted-foreground">Present Attendees</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1">
-                <User className="h-3.5 w-3.5 text-muted-foreground" /> {session.instructor_name}
+                <User className="h-3.5 w-3.5 text-muted-foreground" /> {instructor || "Faculty"}
               </span>
               <span>•</span>
               <span className="flex items-center gap-1">
@@ -99,7 +120,6 @@ export function SessionDetailSheet({ session, open, onOpenChange }: SessionDetai
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Session Cryptographic Telemetry */}
             <div className="rounded-xl border border-border/80 bg-card p-4 space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-foreground flex items-center gap-1.5">
@@ -107,23 +127,23 @@ export function SessionDetailSheet({ session, open, onOpenChange }: SessionDetai
                   Beacon Security Credentials
                 </span>
                 <StatusIndicator
-                  status={session.session_nonce ? "success" : "neutral"}
-                  label={session.session_nonce ? "Active Nonce" : "Legacy"}
+                  status={nonce ? "success" : "neutral"}
+                  label={nonce ? "Active Nonce" : "Legacy"}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
                 <div className="bg-muted/30 p-2 rounded-lg">
                   <span className="text-muted-foreground text-[10px]">Started:</span>
-                  <p className="text-foreground truncate">{formatDate(session.start_time)}</p>
+                  <p className="text-foreground truncate">{formatDate(startTime)}</p>
                 </div>
                 <div className="bg-muted/30 p-2 rounded-lg">
                   <span className="text-muted-foreground text-[10px]">Session Nonce:</span>
-                  <p className="text-foreground truncate">{session.session_nonce || "None"}</p>
+                  <p className="text-foreground truncate">{nonce || "None"}</p>
                 </div>
               </div>
 
-              {session.is_active && (
+              {isActive && (
                 <Button
                   variant="destructive"
                   size="sm"
@@ -131,18 +151,22 @@ export function SessionDetailSheet({ session, open, onOpenChange }: SessionDetai
                   className="w-full text-xs gap-1.5 mt-2"
                 >
                   <StopCircle className="h-3.5 w-3.5" />
-                  Conclude & Finalize Attendance Session
+                  Conclude &amp; Finalize Attendance Session
                 </Button>
               )}
             </div>
 
-            {/* Attendance Roster Table */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5 text-muted-foreground" />
                   Verified Attendees List ({attendees.length})
                 </h3>
+                {attendees.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={handleExportCsv} className="h-7 text-xs gap-1">
+                    <Download className="h-3 w-3" /> Export CSV
+                  </Button>
+                )}
               </div>
 
               {isAttendeesLoading ? (
@@ -194,7 +218,7 @@ export function SessionDetailSheet({ session, open, onOpenChange }: SessionDetai
         open={stopConfirmOpen}
         onOpenChange={setStopConfirmOpen}
         title="Conclude Attendance Session"
-        description={`Are you sure you want to stop recording attendance for '${session.subject}'? Students will no longer be able to check in.`}
+        description={`Are you sure you want to stop recording attendance for '${session.subject || session.name}'? Students will no longer be able to check in.`}
         confirmLabel="Conclude Session"
         isLoading={stopMutation.isPending}
         onConfirm={async () => {

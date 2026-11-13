@@ -1,4 +1,5 @@
 import { apiClient } from "@/services/api/api-client"
+import { authService } from "@/services/auth/auth-service"
 
 export interface AdminComplaint {
   id: string
@@ -18,7 +19,6 @@ export interface AdminComplaint {
   isAgeing?: boolean
   recurrenceId?: string | null
   studentName?: string
-  // Feature 2: Proof-of-Fix OTP & Escalation Slingshot
   closureOtp?: string | null
   hasClosureOtp?: boolean
   otpVerifiedAt?: string | null
@@ -78,6 +78,8 @@ export interface RecurringCluster {
   complaintCount: number
   highestPriority: string
   recurrenceStatus: "ACTIVE" | "RESOLVED"
+  escalationLevel?: "NORMAL" | "ELEVATED" | "HIGH" | string
+  windowDays?: number
   latestComplaintAt: string
   averageResolutionHours: number
 }
@@ -119,12 +121,14 @@ export const complaintsApi = {
 
   assignComplaint: (id: string, assignedTo: string, remarks?: string) =>
     apiClient.post<{ message: string; complaint: AdminComplaint }>(`/complaints/${id}/assign`, {
+      actorId: authService.getCurrentUser()?.id,
       assignedTo,
       remarks,
     }),
 
   actionComplaint: (id: string, action: string, remarks?: string, assignedTo?: string, otp?: string) =>
     apiClient.post<{ message: string; complaint: AdminComplaint }>(`/complaints/${id}/action`, {
+      actorId: authService.getCurrentUser()?.id,
       action,
       remarks,
       assignedTo,
@@ -133,6 +137,7 @@ export const complaintsApi = {
 
   verifyResolveComplaint: (id: string, otp: string, remarks: string) =>
     apiClient.post<{ message: string; complaint: AdminComplaint }>(`/complaints/${id}/verify-resolve`, {
+      actorId: authService.getCurrentUser()?.id,
       otp,
       remarks,
     }),

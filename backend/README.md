@@ -1,7 +1,7 @@
 # CampusOS Backend: Modular Flask Monolith & Cryptographic Services
 
 [![Backend Framework](https://img.shields.io/badge/Framework-Flask%203.x-blue?style=flat-square)](file:///d:/DEVLOPEMENT/CampusOS-1.0.0/backend/app.py)
-[![Database](https://img.shields.io/badge/Database-MySQL%208.0%20%2F%20SQLAlchemy-orange?style=flat-square)](file:///d:/DEVLOPEMENT/CampusOS-1.0.0/backend/models)
+[![Database](https://img.shields.io/badge/Database-SQLite%20(app.db)%20%2F%20SQLAlchemy-orange?style=flat-square)](file:///d:/DEVLOPEMENT/CampusOS-1.0.0/backend/models)
 [![Cryptography](https://img.shields.io/badge/Crypto-Ed25519%20%2B%20HMAC--SHA256-green?style=flat-square)](file:///d:/DEVLOPEMENT/CampusOS-1.0.0/backend/utils/crypto.py)
 [![Test Suites](https://img.shields.io/badge/Test%20Suites-22%20Passing-success?style=flat-square)](file:///d:/DEVLOPEMENT/CampusOS-1.0.0/backend/run_all_backend_tests.py)
 
@@ -74,9 +74,9 @@ backend/
 
 ---
 
-## 🗄️ Relational Database Schema (MySQL 8)
+## 🗄️ Relational Database Schema (SQLite `app.db`)
 
-The backend interacts with **27 normalized relational tables** in MySQL:
+The backend interacts with **30 normalized relational tables** in SQLite (`backend/app.db`):
 
 | Domain | Table Name | Purpose |
 | :--- | :--- | :--- |
@@ -131,7 +131,7 @@ Environment variables are loaded automatically from [backend/.env](file:///d:/DE
 
 | Variable | Description | Default / Example |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | MySQL connection string (PyMySQL driver) | `mysql+pymysql://root:password@localhost/attentify` |
+| `DATABASE_URL` | SQLAlchemy database connection string | `sqlite:///app.db` |
 | `GATE_PASS_SECRET` | Secret key used for signing HMAC gate passes | `campusos_gate_super_secret_key_2026` |
 | `PASSPORT_INSTITUTION_KEY_ID` | Identifier for institutional root key | `campusos-root-2026-v1` |
 | `PASSPORT_INSTITUTION_PRIVATE_KEY` | Base64-encoded Ed25519 institutional key | *(Optional in dev)* |
@@ -152,7 +152,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Database Migration & Seeding
-Ensure MySQL is running and the database specified in `DATABASE_URL` exists.
+Tables are automatically created in `backend/app.db` on startup (and via `seed_test_data.py`).
 Run the deterministic seeder to create tables and initialize test accounts:
 ```bash
 python seed_test_data.py --reset --verify

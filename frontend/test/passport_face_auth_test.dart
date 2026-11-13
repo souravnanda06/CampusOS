@@ -1,11 +1,18 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:attendance_app/core/network/api_client.dart';
 import 'package:attendance_app/student/services/passport_biometric_service.dart';
 import 'package:attendance_app/student/services/passport_face_auth_service.dart';
+import 'package:attendance_app/student/services/passport_mlkit_service.dart';
 import 'package:attendance_app/student/widgets/face/face_auth_gate_sheet.dart';
 import 'package:attendance_app/student/screens/face_enrollment_screen.dart';
 import 'package:attendance_app/auth/providers/user_provider.dart';
@@ -74,8 +81,20 @@ void main() {
     late PassportFaceAuthService faceService;
 
     setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      PassportFaceAuthService.resetCacheForTesting();
       fakeStorage = FakeSecureStorage();
-      faceService = PassportFaceAuthService(secureStorage: fakeStorage);
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({'faceEnrolled': false, 'status': 'NOT_ENROLLED'}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      faceService = PassportFaceAuthService(
+        secureStorage: fakeStorage,
+        apiClient: ApiClient(baseUrl: 'http://localhost', client: mockClient),
+      );
     });
 
     test('1. Unenrolled student returns isFaceEnrolled == false', () async {
@@ -181,6 +200,7 @@ void main() {
               studentId: 'student_ui',
               enrolledVector: vector,
               promptReason: 'Verify face to mark attendance',
+              isTestMode: true,
             ),
           ),
         ),
@@ -212,7 +232,10 @@ void main() {
             ChangeNotifierProvider.value(value: userProvider),
           ],
           child: const MaterialApp(
-            home: FaceEnrollmentScreen(studentId: 'student_enroll_ui'),
+            home: FaceEnrollmentScreen(
+              studentId: 'student_enroll_ui',
+              isTestMode: true,
+            ),
           ),
         ),
       );
@@ -229,6 +252,177 @@ void main() {
       await tester.pump(const Duration(milliseconds: 800));
       await tester.pump(const Duration(milliseconds: 900));
       await tester.pump(const Duration(milliseconds: 1500));
+    });
+
+    test('10. College account association: Face vector is bound to verified student ID', () async {
+      const studentA = '2201289001';
+      const studentB = '2201289002';
+      final vectorA = createTestEmbedding(101);
+
+      await faceService.enrollFace(studentId: studentA, embedding: vectorA);
+
+      expect(await faceService.isFaceEnrolled(studentA), isTrue);
+      expect(await faceService.isFaceEnrolled(studentB), isFalse);
+
+      final retrievedA = await faceService.getEnrolledVector(studentA);
+      final retrievedB = await faceService.getEnrolledVector(studentB);
+
+      expect(retrievedA, isNotNull);
+      expect(retrievedB, isNull);
+    });
+
+    test('11. Subsequent attendance attempts use existing enrollment without re-prompting', () async {
+      const studentId = 'student_subsequent_attendance';
+      final enrolledVector = createTestEmbedding(202);
+
+      // Initial one-time enrollment
+      await faceService.enrollFace(studentId: studentId, embedding: enrolledVector);
+      expect(await faceService.isFaceEnrolled(studentId), isTrue);
+
+      // Simulate 5 subsequent attendance attempts throughout the day
+      for (int i = 0; i < 5; i++) {
+        // Must recognize student is already enrolled without re-prompting setup
+        final enrolled = await faceService.isFaceEnrolled(studentId);
+        expect(enrolled, isTrue, reason: 'Attempt $i should immediately recognize existing enrollment');
+
+        // Subsequent live match passes using existing enrollment
+        final liveFrame = enrolledVector.map((x) => x).toList();
+        final matchResult = await faceService.evaluateMatch(
+          studentId: studentId,
+          liveEmbedding: liveFrame,
+        );
+        expect(matchResult.isSuccess, isTrue, reason: 'Attempt $i should successfully authenticate via cached vector');
+      }
+    });
+
+    test('12. Enrollment status remains associated across server synchronization', () async {
+      const studentId = 'student_persist_test';
+      final vector = createTestEmbedding(303);
+      await faceService.enrollFace(studentId: studentId, embedding: vector);
+
+      // Mock server confirming enrollment is still active
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/passport/face/status')) {
+          return http.Response(
+            jsonEncode({
+              'studentId': studentId,
+              'faceEnrolled': true,
+              'status': 'ENROLLED',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final syncedService = PassportFaceAuthService(
+        secureStorage: fakeStorage,
+        apiClient: ApiClient(baseUrl: 'http://localhost', client: mockClient),
+      );
+
+      final isStillEnrolled = await syncedService.syncStatusWithServer(studentId);
+      expect(isStillEnrolled, isTrue);
+
+      final retrievedVector = await syncedService.getEnrolledVector(studentId);
+      expect(retrievedVector, isNotNull);
+      expect(retrievedVector!.length, equals(128));
+    });
+
+    test('13. Authorized administrative reset clears local enrollment and prompts re-enrollment', () async {
+      const studentId = 'student_reset_test';
+      final vector = createTestEmbedding(404);
+      await faceService.enrollFace(studentId: studentId, embedding: vector);
+      expect(await faceService.isFaceEnrolled(studentId), isTrue);
+
+      // Mock server reporting authorized reset performed by Dean/Admin
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/passport/face/status')) {
+          return http.Response(
+            jsonEncode({
+              'studentId': studentId,
+              'faceEnrolled': false,
+              'status': 'NOT_ENROLLED',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final resetService = PassportFaceAuthService(
+        secureStorage: fakeStorage,
+        apiClient: ApiClient(baseUrl: 'http://localhost', client: mockClient),
+      );
+
+      // Administrative reset detected during sync
+      final syncResult = await resetService.syncStatusWithServer(studentId);
+      expect(syncResult, isFalse);
+
+      // Local hardware storage and memory cache must be purged
+      expect(await resetService.isFaceEnrolled(studentId), isFalse);
+      expect(await resetService.getEnrolledVector(studentId), isNull);
+
+      // Attempting biometric authentication now mandates one-time re-enrollment
+      final authResult = await resetService.evaluateMatch(
+        studentId: studentId,
+        liveEmbedding: vector,
+      );
+      expect(authResult.status, equals(BiometricAuthStatus.biometricRequired));
+      expect(authResult.message, contains('FACE_ENROLLMENT_REQUIRED'));
+    });
+
+    test('14. Google ML Kit Face Service: Instance initialized and ready for biometric extraction', () {
+      final mlKit = PassportMlKitService.instance;
+      expect(mlKit, isNotNull);
+    });
+
+    testWidgets('15. FaceEnrollmentScreen blocks unilateral re-enrollment when already registered', (tester) async {
+      const studentId = 'student_already_enrolled';
+      final vector = createTestEmbedding(505);
+      await faceService.enrollFace(studentId: studentId, embedding: vector);
+
+      final testUser = UserModel(
+        id: studentId,
+        name: 'Sourav Nanda',
+        email: 'sourav@campusos.edu',
+        role: 'student',
+        registrationNumber: '2201289001',
+      );
+
+      final userProvider = UserProvider();
+      userProvider.setUser(testUser);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: userProvider),
+          ],
+          child: const MaterialApp(
+            home: FaceEnrollmentScreen(
+              studentId: studentId,
+              isTestMode: true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Viewfinder and setup button must NOT be present
+      expect(find.text('Scan & Enroll Face'), findsNothing);
+      expect(find.text('One-Time Face Setup'), findsNothing);
+
+      // Locked screen must be rendered
+      expect(find.text('Face Identity Registered & Locked'), findsOneWidget);
+      expect(find.text('ACTIVE & VERIFIED'), findsOneWidget);
+      expect(find.text('Return to Dashboard'), findsOneWidget);
+
+      // Tapping Return to Dashboard pops
+      await tester.tap(find.text('Return to Dashboard'));
+      await tester.pump(const Duration(milliseconds: 100));
     });
   });
 }

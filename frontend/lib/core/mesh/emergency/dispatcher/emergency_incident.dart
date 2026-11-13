@@ -97,6 +97,12 @@ class EmergencyIncident {
   /// Cryptographic signature verification status ('TRUSTED', 'UNVERIFIED', 'REVOKED').
   final String signatureVerificationState;
 
+  /// Whether this incident broadcast an audible siren directive.
+  final bool sirenEnabled;
+
+  /// Audible siren pattern associated with this incident.
+  final EmergencySirenPattern sirenPattern;
+
   const EmergencyIncident({
     required this.incidentId,
     required this.alertId,
@@ -122,7 +128,12 @@ class EmergencyIncident {
     this.acknowledgementCount = 0,
     this.lastPropagationAt,
     this.signatureVerificationState = 'TRUSTED',
+    this.sirenEnabled = false,
+    this.sirenPattern = EmergencySirenPattern.none,
   });
+
+  bool get hasSiren =>
+      sirenEnabled && sirenPattern != EmergencySirenPattern.none;
 
   /// Whether the incident is currently active.
   bool isActive([DateTime? now]) {
@@ -197,6 +208,8 @@ class EmergencyIncident {
     int? acknowledgementCount,
     DateTime? lastPropagationAt,
     String? signatureVerificationState,
+    bool? sirenEnabled,
+    EmergencySirenPattern? sirenPattern,
   }) {
     return EmergencyIncident(
       incidentId: incidentId ?? this.incidentId,
@@ -223,6 +236,8 @@ class EmergencyIncident {
       acknowledgementCount: acknowledgementCount ?? this.acknowledgementCount,
       lastPropagationAt: lastPropagationAt ?? this.lastPropagationAt,
       signatureVerificationState: signatureVerificationState ?? this.signatureVerificationState,
+      sirenEnabled: sirenEnabled ?? this.sirenEnabled,
+      sirenPattern: sirenPattern ?? this.sirenPattern,
     );
   }
 
@@ -252,6 +267,8 @@ class EmergencyIncident {
       'acknowledgementCount': acknowledgementCount,
       'lastPropagationAt': lastPropagationAt?.toIso8601String(),
       'signatureVerificationState': signatureVerificationState,
+      'sirenEnabled': sirenEnabled,
+      'sirenPattern': sirenPattern.code,
     };
   }
 
@@ -281,6 +298,8 @@ class EmergencyIncident {
       acknowledgementCount: json['acknowledgementCount'] as int? ?? 0,
       lastPropagationAt: json['lastPropagationAt'] != null ? DateTime.parse(json['lastPropagationAt'] as String) : null,
       signatureVerificationState: json['signatureVerificationState'] as String? ?? 'TRUSTED',
+      sirenEnabled: json['sirenEnabled'] == true,
+      sirenPattern: EmergencySirenPattern.fromCode(json['sirenPattern']?.toString()),
     );
   }
 }

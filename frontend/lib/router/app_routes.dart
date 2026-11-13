@@ -17,7 +17,9 @@ class AppRoutes {
   static const studentMess = '/student/mess';
   static const studentScanner = '/student/scanner';
   static const studentSettings = '/student/settings';
+  static const studentEmergency = '/student/emergency';
   static const faceEnrollment = '/student/face-enroll';
+  static const careerHub = '/student/career-hub';
 
   // Teacher routes
   static const teacherCreateSession = '/teacher/create-session';

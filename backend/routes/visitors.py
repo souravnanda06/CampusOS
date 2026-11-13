@@ -7,6 +7,7 @@ from models.expansion import VisitorRequest
 from models.audit import RequestAudit
 from models.notification import NotificationDelivery
 from middleware.auth import get_authenticated_requester
+from services.whatsapp_service import send_visitor_pass_alert
 
 visitors_bp = Blueprint('visitors_bp', __name__)
 
@@ -187,6 +188,20 @@ def action_visitor_request(id):
     )
     db.session.add(audit)
     db.session.commit()
+
+    if action == 'APPROVE' and vr.visitor_phone:
+        try:
+            host_user = User.query.get(vr.student_id)
+            host_name = host_user.name if host_user else 'Campus Host'
+            send_visitor_pass_alert(
+                visitor_phone=vr.visitor_phone,
+                visitor_name=vr.visitor_name,
+                pass_code=vr.pass_code,
+                host_name=host_name,
+                visit_date=vr.visit_date
+            )
+        except Exception:
+            pass
 
     return jsonify({
         "message": f"Visitor request {vr.status.lower()} successfully",
@@ -397,3 +412,31 @@ def get_visitor_admin_kpis():
         "insideCampusNow": sum(1 for v in all_visitors if v.status == 'CHECKED_IN'),
         "completedVisitsToday": sum(1 for v in all_visitors if v.visit_date == today_str and v.status == 'CHECKED_OUT')
     }), 200
+
+
+@visitors_bp.route('/visitors/admin/all', methods=['GET'])
+def get_all_visitor_requests():
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff', 'warden', 'security', 'guard', 'security_guard']:
+        return jsonify({"message": "Forbidden: Administrative or security privileges required"}), 403
+
+    status_filter = (request.args.get('status') or 'ALL').strip().upper()
+    query = db.session.query(VisitorRequest, User).join(User, VisitorRequest.student_id == User.id)
+    if status_filter and status_filter != 'ALL':
+        query = query.filter(VisitorRequest.status == status_filter)
+
+    rows = query.order_by(VisitorRequest.created_at.desc()).limit(200).all()
+    results = []
+    for vr, student in rows:
+        d = vr.to_dict()
+        d.update({
+            "studentName": student.name,
+            "registrationNumber": student.registration_number,
+            "branch": student.branch,
+            "year": student.year,
+        })
+        results.append(d)
+
+    return jsonify(results), 200

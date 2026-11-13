@@ -16,6 +16,7 @@ import '../../router/app_routes.dart';
 import 'package:provider/provider.dart';
 import '../../shared/providers/attendance_provider.dart';
 import 'passport_screen.dart';
+import '../services/passport_location_service.dart';
 
 class ReadyScreen extends StatefulWidget {
   const ReadyScreen({Key? key}) : super(key: key);
@@ -116,60 +117,75 @@ class _ReadyScreenState extends State<ReadyScreen>
     // So if this is called, we assume a session exists and user swiped.
     if (_activeSessions.isEmpty) return;
 
-    await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.location
-    ].request();
+    try {
+      await [
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.location
+      ].request();
+    } catch (_) {}
 
     setState(() {
       _isScanning = true;
-      _statusMessage = "Verifying signal strength...";
+      _statusMessage = "Verifying signal & proximity...";
     });
 
-    // Start BLE Scan
-    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+    // Attempt BLE Scan with graceful GPS + Internet fallback
+    try {
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
 
-    var scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
-      for (ScanResult r in results) {
-        for (var session in _activeSessions) {
-          final targetUuid = SessionService.formatSessionBleUuid(session.id).toLowerCase();
-          final matchesService = r.advertisementData.serviceUuids.any(
-            (u) =>
-                u.toString().toLowerCase() == targetUuid ||
-                u.toString().toLowerCase().replaceAll('-', '').contains(session.id.toLowerCase()),
-          );
+      var scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
+        for (ScanResult r in results) {
+          for (var session in _activeSessions) {
+            final targetUuid = SessionService.formatSessionBleUuid(session.id).toLowerCase();
+            final matchesService = r.advertisementData.serviceUuids.any(
+              (u) =>
+                  u.toString().toLowerCase() == targetUuid ||
+                  u.toString().toLowerCase().replaceAll('-', '').contains(session.id.toLowerCase()),
+            );
 
-          if (matchesService) {
-            int rssi = r.rssi;
-            bool isShortRange = (session.txPowerLevel == 0);
-            int threshold = isShortRange ? -60 : -90;
+            if (matchesService) {
+              int rssi = r.rssi;
+              bool isShortRange = (session.txPowerLevel == 0);
+              int threshold = isShortRange ? -60 : -90;
 
-            if (rssi >= threshold) {
-              FlutterBluePlus.stopScan();
-              await _stopScanAndMarkAttendance(session);
-              return;
+              if (rssi >= threshold) {
+                FlutterBluePlus.stopScan();
+                await _stopScanAndMarkAttendance(session);
+                return;
+              }
             }
           }
         }
-      }
-    });
+      });
 
-    await Future.delayed(const Duration(seconds: 5));
-    if (mounted && _isScanning) {
-      FlutterBluePlus.stopScan();
-      scanSubscription.cancel();
-      // If student has an active session and BLE didn't trigger in 5s, mark attendance directly if active
+      await Future.delayed(const Duration(seconds: 5));
+      if (mounted && _isScanning) {
+        FlutterBluePlus.stopScan();
+        scanSubscription.cancel();
+        // If student has an active session and BLE didn't trigger in 5s, mark attendance directly via GPS
+        if (_activeSessions.isNotEmpty) {
+          setState(() {
+            _statusMessage = "Session detected: ${_activeSessions.first.name}. Verifying GPS...";
+          });
+          await _stopScanAndMarkAttendance(_activeSessions.first);
+        } else {
+          setState(() {
+            _isScanning = false;
+            _dragValue = 0.0; // Reset slider
+            _statusMessage = "Signal too weak. Move closer.";
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("ℹ️ [READY_SCREEN] Bluetooth unavailable ($e). Marking via GPS + Internet...");
       if (_activeSessions.isNotEmpty) {
-        setState(() {
-          _statusMessage = "Confirmed session: ${_activeSessions.first.name}. Marking attendance...";
-        });
         await _stopScanAndMarkAttendance(_activeSessions.first);
       } else {
         setState(() {
           _isScanning = false;
-          _dragValue = 0.0; // Reset slider
-          _statusMessage = "Signal too weak. Move closer.";
+          _dragValue = 0.0;
+          _statusMessage = "Bluetooth unavailable. Please enable GPS & Internet.";
         });
       }
     }
@@ -177,11 +193,31 @@ class _ReadyScreenState extends State<ReadyScreen>
 
   Future<void> _stopScanAndMarkAttendance(SessionModel session) async {
     if (!mounted) return;
+    setState(() {
+      _statusMessage = "Verifying GPS location within 20m radius...";
+    });
     try {
+      double? lat;
+      double? lng;
+      try {
+        final snap = await const PassportLocationService().captureSnapshot(
+          timeout: const Duration(seconds: 4),
+        );
+        if (snap != null) {
+          lat = snap.latitude;
+          lng = snap.longitude;
+        }
+      } catch (locErr) {
+        debugPrint('ℹ️ [READY_SCREEN] Location snapshot notice: $locErr');
+      }
+
       await _attendanceService.markAttendance(
         sessionId: session.id,
         studentId: _currentUser!.uid,
         studentName: _currentUser!.name,
+        latitude: lat,
+        longitude: lng,
+        verificationMode: lat != null ? 'GPS_LOCATION' : 'BLE_PROXIMITY',
       );
 
       if (!mounted) return;
@@ -203,7 +239,7 @@ class _ReadyScreenState extends State<ReadyScreen>
         setState(() {
           _isScanning = false;
           _dragValue = 0.0;
-          _statusMessage = "Error: ${e.toString()}";
+          _statusMessage = "Error: ${e.toString().replaceAll('Exception: ', '')}";
         });
       }
     }
@@ -296,6 +332,28 @@ class _ReadyScreenState extends State<ReadyScreen>
                     ),
                   ),
                 ),
+                if (hasSession) ...[
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: _isScanning
+                        ? null
+                        : () => _stopScanAndMarkAttendance(_activeSessions.first),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0D9488),
+                      side: const BorderSide(color: Color(0xFF0D9488)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    icon: const Icon(Icons.location_on_rounded, size: 16),
+                    label: Text(
+                      "Mark via GPS & Internet (20m Radius)",
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 _buildSlider(hasSession),
                 const SizedBox(height: 40),

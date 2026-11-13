@@ -6,8 +6,6 @@ import 'package:attendance_app/student/models/passport_attendance_model.dart';
 import 'package:attendance_app/student/models/passport_proximity_observation.dart';
 import 'package:attendance_app/student/services/passport_attendance_ledger_service.dart';
 import 'package:attendance_app/teacher/services/passport_teacher_attendance_service.dart';
-import 'package:attendance_app/shared/models/session_model.dart';
-import 'package:attendance_app/auth/models/user_model.dart';
 import 'package:attendance_app/shared/services/attendance_service.dart';
 
 /// Configurable mock AttendanceService for testing network scenarios
@@ -375,15 +373,6 @@ void main() {
         ledgerService: ledger,
       );
 
-      final testSession = SessionModel(
-        id: testSessionId,
-        name: 'Distributed Systems',
-        instructorName: 'Prof. Sharma',
-        startTime: DateTime.now(),
-        endTime: DateTime.now().add(const Duration(hours: 1)),
-        location: 'Room 204',
-        isActive: true,
-      );
       // restoreQueuedResults restores queued records into _verifiedResults and emits metrics
       await teacherService.restoreQueuedResults(testSessionId);
 

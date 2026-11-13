@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/haptics/app_haptics.dart';
 import '../../../auth/providers/user_provider.dart';
 import '../../services/leave_service.dart';
+import '../../../shared/widgets/motion/apple_bounceable.dart';
+import '../../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 class LeaveRequestForm extends StatefulWidget {
   final VoidCallback? onRequestSubmitted;
@@ -18,7 +20,7 @@ class LeaveRequestForm extends StatefulWidget {
 
 class _LeaveRequestFormState extends State<LeaveRequestForm> {
   final _formKey = GlobalKey<FormState>();
-  String? _leaveType;
+  String? _leaveType = 'Personal';
   DateTime? _startDate;
   DateTime? _endDate;
   final _reasonController = TextEditingController();
@@ -32,16 +34,30 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
     'Other'
   ];
 
-  InputDecoration _buildInputDecoration(String label, {IconData? suffixIcon}) {
+  InputDecoration _buildInputDecoration(BuildContext context, String label, {IconData? suffixIcon, String? hint}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 14),
+      hintText: hint,
+      labelStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textSecondaryOf(context),
+        fontSize: 13.5,
+        fontWeight: FontWeight.w500,
+      ),
+      hintStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textTertiaryOf(context),
+        fontSize: 13,
+      ),
       filled: true,
-      fillColor: AppColors.bg,
-      suffixIcon: suffixIcon != null ? Icon(suffixIcon, color: AppColors.textSecondary, size: 20) : null,
+      fillColor: AppColors.surfaceAltOf(context),
+      suffixIcon: suffixIcon != null
+          ? Icon(suffixIcon, color: AppColors.primary, size: 18)
+          : null,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+        borderSide: BorderSide(
+          color: AppColors.borderOf(context).withValues(alpha: 0.6),
+          width: 0.5,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -49,17 +65,18 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.danger),
+        borderSide: const BorderSide(color: AppColors.danger, width: 1.0),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: AppColors.danger, width: 1.5),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {
+    AppHaptics.selectionClick();
     final DateTime initialDate = isStart 
         ? (_startDate ?? DateTime.now()) 
         : (_endDate ?? _startDate ?? DateTime.now());
@@ -76,10 +93,11 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
+            colorScheme: ColorScheme.light(
               primary: AppColors.primary,
               onPrimary: Colors.white,
-              onSurface: AppColors.textPrimary,
+              surface: AppColors.surfaceOf(context),
+              onSurface: AppColors.textPrimaryOf(context),
             ),
           ),
           child: child!,
@@ -88,6 +106,7 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
     );
 
     if (picked != null) {
+      AppHaptics.lightImpact();
       setState(() {
         if (isStart) {
           _startDate = picked;
@@ -106,14 +125,32 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
 
     if (_formKey.currentState!.validate()) {
       if (_startDate == null || _endDate == null) {
+        AppHaptics.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select start and end dates.')),
+          SnackBar(
+            content: Text(
+              'Please select start and end dates.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
       if (_leaveType == null) {
+        AppHaptics.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a leave type.')),
+          SnackBar(
+            content: Text(
+              'Please select a leave type.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
@@ -122,11 +159,20 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
       final studentId = userProvider.user?.id;
       if (studentId == null || studentId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User profile not loaded. Please log in again.')),
+          SnackBar(
+            content: Text(
+              'User profile not loaded. Please log in again.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
 
+      AppHaptics.lightImpact();
       setState(() => _isSubmitting = true);
 
       try {
@@ -142,25 +188,35 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
         );
 
         if (!mounted) return;
+        AppHaptics.lightImpact();
         widget.onRequestSubmitted?.call();
         Navigator.pop(context, true);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              "Leave request submitted successfully",
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Leave request submitted successfully",
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor: AppColors.success,
+            backgroundColor: AppColors.emerald,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       } catch (e) {
         if (!mounted) return;
+        AppHaptics.mediumImpact();
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -179,148 +235,297 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
 
   @override
   Widget build(BuildContext context) {
+    final durationDays = (_startDate != null && _endDate != null)
+        ? _endDate!.difference(_startDate!).inDays + 1
+        : null;
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
+            physics: AppleSpringScrollPhysics.always,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Center(
                   child: Container(
-                    width: 48,
-                    height: 4,
+                    width: 36,
+                    height: 5,
                     decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+                      color: AppColors.borderOf(context),
+                      borderRadius: BorderRadius.circular(2.5),
                     ),
                   ),
                 ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "New Leave Request",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimaryOf(context),
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Formal transit permission away from campus",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondaryOf(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                    AppleBounceable(
+                      scaleFactor: 0.90,
+                      onTap: () {
+                        AppHaptics.selectionClick();
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceAltOf(context),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: AppColors.textSecondaryOf(context),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 24),
+
+                // Section Label
+                Text(
+                  "LEAVE CATEGORY",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondaryOf(context),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _leaveType,
+                  dropdownColor: AppColors.surfaceOf(context),
+                  icon: const Icon(Icons.expand_more_rounded, color: AppColors.primary, size: 20),
+                  decoration: _buildInputDecoration(context, "Type of Absence"),
+                  items: _leaveTypes.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Text(
+                        type,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textPrimaryOf(context),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    AppHaptics.selectionClick();
+                    setState(() => _leaveType = value);
+                  },
+                  validator: (value) => value == null ? 'Please select a leave type' : null,
+                ),
+                const SizedBox(height: 20),
+
+                // Section Label: Dates
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      "New Leave Request",
+                      "DURATION & TIMELINE",
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondaryOf(context),
+                        letterSpacing: 0.8,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
-                      onPressed: () => Navigator.pop(context),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.bg,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    if (durationDays != null && durationDays > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "$durationDays ${durationDays == 1 ? 'day' : 'days'}",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
-                    ),
                   ],
-                ).animate().fadeIn().slideX(begin: -0.05),
-                const SizedBox(height: 32),
-                DropdownButtonFormField<String>(
-                  initialValue: _leaveType,
-                  dropdownColor: AppColors.surface,
-                  icon: const Icon(Icons.expand_more_rounded, color: AppColors.textSecondary),
-                  decoration: _buildInputDecoration("Leave Type"),
-                  items: _leaveTypes.map((type) {
-                    return DropdownMenuItem(
-                      value: type,
-                      child: Text(type, style: GoogleFonts.plusJakartaSans(color: AppColors.textPrimary)),
-                    );
-                  }).toList(),
-                  onChanged: (value) => setState(() => _leaveType = value),
-                  validator: (value) => value == null ? 'Please select a leave type' : null,
-                ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.1),
-                const SizedBox(height: 20),
+                ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
-                      child: InkWell(
+                      child: AppleBounceable(
+                        scaleFactor: 0.98,
                         onTap: () => _selectDate(context, true),
-                        borderRadius: BorderRadius.circular(16),
                         child: InputDecorator(
-                          decoration: _buildInputDecoration("Start Date", suffixIcon: Icons.calendar_today_rounded),
+                          decoration: _buildInputDecoration(
+                            context,
+                            "Start Date",
+                            suffixIcon: Icons.calendar_today_rounded,
+                          ),
                           child: Text(
-                            _startDate != null ? DateFormat('MMM dd, yyyy').format(_startDate!) : 'Select Date',
+                            _startDate != null
+                                ? DateFormat('MMM dd, yyyy').format(_startDate!)
+                                : 'Select date',
                             style: GoogleFonts.plusJakartaSans(
-                              color: _startDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                              color: _startDate != null
+                                  ? AppColors.textPrimaryOf(context)
+                                  : AppColors.textTertiaryOf(context),
+                              fontSize: 13.5,
+                              fontWeight: _startDate != null ? FontWeight.w600 : FontWeight.w400,
                             ),
                           ),
                         ),
                       ),
-                    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1),
-                    const SizedBox(width: 16),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: InkWell(
+                      child: AppleBounceable(
+                        scaleFactor: 0.98,
                         onTap: () => _selectDate(context, false),
-                        borderRadius: BorderRadius.circular(16),
                         child: InputDecorator(
-                          decoration: _buildInputDecoration("End Date", suffixIcon: Icons.calendar_today_rounded),
+                          decoration: _buildInputDecoration(
+                            context,
+                            "End Date",
+                            suffixIcon: Icons.calendar_today_rounded,
+                          ),
                           child: Text(
-                            _endDate != null ? DateFormat('MMM dd, yyyy').format(_endDate!) : 'Select Date',
+                            _endDate != null
+                                ? DateFormat('MMM dd, yyyy').format(_endDate!)
+                                : 'Select date',
                             style: GoogleFonts.plusJakartaSans(
-                              color: _endDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                              color: _endDate != null
+                                  ? AppColors.textPrimaryOf(context)
+                                  : AppColors.textTertiaryOf(context),
+                              fontSize: 13.5,
+                              fontWeight: _endDate != null ? FontWeight.w600 : FontWeight.w400,
                             ),
                           ),
                         ),
                       ),
-                    ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
+
+                // Section Label: Reason
+                Text(
+                  "PURPOSE / EXPLANATION",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondaryOf(context),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _reasonController,
-                  maxLines: 4,
-                  style: GoogleFonts.plusJakartaSans(color: AppColors.textPrimary),
-                  decoration: _buildInputDecoration("Reason").copyWith(alignLabelWithHint: true),
-                  validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter a reason' : null,
-                ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
-                const SizedBox(height: 40),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : Text(
-                            "Submit Request",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                  maxLines: 3,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimaryOf(context),
+                    fontSize: 14,
+                    height: 1.4,
                   ),
-                ).animate().fadeIn(delay: 250.ms).slideY(begin: 0.1),
-                const SizedBox(height: 16),
+                  decoration: _buildInputDecoration(
+                    context,
+                    "Reason for Absence",
+                    hint: "e.g. Attending family function, medical appointment...",
+                  ).copyWith(alignLabelWithHint: true),
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? 'Please enter a clear reason'
+                      : null,
+                ),
+                const SizedBox(height: 28),
+
+                // Action Button
+                AppleBounceable(
+                  scaleFactor: 0.96,
+                  onTap: _isSubmitting ? null : _submit,
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.28),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.2,
+                              ),
+                            )
+                          : Text(
+                              "Submit Leave Request",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
               ],
             ),
           ),

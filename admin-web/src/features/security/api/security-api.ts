@@ -14,15 +14,15 @@ export interface GateSecuritySummary {
 
 export interface SecurityGatePass {
   id: string
-  student_id: string
+  studentId: string
   destination: string
   reason: string
-  expected_exit_time: string
-  expected_return_time: string
-  actual_exit_time?: string | null
-  actual_return_time?: string | null
-  status: "ISSUED" | "EXITED" | "RETURNED" | "EXPIRED" | "CANCELLED"
-  verification_mode?: string
+  expectedExitTime: string
+  expectedReturnTime: string
+  actualExitTime?: string | null
+  actualReturnTime?: string | null
+  status: "ISSUED" | "EXITED" | "RETURNED" | "EXPIRED" | "CANCELLED" | string
+  verificationMode?: string | null
   student: {
     id: string
     name: string

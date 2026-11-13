@@ -8,6 +8,9 @@ class AttendanceModel {
   final String location;
   final String status;
   final bool couponEarned;
+  final double? distanceMeters;
+  final double? latitude;
+  final double? longitude;
 
   AttendanceModel({
     required this.id,
@@ -19,6 +22,9 @@ class AttendanceModel {
     required this.location,
     required this.status,
     this.couponEarned = false,
+    this.distanceMeters,
+    this.latitude,
+    this.longitude,
   });
 
   factory AttendanceModel.fromMap(Map<String, dynamic> map, String id) {
@@ -34,6 +40,9 @@ class AttendanceModel {
       location: map['location'] ?? '',
       status: map['status'] ?? 'present',
       couponEarned: map['couponEarned'] ?? false,
+      distanceMeters: map['distanceMeters'] != null ? (map['distanceMeters'] as num).toDouble() : null,
+      latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
+      longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
     );
   }
 
@@ -47,6 +56,9 @@ class AttendanceModel {
       'location': location,
       'status': status,
       'couponEarned': couponEarned,
+      if (distanceMeters != null) 'distanceMeters': distanceMeters,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
   }
 }

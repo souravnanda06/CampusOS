@@ -65,9 +65,13 @@ class MeshEmergencyRepository {
         delivery_state TEXT NOT NULL,
         verification_state TEXT NOT NULL,
         relay_count INTEGER NOT NULL DEFAULT 1,
-        is_acknowledged INTEGER NOT NULL DEFAULT 0
+        is_acknowledged INTEGER NOT NULL DEFAULT 0,
+        siren_enabled INTEGER NOT NULL DEFAULT 0,
+        siren_pattern TEXT NOT NULL DEFAULT 'none'
       );
     ''');
+
+    await _ensureSirenColumns();
 
     await _executor.runCustom('''
       CREATE INDEX IF NOT EXISTS idx_mesh_emergency_expiry 
@@ -136,8 +140,8 @@ class MeshEmergencyRepository {
         scope, severity, category, title, message,
         created_at, expires_at, first_seen_at, last_seen_at,
         hop_count, delivery_state, verification_state,
-        relay_count, is_acknowledged
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        relay_count, is_acknowledged, siren_enabled, siren_pattern
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''',
       [
         alert.alertId,
@@ -158,6 +162,8 @@ class MeshEmergencyRepository {
         alert.verificationState,
         alert.relayCount,
         alert.isAcknowledged ? 1 : 0,
+        alert.sirenEnabled ? 1 : 0,
+        alert.sirenPattern.code,
       ],
     );
 
@@ -178,6 +184,45 @@ class MeshEmergencyRepository {
       return true;
     }
     return false;
+  }
+
+  /// Marks an active alert as cancelled/expired immediately when a signed cancellation arrives.
+  Future<bool> cancelAlert(String alertId, [DateTime? cancelledAt]) async {
+    await initialize();
+    final nowMillis = (cancelledAt ?? DateTime.now()).millisecondsSinceEpoch;
+    final updated = await _executor.runUpdate(
+      '''
+      UPDATE mesh_emergency_alerts
+      SET expires_at = ?, delivery_state = 'expired'
+      WHERE alert_id = ?
+      ''',
+      [nowMillis, alertId],
+    );
+    if (updated > 0) {
+      _notifyAlertsChanged();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _ensureSirenColumns() async {
+    try {
+      final cols = await _executor.runSelect(
+        'PRAGMA table_info(mesh_emergency_alerts)',
+        [],
+      );
+      final colNames = cols.map((c) => c['name']?.toString()).toSet();
+      if (!colNames.contains('siren_enabled')) {
+        await _executor.runCustom(
+          'ALTER TABLE mesh_emergency_alerts ADD COLUMN siren_enabled INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!colNames.contains('siren_pattern')) {
+        await _executor.runCustom(
+          "ALTER TABLE mesh_emergency_alerts ADD COLUMN siren_pattern TEXT NOT NULL DEFAULT 'none'",
+        );
+      }
+    } catch (_) {}
   }
 
   /// Retrieves active (non-expired) alerts, ordered by severity and creation time.
@@ -321,6 +366,10 @@ class MeshEmergencyRepository {
       relayPriority: priority,
       relayCount: row['relay_count'] as int? ?? 1,
       isAcknowledged: (row['is_acknowledged'] as int? ?? 0) == 1,
+      sirenEnabled: (row['siren_enabled'] as int? ?? 0) == 1,
+      sirenPattern: EmergencySirenPattern.fromCode(
+        row['siren_pattern']?.toString(),
+      ),
     );
   }
 

@@ -11,6 +11,9 @@ class SessionModel {
   final bool isActive;
   final int attendanceCount;
   final int? txPowerLevel; // Stores the range setting (0=Short, 1=Medium, etc.)
+  final double? latitude;
+  final double? longitude;
+  final double? radiusMeters;
 
   SessionModel({
     required this.id,
@@ -25,9 +28,18 @@ class SessionModel {
     required this.isActive,
     this.attendanceCount = 0,
     this.txPowerLevel,
+    this.latitude,
+    this.longitude,
+    this.radiusMeters = 20.0,
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map, String id) {
+    double? parseCoord(dynamic val) {
+      if (val == null) return null;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString());
+    }
+
     return SessionModel(
       id: id,
       name: map['name'] ?? '',
@@ -42,6 +54,9 @@ class SessionModel {
       location: map['location'] ?? '',
       isActive: map['isActive'] ?? false,
       attendanceCount: map['attendanceCount'] ?? 0,
+      latitude: parseCoord(map['latitude']),
+      longitude: parseCoord(map['longitude']),
+      radiusMeters: parseCoord(map['radiusMeters']) ?? 20.0,
       // We don't strictly need to map txPowerLevel from DB for this local feature,
       // but we keep it in the model for passing data between screens.
     );
@@ -59,6 +74,9 @@ class SessionModel {
       'location': location,
       'isActive': isActive,
       'attendanceCount': attendanceCount,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (radiusMeters != null) 'radiusMeters': radiusMeters,
     };
   }
 }

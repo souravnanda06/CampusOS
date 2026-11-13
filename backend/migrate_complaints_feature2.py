@@ -6,7 +6,7 @@ vendor_penalty_flag, vendor_penalty_amount, student_rating, student_feedback.
 
 import os
 import sys
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
@@ -19,20 +19,19 @@ def migrate():
         columns = [
             ("closure_otp", "VARCHAR(6) NULL"),
             ("otp_verified_at", "VARCHAR(50) NULL"),
-            ("escalation_level", "INT NOT NULL DEFAULT 1"),
+            ("escalation_level", "INTEGER NOT NULL DEFAULT 1"),
             ("escalated_at", "VARCHAR(50) NULL"),
-            ("vendor_penalty_flag", "BOOLEAN NOT NULL DEFAULT FALSE"),
+            ("vendor_penalty_flag", "BOOLEAN NOT NULL DEFAULT 0"),
             ("vendor_penalty_amount", "FLOAT NOT NULL DEFAULT 0.0"),
-            ("student_rating", "INT NULL"),
+            ("student_rating", "INTEGER NULL"),
             ("student_feedback", "TEXT NULL")
         ]
 
-        # Check existing columns
-        inspector_query = text("SHOW COLUMNS FROM complaints")
+        # Check existing columns using SQLAlchemy inspector (works on SQLite & other dialects)
         existing_cols = set()
         try:
-            res = db.session.execute(inspector_query).fetchall()
-            existing_cols = {row[0].lower() for row in res}
+            inspector = inspect(db.engine)
+            existing_cols = {c['name'].lower() for c in inspector.get_columns('complaints')}
         except Exception as e:
             print(f"Error inspecting columns: {e}")
 

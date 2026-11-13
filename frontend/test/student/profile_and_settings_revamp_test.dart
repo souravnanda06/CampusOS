@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:attendance_app/auth/models/user_model.dart';
-import 'package:attendance_app/core/theme/app_colors.dart';
 import 'package:attendance_app/core/theme/theme_provider.dart';
 import 'package:attendance_app/core/haptics/app_haptics.dart';
 import 'package:attendance_app/core/haptics/haptics_provider.dart';

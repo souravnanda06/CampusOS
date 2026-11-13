@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../auth/providers/user_provider.dart';
 import '../../shared/services/attendance_service.dart';
+import '../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 class StudentAnalyticsScreen extends StatefulWidget {
   const StudentAnalyticsScreen({Key? key}) : super(key: key);
@@ -81,7 +82,7 @@ class _StudentAnalyticsScreenState extends State<StudentAnalyticsScreen>
           return SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              physics: const BouncingScrollPhysics(),
+              physics: AppleSpringScrollPhysics.always,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

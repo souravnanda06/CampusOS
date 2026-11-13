@@ -17,6 +17,21 @@ SUPPORTED_NOTICE_CATEGORIES = {
 SUPPORTED_NOTICE_TARGET_TYPES = {'ALL', 'BRANCH', 'YEAR', 'HOSTEL', 'STUDENT'}
 SUPPORTED_NOTICE_STATUSES = {'DRAFT', 'PUBLISHED', 'ARCHIVED', 'EXPIRED'}
 
+def _get_year_variants(val):
+    if not val:
+        return []
+    val_clean = str(val).strip().lower()
+    digit = ''.join([c for c in val_clean if c.isdigit()])
+    suffixes = {'1': '1st', '2': '2nd', '3': '3rd', '4': '4th'}
+    variants = {val_clean}
+    if digit:
+        variants.add(digit)
+        suf = suffixes.get(digit, f"{digit}th")
+        variants.add(suf)
+        variants.add(f"{suf} year")
+        variants.add(f"{digit} year")
+    return list(variants)
+
 def resolve_notice_recipients(notice):
     target_type = (notice.target_type or 'ALL').upper()
     target_value = (notice.target_value or '').strip()
@@ -41,7 +56,8 @@ def resolve_notice_recipients(notice):
     elif target_type == 'YEAR':
         if not target_value:
             return []
-        recipients = query.filter(func.lower(User.year) == target_value.lower()).order_by(User.id.asc()).all()
+        year_variants = _get_year_variants(target_value)
+        recipients = query.filter(func.lower(User.year).in_(year_variants)).order_by(User.id.asc()).all()
     elif target_type == 'STUDENT':
         if not target_value:
             return []
@@ -88,7 +104,8 @@ def is_notice_targeted_to_student(notice, student, delivery_lookup=None):
     elif target_type == 'YEAR':
         if not target_value or not student.year:
             return False
-        return student.year.strip().lower() == target_value.lower()
+        year_variants = _get_year_variants(target_value)
+        return student.year.strip().lower() in year_variants
     elif target_type == 'STUDENT':
         if not target_value:
             return False

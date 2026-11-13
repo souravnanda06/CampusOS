@@ -1,7 +1,7 @@
 import * as React from "react"
-import { User, UserRole } from "@/types/auth"
+import { User, UserRole, isConsoleAuthorizedRole, normalizeRole } from "@/types/auth"
 import { authService } from "@/services/auth/auth-service"
-import { apiClient } from "@/services/api/api-client"
+import { apiClient, ApiError } from "@/services/api/api-client"
 
 interface AuthContextType {
   user: User | null
@@ -21,7 +21,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = React.useState<boolean>(false)
 
   React.useEffect(() => {
-    // Listen for cross-tab or interceptor auth changes
     const unsubscribe = authService.onAuthStateChanged((newUser) => {
       setUser(newUser)
       setToken(authService.getAccessToken())
@@ -36,6 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "/login",
         { email, password }
       )
+      if (!isConsoleAuthorizedRole(response.user?.role)) {
+        throw new ApiError(
+          403,
+          `Account role '${response.user?.role || "student"}' is not authorized for the CampusOS Control Plane. Please use the CampusOS mobile app.`,
+          "ROLE_NOT_AUTHORIZED"
+        )
+      }
       authService.setSession(response.token, response.user)
       setUser(response.user)
       setToken(response.token)
@@ -46,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const logout = React.useCallback(() => {
+    apiClient.post("/auth/logout").catch(() => undefined)
     authService.logout()
     setUser(null)
     setToken(null)
@@ -54,8 +61,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasRole = React.useCallback(
     (roles: UserRole | UserRole[]): boolean => {
       if (!user) return false
-      const allowed = Array.isArray(roles) ? roles : [roles]
-      return allowed.includes(user.role)
+      const allowed = (Array.isArray(roles) ? roles : [roles]).map((r) => normalizeRole(r))
+      return allowed.includes(normalizeRole(user.role))
     },
     [user]
   )

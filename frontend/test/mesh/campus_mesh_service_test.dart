@@ -56,12 +56,10 @@ class FakeMeshBleAdapter implements MeshBleAdapter {
     isAdvertising = false;
   }
 
-  @override
   Future<void> pauseAdvertising() async {
     isAdvertising = false;
   }
 
-  @override
   Future<void> resumeAdvertising() async {}
 
   @override

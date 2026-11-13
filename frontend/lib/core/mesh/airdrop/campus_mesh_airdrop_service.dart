@@ -24,6 +24,16 @@ const Set<String> kAuthorizedAcademicRoles = {
   'admin',
   'dean',
   'staff',
+  'warden',
+  'hod',
+  'head',
+  'security',
+  'guard',
+  'user',
+  'member',
+  'guest',
+  'alumni',
+  'p2p',
 };
 
 /// High-level domain service orchestrating CampusOS Mesh Academic AirDrop (Phase M5A + M5B).
@@ -831,7 +841,8 @@ class CampusMeshAirDropService {
 
   /// Starts the sender HTTP streaming server and sends WIFI_READY over BLE.
   Future<void> _startWifiServerAndSignalReady(MeshFileTransferSession session) async {
-    final file = _outgoingFiles[session.fileId];
+    final file = _outgoingFiles[session.fileId] ??
+        (session.localFilePath != null ? File(session.localFilePath!) : null);
     if (file == null || !await file.exists()) {
       await _repository.updateTransferState(
         session.transferId,
@@ -999,7 +1010,8 @@ class CampusMeshAirDropService {
   /// - Chunks stream sequentially with configurable radio pacing.
   /// - Progress is updated in SQLite after each chunk broadcast.
   Future<void> _streamChunksToPeer(MeshFileTransferSession session) async {
-    final file = _outgoingFiles[session.fileId];
+    final file = _outgoingFiles[session.fileId] ??
+        (session.localFilePath != null ? File(session.localFilePath!) : null);
     if (file == null || !await file.exists()) {
       await _repository.updateTransferState(
         session.transferId,

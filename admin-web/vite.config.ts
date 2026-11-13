@@ -14,10 +14,24 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     proxy: {
-      // Proxy all Flask API routes to local Flask backend
-      '/api': {
-        target: 'http://127.0.0.1:5000',
+      // Career & Placement routes (routed to local backend if not yet deployed on PythonAnywhere)
+      '/api/career': {
+        target: process.env.VITE_CAREER_TARGET || 'http://127.0.0.1:5000',
         changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/api/admin/career': {
+        target: process.env.VITE_CAREER_TARGET || 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      // Proxy all other /api requests to deployed PythonAnywhere backend (or local Flask via VITE_PROXY_TARGET=http://127.0.0.1:5000)
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET || 'https://campusos.pythonanywhere.com',
+        changeOrigin: true,
+        secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

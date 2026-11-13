@@ -16,7 +16,6 @@ import 'package:attendance_app/teacher/screens/class_detail_screen.dart';
 import 'package:attendance_app/teacher/screens/teacher_profile_screen.dart';
 import 'package:attendance_app/teacher/screens/post_session_report_screen.dart';
 import 'package:attendance_app/teacher/services/passport_teacher_attendance_service.dart';
-import 'package:attendance_app/router/app_routes.dart';
 import 'package:attendance_app/router/app_router.dart';
 
 void main() {

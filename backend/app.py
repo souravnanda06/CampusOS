@@ -137,6 +137,21 @@ def create_app(config_class=Config):
 
     # Initialize shared extensions
     db.init_app(app)
+
+    # SQLite Concurrency & Integrity Hardening (WAL mode, busy timeout, foreign keys)
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    @event.listens_for(Engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        if type(dbapi_connection).__module__ == 'sqlite3':
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=10000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
     init_firebase()
 
     # Non-destructive additive database initialization
@@ -152,6 +167,12 @@ def create_app(config_class=Config):
             "service": "CampusOS Backend",
             "version": "1.0.0"
         }, 200
+
+    @app.errorhandler(400)
+    def handle_400(e):
+        import sys
+        print(f"DEBUG 400 ERROR: {e}, desc={getattr(e, 'description', '')}", file=sys.stderr)
+        return {"error": str(e), "description": getattr(e, 'description', '')}, 400
 
     # Transparently handle optional /api prefix for direct backend callers
     class ApiPrefixMiddleware:

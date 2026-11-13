@@ -219,3 +219,70 @@ def create_fee_record():
         "message": "Fee record created successfully",
         "fee": new_fee.to_dict()
     }), 201
+
+
+@fees_bp.route('/fees/<id>', methods=['PATCH'])
+def update_fee_record(id):
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff']:
+        return jsonify({"message": "Forbidden: Admin/Staff privileges required"}), 403
+
+    fee = FeeRecord.query.get(id)
+    if not fee:
+        return jsonify({"message": "Fee record not found"}), 404
+
+    data = request.json or {}
+    if 'title' in data and (data.get('title') or '').strip():
+        fee.title = data['title'].strip()
+    if 'category' in data and (data.get('category') or '').strip():
+        fee.category = data['category'].upper().strip()
+    if 'dueDate' in data and data.get('dueDate'):
+        fee.due_date = str(data['dueDate'])
+    if 'amount' in data and data.get('amount') is not None:
+        new_amt = float(data['amount'])
+        if new_amt <= 0:
+            return jsonify({"message": "amount must be positive"}), 400
+        fee.amount = new_amt
+    if 'status' in data and (data.get('status') or '').strip():
+        fee.status = data['status'].upper().strip()
+
+    db.session.add(RequestAudit(
+        entity_type='FEE_RECORD',
+        entity_id=fee.id,
+        actor_id=requester.id,
+        action='UPDATED',
+        remarks=f"Updated fee '{fee.title}' (₹{fee.amount}, status={fee.status})",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+    return jsonify({"message": "Fee record updated", "fee": fee.to_dict()}), 200
+
+
+@fees_bp.route('/fees/<id>', methods=['DELETE'])
+def delete_fee_record(id):
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff']:
+        return jsonify({"message": "Forbidden: Admin/Staff privileges required"}), 403
+
+    fee = FeeRecord.query.get(id)
+    if not fee:
+        return jsonify({"message": "Fee record not found"}), 404
+    if fee.amount_paid and fee.amount_paid > 0:
+        return jsonify({"message": "Cannot delete a fee record that already has recorded payments"}), 409
+
+    title = fee.title
+    db.session.add(RequestAudit(
+        entity_type='FEE_RECORD',
+        entity_id=fee.id,
+        actor_id=requester.id,
+        action='DELETED',
+        remarks=f"Cancelled fee demand '{title}' (₹{fee.amount})",
+        ip_address=request.remote_addr,
+    ))
+    db.session.delete(fee)
+    db.session.commit()
+    return jsonify({"message": f"Fee record '{title}' cancelled"}), 200

@@ -1,11 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:confetti/confetti.dart';
 
 import '../../core/mesh/airdrop/campus_mesh_airdrop_service.dart';
 import '../../core/mesh/airdrop/mesh_airdrop_models.dart';
 import '../../core/mesh/airdrop/transport/localsend_udp_discovery.dart';
+import '../../core/mesh/campus_mesh_manager.dart';
 import '../../core/mesh/campus_mesh_service.dart';
 import '../../core/mesh/mesh_peer.dart';
 import '../../core/theme/app_colors.dart';
@@ -28,7 +35,8 @@ class CampusMeshAirDropScreen extends StatefulWidget {
   State<CampusMeshAirDropScreen> createState() => _CampusMeshAirDropScreenState();
 }
 
-class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
+class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen>
+    with SingleTickerProviderStateMixin {
   String? _selectedPeerDeviceId;
   File? _selectedFile;
   String _selectedFileName = 'DBMS_Unit_3_Notes.pdf';
@@ -36,11 +44,76 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
   MeshTransportType? _selectedTransport;
   bool _isOffering = false;
 
+  late final ConfettiController _confettiController;
+  late final AnimationController _radarAnimController;
+
+  StreamSubscription<List<MeshPeer>>? _blePeersSub;
+  StreamSubscription<List<LocalSendPeer>>? _wifiPeersSub;
+  StreamSubscription<MeshFileTransferSession>? _incomingOfferSub;
+  Timer? _periodicRefreshTimer;
+
+  List<MeshPeer> _blePeers = [];
+  List<LocalSendPeer> _wifiPeers = [];
+  final Set<String> _promptedOfferIds = {};
+
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
+    _radarAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+
     // Ensure services and LocalSend UDP discovery are active
     widget.airdropService.initialize();
+    CampusMeshManager.instance.startMesh();
+
+    // Listen to live peer updates
+    _blePeers = _mesh.peerRegistry.activePeers;
+    _blePeersSub = _mesh.peerUpdates.listen((peers) {
+      if (mounted) setState(() => _blePeers = peers);
+    });
+
+    final udp = widget.airdropService.udpDiscovery;
+    if (udp != null) {
+      _wifiPeers = udp.activePeers;
+      _wifiPeersSub = udp.peersStream.listen((peers) {
+        if (mounted) setState(() => _wifiPeers = peers);
+      });
+    }
+
+    // High-priority modal prompt for incoming file offers (Apple AirDrop style)
+    _incomingOfferSub = widget.airdropService.incomingOffers.listen((offer) {
+      if (!mounted) return;
+      if (!_promptedOfferIds.contains(offer.fileId)) {
+        _promptedOfferIds.add(offer.fileId);
+        _showIncomingAirDropModal(offer);
+      }
+    });
+
+    // Periodic UI tick to refresh throughput, discovery lists, and transfer status
+    _periodicRefreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) {
+        final currentUdp = widget.airdropService.udpDiscovery;
+        if (currentUdp != null && currentUdp.activePeers.length != _wifiPeers.length) {
+          setState(() {
+            _wifiPeers = currentUdp.activePeers;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    _radarAnimController.dispose();
+    _blePeersSub?.cancel();
+    _wifiPeersSub?.cancel();
+    _incomingOfferSub?.cancel();
+    _periodicRefreshTimer?.cancel();
+    super.dispose();
   }
 
   CampusMeshAirDropService get _service => widget.airdropService;
@@ -53,7 +126,9 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       if (picked != null) {
         final file = File(picked.path);
         final length = await file.length();
-        final name = picked.name.isNotEmpty ? picked.name : file.path.split(Platform.pathSeparator).last;
+        final name = picked.name.isNotEmpty
+            ? picked.name
+            : file.path.split(Platform.pathSeparator).last;
         setState(() {
           _selectedFile = file;
           _selectedFileName = name;
@@ -62,7 +137,9 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Selected: $name (${(length / (1024 * 1024)).toStringAsFixed(2)} MB)'),
+              content: Text(
+                'Selected: $name (${(length / (1024 * 1024)).toStringAsFixed(2)} MB)',
+              ),
               backgroundColor: AppColors.primary,
               duration: const Duration(seconds: 2),
             ),
@@ -83,50 +160,62 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
 
   Future<void> _pickDeviceDocument() async {
     try {
-      final List<Directory> searchDirs = [];
-      try {
-        final appDoc = await getApplicationDocumentsDirectory();
-        searchDirs.add(appDoc);
-      } catch (_) {}
-
-      try {
-        final downloads = await getDownloadsDirectory();
-        if (downloads != null) searchDirs.add(downloads);
-      } catch (_) {}
-
-      final List<File> discovered = [];
-      for (final dir in searchDirs) {
-        if (await dir.exists()) {
-          try {
-            final entities = dir.listSync(recursive: false);
-            for (final entity in entities) {
-              if (entity is File) discovered.add(entity);
-            }
-          } catch (_) {}
-        }
-      }
-
-      if (!mounted) return;
-
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) => _DocumentPickerSheet(
-          discoveredFiles: discovered,
-          onFileSelected: (File file, String name, int size) {
-            setState(() {
-              _selectedFile = file;
-              _selectedFileName = name;
-              _selectedFileSize = size;
-            });
-            Navigator.pop(ctx);
-          },
-        ),
+      final result = await FilePicker.pickFiles(
+        allowMultiple: false,
+        type: FileType.any,
       );
+
+      if (result != null &&
+          result.files.isNotEmpty &&
+          result.files.first.path != null) {
+        final path = result.files.first.path!;
+        final file = File(path);
+        final length = await file.length();
+        final name = result.files.first.name;
+
+        setState(() {
+          _selectedFile = file;
+          _selectedFileName = name;
+          _selectedFileSize = length;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Selected: $name (${(length / (1024 * 1024)).toStringAsFixed(2)} MB)',
+              ),
+              backgroundColor: AppColors.primary,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
     } catch (e) {
-      debugPrint('Error picking document: $e');
+      debugPrint('Native file picker error, falling back to preset sheet: $e');
     }
+
+    if (!mounted) return;
+    _openAcademicPresetsSheet();
+  }
+
+  void _openAcademicPresetsSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _AcademicDocumentPresetsSheet(
+        onPresetSelected: (File file, String name, int size) {
+          setState(() {
+            _selectedFile = file;
+            _selectedFileName = name;
+            _selectedFileSize = size;
+          });
+          Navigator.pop(ctx);
+        },
+      ),
+    );
   }
 
   Future<void> _handleSendOffer() async {
@@ -134,13 +223,21 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
     setState(() => _isOffering = true);
 
     try {
-      File fileToSend = _selectedFile ?? await _createSampleAcademicFile(_selectedFileName, _selectedFileSize);
+      File fileToSend = _selectedFile ??
+          await _createSampleAcademicFile(_selectedFileName, _selectedFileSize);
 
-      final mime = _selectedFileName.endsWith('.zip')
+      final lowerName = _selectedFileName.toLowerCase();
+      final mime = lowerName.endsWith('.zip')
           ? 'application/zip'
-          : _selectedFileName.endsWith('.mp4')
+          : lowerName.endsWith('.mp4') || lowerName.endsWith('.mkv')
               ? 'video/mp4'
-              : 'application/pdf';
+              : lowerName.endsWith('.png')
+                  ? 'image/png'
+                  : lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')
+                      ? 'image/jpeg'
+                      : lowerName.endsWith('.docx')
+                          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                          : 'application/pdf';
 
       await _service.sendFileOffer(
         file: fileToSend,
@@ -152,8 +249,21 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('File offer sent for $_selectedFileName'),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'File offer broadcasted: $_selectedFileName',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -161,8 +271,16 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to offer file: $e'),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Failed to offer file: $e')),
+              ],
+            ),
             backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -190,6 +308,195 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
     return sampleFile;
   }
 
+  void _showIncomingAirDropModal(MeshFileTransferSession offer) {
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = AppColors.isDark(ctx);
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.air_rounded, color: Colors.white, size: 32),
+              ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+              const SizedBox(height: 12),
+              Text(
+                'CampusOS AirDrop',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '[${offer.peerRole.toUpperCase()}]',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    offer.peerDisplayName ?? offer.peerDeviceId,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                  if (offer.isPeerVerified) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.verified, color: AppColors.success, size: 14),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.surfaceAltDark : AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _iconForFilename(offer.filename),
+                      color: AppColors.primary,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            offer.filename,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            offer.fileSize >= 1024 * 1024
+                                ? '${(offer.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB · ${offer.transportType.label}'
+                                : '${(offer.fileSize / 1024).toStringAsFixed(1)} KB · ${offer.transportType.label}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        _service.rejectOffer(offer.fileId);
+                        Navigator.pop(ctx);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                        side: const BorderSide(color: AppColors.danger),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Decline', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _service.acceptOffer(offer.fileId);
+                        Navigator.pop(ctx);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                      ),
+                      child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _iconForFilename(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_rounded;
+    if (lower.endsWith('.zip') || lower.endsWith('.tar') || lower.endsWith('.gz') || lower.endsWith('.rar')) {
+      return Icons.folder_zip_rounded;
+    }
+    if (lower.endsWith('.mp4') || lower.endsWith('.mkv') || lower.endsWith('.mov')) {
+      return Icons.video_file_rounded;
+    }
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')) {
+      return Icons.image_rounded;
+    }
+    if (lower.endsWith('.docx') || lower.endsWith('.doc')) return Icons.description_rounded;
+    return Icons.insert_drive_file_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = AppColors.isDark(context);
@@ -209,86 +516,135 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
               final active = snapshot.data?.status == MeshStateStatus.active;
               return Padding(
                 padding: const EdgeInsets.only(right: 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: active ? AppColors.success : AppColors.warning,
-                        shape: BoxShape.circle,
+                child: InkWell(
+                  onTap: () {
+                    if (active) {
+                      CampusMeshManager.instance.stopMesh();
+                    } else {
+                      CampusMeshManager.instance.startMesh();
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (active ? AppColors.success : AppColors.warning).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: (active ? AppColors.success : AppColors.warning).withValues(alpha: 0.4),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      active ? 'Mesh Active' : 'Mesh Standby',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: active ? AppColors.success : AppColors.warning,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          active ? 'Mesh Active' : 'Mesh Standby',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               );
             },
           ),
         ],
       ),
-      body: StreamBuilder<List<MeshFileTransferSession>>(
-        stream: _service.repository.transfersStream,
-        builder: (context, snapshot) {
-          return FutureBuilder<List<MeshFileTransferSession>>(
-            future: _service.repository.getAllTransfers(),
-            builder: (context, futureSnapshot) {
-              final allTransfers = snapshot.data ?? futureSnapshot.data ?? [];
-              final pendingOffers = allTransfers
-                  .where((t) => t.direction == MeshTransferDirection.incoming && t.state == MeshFileTransferState.offered)
-                  .toList();
-              final activeTransfers = allTransfers
-                  .where((t) => !t.state.isTerminal && t.state != MeshFileTransferState.offered)
-                  .toList();
-              final completedTransfers = allTransfers
-                  .where((t) => t.state == MeshFileTransferState.completed)
-                  .toList();
-              final failedTransfers = allTransfers
-                  .where((t) => t.state == MeshFileTransferState.integrityFailure || t.state == MeshFileTransferState.failed)
-                  .toList();
+      body: Stack(
+        children: [
+          StreamBuilder<List<MeshFileTransferSession>>(
+            stream: _service.repository.transfersStream,
+            builder: (context, snapshot) {
+              return FutureBuilder<List<MeshFileTransferSession>>(
+                future: _service.repository.getAllTransfers(),
+                builder: (context, futureSnapshot) {
+                  final allTransfers = snapshot.data ?? futureSnapshot.data ?? [];
+                  final pendingOffers = allTransfers
+                      .where((t) =>
+                          t.direction == MeshTransferDirection.incoming &&
+                          t.state == MeshFileTransferState.offered)
+                      .toList();
+                  final activeTransfers = allTransfers
+                      .where((t) =>
+                          !t.state.isTerminal && t.state != MeshFileTransferState.offered)
+                      .toList();
+                  final completedTransfers = allTransfers
+                      .where((t) => t.state == MeshFileTransferState.completed)
+                      .toList();
+                  final failedTransfers = allTransfers
+                      .where((t) =>
+                          t.state == MeshFileTransferState.integrityFailure ||
+                          t.state == MeshFileTransferState.failed)
+                      .toList();
 
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildIdentityHeader(context),
-                  const SizedBox(height: 16),
-                  if (pendingOffers.isNotEmpty) ...[
-                    _buildSectionHeader('INCOMING FILE OFFERS', pendingOffers.length),
-                    const SizedBox(height: 8),
-                    ...pendingOffers.map((offer) => _buildIncomingOfferCard(context, offer)),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildSendAcademicFileCard(context),
-                  const SizedBox(height: 16),
-                  if (activeTransfers.isNotEmpty) ...[
-                    _buildSectionHeader('ACTIVE TRANSFERS', activeTransfers.length),
-                    const SizedBox(height: 8),
-                    ...activeTransfers.map((t) => _buildActiveTransferCard(context, t)),
-                    const SizedBox(height: 16),
-                  ],
-                  if (completedTransfers.isNotEmpty) ...[
-                    _buildSectionHeader('COMPLETED TRANSFERS', completedTransfers.length),
-                    const SizedBox(height: 8),
-                    ...completedTransfers.map((t) => _buildCompletedTransferCard(context, t)),
-                    const SizedBox(height: 16),
-                  ],
-                  if (failedTransfers.isNotEmpty) ...[
-                    _buildSectionHeader('FAILED / INTEGRITY ALERTS', failedTransfers.length),
-                    const SizedBox(height: 8),
-                    ...failedTransfers.map((t) => _buildFailedTransferCard(context, t)),
-                  ],
-                ],
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    children: [
+                      _buildIdentityHeader(context),
+                      const SizedBox(height: 14),
+                      _buildRadarScannerHero(context),
+                      const SizedBox(height: 14),
+                      if (pendingOffers.isNotEmpty) ...[
+                        _buildSectionHeader('INCOMING FILE OFFERS', pendingOffers.length),
+                        const SizedBox(height: 8),
+                        ...pendingOffers.map((offer) => _buildIncomingOfferCard(context, offer)),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildSendAcademicFileCard(context),
+                      const SizedBox(height: 16),
+                      if (activeTransfers.isNotEmpty) ...[
+                        _buildSectionHeader('ACTIVE TRANSFERS', activeTransfers.length),
+                        const SizedBox(height: 8),
+                        ...activeTransfers.map((t) => _buildActiveTransferCard(context, t)),
+                        const SizedBox(height: 16),
+                      ],
+                      if (completedTransfers.isNotEmpty) ...[
+                        _buildSectionHeader('COMPLETED TRANSFERS', completedTransfers.length),
+                        const SizedBox(height: 8),
+                        ...completedTransfers.map((t) => _buildCompletedTransferCard(context, t)),
+                        const SizedBox(height: 16),
+                      ],
+                      if (failedTransfers.isNotEmpty) ...[
+                        _buildSectionHeader('FAILED / INTEGRITY ALERTS', failedTransfers.length),
+                        const SizedBox(height: 8),
+                        ...failedTransfers.map((t) => _buildFailedTransferCard(context, t)),
+                      ],
+                      const SizedBox(height: 40),
+                    ],
+                  );
+                },
               );
             },
-          );
-        },
+          ),
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              shouldLoop: false,
+              colors: const [
+                AppColors.primary,
+                AppColors.success,
+                Colors.amber,
+                Colors.blueAccent,
+                Colors.purpleAccent,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,20 +657,31 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.border,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              gradient: LinearGradient(
+                colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.school, color: AppColors.primary, size: 24),
+            child: const Icon(Icons.school_rounded, color: Colors.white, size: 24),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -356,9 +723,136 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                   'Local Node: ${_mesh.localDeviceId}',
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                     color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRadarScannerHero(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    final totalPeers = _wifiPeers.length + _blePeers.length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+              : [const Color(0xFFEFF6FF), const Color(0xFFDBEAFE)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Animated Radar Pulse
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _radarAnimController,
+                builder: (context, child) {
+                  final val = _radarAnimController.value;
+                  return Container(
+                    width: 54 + (val * 18),
+                    height: 54 + (val * 18),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: (1.0 - val) * 0.6),
+                        width: 2,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.wifi_tethering_rounded, color: Colors.white, size: 24),
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Nearby Peer Radar',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$totalPeers Found',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Zero-Cloud Wi-Fi LAN & BLE Mesh scanning active',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.wifi, size: 13, color: AppColors.success),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_wifiPeers.length} Wi-Fi (50 MB/s)',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success),
+                    ),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.bluetooth, size: 13, color: AppColors.info),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_blePeers.length} BLE Mesh',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.info),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -408,11 +902,18 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.4),
+          color: AppColors.primary.withValues(alpha: 0.5),
           width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,7 +924,7 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.description, color: AppColors.primary, size: 22),
               ),
@@ -449,6 +950,7 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
@@ -560,17 +1062,24 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
 
   Widget _buildSendAcademicFileCard(BuildContext context) {
     final isDark = AppColors.isDark(context);
-    final blePeers = _mesh.peerRegistry.activePeers;
-    final wifiPeers = _service.udpDiscovery?.activePeers ?? [];
+    final blePeers = _blePeers;
+    final wifiPeers = _wifiPeers;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.border,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -613,22 +1122,9 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
           ),
           const SizedBox(height: 14),
 
-          // File Picker Buttons
+          // File Picker Action Buttons
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickDeviceMedia,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.perm_media_rounded, size: 18, color: AppColors.primary),
-                  label: const Text('Pick Media', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _pickDeviceDocument,
@@ -641,23 +1137,36 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                   label: const Text('Browse Files', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickDeviceMedia,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.perm_media_rounded, size: 18, color: AppColors.primary),
+                  label: const Text('Pick Media', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
 
-          // Selected File Preview
+          // Selected File Preview Card
           if (_selectedFile != null)
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.insert_drive_file_rounded, color: AppColors.primary, size: 28),
+                  Icon(_iconForFilename(_selectedFileName), color: AppColors.primary, size: 28),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -765,11 +1274,20 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Discovered Peers Section
+          // Discovered Peers Interactive Strip
           if (wifiPeers.isNotEmpty || blePeers.isNotEmpty) ...[
-            const Text(
-              'Discovered Nearby Devices (Tap to Select):',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Discovered Nearby Devices (Tap to Select):',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                ),
+                Text(
+                  '${wifiPeers.length + blePeers.length} online',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             SingleChildScrollView(
@@ -782,7 +1300,10 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                       padding: const EdgeInsets.only(right: 6),
                       child: ChoiceChip(
                         avatar: const Icon(Icons.wifi, size: 14, color: AppColors.success),
-                        label: Text('${wp.displayName} (Wi-Fi 50MB/s)', style: TextStyle(fontSize: 11, color: isSel ? Colors.white : null)),
+                        label: Text(
+                          '${wp.displayName} (Wi-Fi 50MB/s)',
+                          style: TextStyle(fontSize: 11, color: isSel ? Colors.white : null),
+                        ),
                         selected: isSel,
                         selectedColor: AppColors.primary,
                         onSelected: (val) {
@@ -800,7 +1321,10 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                       padding: const EdgeInsets.only(right: 6),
                       child: ChoiceChip(
                         avatar: const Icon(Icons.bluetooth, size: 14, color: AppColors.info),
-                        label: Text('${bp.deviceId} (BLE)', style: TextStyle(fontSize: 11, color: isSel ? Colors.white : null)),
+                        label: Text(
+                          '${bp.deviceId} (BLE)',
+                          style: TextStyle(fontSize: 11, color: isSel ? Colors.white : null),
+                        ),
                         selected: isSel,
                         selectedColor: AppColors.primary,
                         onSelected: (val) {
@@ -851,13 +1375,14 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.send),
+                  : const Icon(Icons.send_rounded),
               label: Text(_isOffering ? 'Sending Offer...' : 'Send File Offer'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
               ),
             ),
           ),
@@ -875,10 +1400,17 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? AppColors.borderDark : AppColors.border,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -886,9 +1418,9 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
           Row(
             children: [
               Icon(
-                isOutgoing ? Icons.arrow_circle_up : Icons.arrow_circle_down,
+                isOutgoing ? Icons.arrow_circle_up_rounded : Icons.arrow_circle_down_rounded,
                 color: isOutgoing ? AppColors.primary : AppColors.info,
-                size: 20,
+                size: 22,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -954,12 +1486,12 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
           ),
           const SizedBox(height: 10),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: transfer.progress,
               backgroundColor: isDark ? AppColors.surfaceAltDark : AppColors.border,
               valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-              minHeight: 6,
+              minHeight: 8,
             ),
           ),
           const SizedBox(height: 8),
@@ -1024,7 +1556,7 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: AppColors.success.withValues(alpha: 0.3),
         ),
@@ -1100,17 +1632,150 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('File ready at: ${transfer.localFilePath ?? transfer.filename}'),
-                ),
-              );
-            },
+            onPressed: () => _openCompletedFile(transfer),
             child: const Text('Open'),
           ),
         ],
       ),
+    );
+  }
+
+  void _openCompletedFile(MeshFileTransferSession transfer) async {
+    final path = transfer.localFilePath;
+    if (path == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('File ready at: ${transfer.filename}')),
+      );
+      return;
+    }
+
+    final file = File(path);
+    final exists = await file.exists();
+
+    if (!mounted) return;
+
+    final lower = transfer.filename.toLowerCase();
+    final isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.webp');
+
+    if (exists && isImage) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: Image.file(file, fit: BoxFit.contain),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        transfer.filename,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Attempt system launch or show details sheet
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = AppColors.isDark(ctx);
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(_iconForFilename(transfer.filename), color: AppColors.primary, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      transfer.filename,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text('Location: $path', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 6),
+              Text('SHA-256: ${transfer.sha256}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: path));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('File path copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy Path'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          final uri = Uri.file(path);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          } else {
+                            throw 'Cannot launch';
+                          }
+                        } catch (_) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('File stored at: $path')),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                      label: const Text('Open in App'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1167,20 +1832,18 @@ class _CampusMeshAirDropScreenState extends State<CampusMeshAirDropScreen> {
   }
 }
 
-class _DocumentPickerSheet extends StatefulWidget {
-  final List<File> discoveredFiles;
-  final void Function(File file, String name, int size) onFileSelected;
+class _AcademicDocumentPresetsSheet extends StatefulWidget {
+  final void Function(File file, String name, int size) onPresetSelected;
 
-  const _DocumentPickerSheet({
-    required this.discoveredFiles,
-    required this.onFileSelected,
+  const _AcademicDocumentPresetsSheet({
+    required this.onPresetSelected,
   });
 
   @override
-  State<_DocumentPickerSheet> createState() => _DocumentPickerSheetState();
+  State<_AcademicDocumentPresetsSheet> createState() => _AcademicDocumentPresetsSheetState();
 }
 
-class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
+class _AcademicDocumentPresetsSheetState extends State<_AcademicDocumentPresetsSheet> {
   bool _isGenerating = false;
 
   Future<void> _generateAndSelect({
@@ -1201,12 +1864,12 @@ class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
       }
       await raf.close();
 
-      widget.onFileSelected(targetFile, filename, sizeBytes);
+      widget.onPresetSelected(targetFile, filename, sizeBytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate benchmark file: $e'),
+            content: Text('Failed to prepare payload: $e'),
             backgroundColor: AppColors.danger,
           ),
         );
@@ -1218,37 +1881,16 @@ class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
     }
   }
 
-  IconData _iconForExtension(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_rounded;
-    if (lower.endsWith('.zip') || lower.endsWith('.tar') || lower.endsWith('.gz')) {
-      return Icons.folder_zip_rounded;
-    }
-    if (lower.endsWith('.mp4') || lower.endsWith('.mkv') || lower.endsWith('.mov')) {
-      return Icons.video_file_rounded;
-    }
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) {
-      return Icons.image_rounded;
-    }
-    if (lower.endsWith('.docx') || lower.endsWith('.doc')) {
-      return Icons.description_rounded;
-    }
-    return Icons.insert_drive_file_rounded;
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = AppColors.isDark(context);
 
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.75,
-      ),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1259,15 +1901,16 @@ class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Select Academic Document',
+                'Academic Document Payloads',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -1281,14 +1924,11 @@ class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
             ],
           ),
           Text(
-            'Device Documents & High-Speed Benchmark Datasets',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white60 : Colors.black54,
-            ),
+            'Instant high-speed test datasets for BLE Mesh & LocalSend Wi-Fi',
+            style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
           ),
-          const SizedBox(height: 16),
-          if (_isGenerating) ...[
+          const SizedBox(height: 20),
+          if (_isGenerating)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(24.0),
@@ -1300,104 +1940,39 @@ class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
                   ],
                 ),
               ),
+            )
+          else ...[
+            _buildPresetTile(
+              label: 'Semester Assignment (PDF)',
+              sizeStr: '2 MB · BLE / Wi-Fi',
+              bytes: 2 * 1024 * 1024,
+              name: 'Semester_Assignment_2MB.pdf',
+              icon: Icons.picture_as_pdf_rounded,
+              color: Colors.redAccent,
             ),
-          ] else ...[
-            const Text(
-              'INSTANT SPEED BENCHMARKS (LOCALSEND 50 MB/s)',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: AppColors.primary,
-              ),
+            _buildPresetTile(
+              label: 'Lab Project Codebase (ZIP)',
+              sizeStr: '10 MB · High-Speed Wi-Fi',
+              bytes: 10 * 1024 * 1024,
+              name: 'Lab_Project_Codebase_10MB.zip',
+              icon: Icons.folder_zip_rounded,
+              color: Colors.amber,
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildBenchmarkChip(
-                  label: '2 MB Assignment (PDF)',
-                  bytes: 2 * 1024 * 1024,
-                  name: 'Semester_Assignment_2MB.pdf',
-                  icon: Icons.picture_as_pdf,
-                ),
-                _buildBenchmarkChip(
-                  label: '10 MB Codebase (ZIP)',
-                  bytes: 10 * 1024 * 1024,
-                  name: 'Lab_Project_Codebase_10MB.zip',
-                  icon: Icons.folder_zip,
-                ),
-                _buildBenchmarkChip(
-                  label: '25 MB Lecture Video (MP4)',
-                  bytes: 25 * 1024 * 1024,
-                  name: 'Recorded_Lecture_25MB.mp4',
-                  icon: Icons.movie_outlined,
-                ),
-                _buildBenchmarkChip(
-                  label: '50 MB Research Dataset (ZIP)',
-                  bytes: 50 * 1024 * 1024,
-                  name: 'Research_Dataset_50MB.zip',
-                  icon: Icons.storage_rounded,
-                ),
-              ],
+            _buildPresetTile(
+              label: 'Recorded Lecture (MP4)',
+              sizeStr: '25 MB · High-Speed Wi-Fi',
+              bytes: 25 * 1024 * 1024,
+              name: 'Recorded_Lecture_25MB.mp4',
+              icon: Icons.movie_outlined,
+              color: Colors.blueAccent,
             ),
-            const SizedBox(height: 16),
-            Text(
-              'DISCOVERED DEVICE STORAGE FILES',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: isDark ? Colors.white60 : Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: widget.discoveredFiles.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.folder_open_rounded, size: 40, color: Colors.grey.withValues(alpha: 0.6)),
-                            const SizedBox(height: 8),
-                            Text(
-                              'No documents found in local app directories',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white60 : Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Use one of the instant benchmark datasets above or Pick Media from your gallery.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 11, color: Colors.grey.withValues(alpha: 0.8)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: widget.discoveredFiles.length,
-                      itemBuilder: (ctx, idx) {
-                        final file = widget.discoveredFiles[idx];
-                        final filename = file.path.split(Platform.pathSeparator).last;
-                        final size = file.lengthSync();
-                        return ListTile(
-                          leading: Icon(_iconForExtension(file.path), color: AppColors.primary),
-                          title: Text(filename, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            size >= 1024 * 1024
-                                ? '${(size / (1024 * 1024)).toStringAsFixed(2)} MB'
-                                : '${(size / 1024).toStringAsFixed(1)} KB',
-                          ),
-                          onTap: () => widget.onFileSelected(file, filename, size),
-                        );
-                      },
-                    ),
+            _buildPresetTile(
+              label: 'Research Dataset (ZIP)',
+              sizeStr: '50 MB · High-Speed Wi-Fi',
+              bytes: 50 * 1024 * 1024,
+              name: 'Research_Dataset_50MB.zip',
+              icon: Icons.storage_rounded,
+              color: Colors.purpleAccent,
             ),
           ],
         ],
@@ -1405,17 +1980,27 @@ class _DocumentPickerSheetState extends State<_DocumentPickerSheet> {
     );
   }
 
-  Widget _buildBenchmarkChip({
+  Widget _buildPresetTile({
     required String label,
+    required String sizeStr,
     required int bytes,
     required String name,
     required IconData icon,
+    required Color color,
   }) {
-    return ActionChip(
-      avatar: Icon(icon, size: 16, color: AppColors.primary),
-      label: Text(label, style: const TextStyle(fontSize: 11)),
-      onPressed: () => _generateAndSelect(filename: name, sizeBytes: bytes),
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 22),
+      ),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+      subtitle: Text(sizeStr, style: const TextStyle(fontSize: 11)),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+      onTap: () => _generateAndSelect(filename: name, sizeBytes: bytes),
     );
   }
 }
-

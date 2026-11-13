@@ -11,3 +11,6 @@ firebase_credentials.json
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# User-uploaded media
+uploads/

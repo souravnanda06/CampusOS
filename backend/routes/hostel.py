@@ -443,3 +443,167 @@ def get_all_allocations():
         results.append(d)
 
     return jsonify(results), 200
+
+
+@hostel_bp.route('/hostel/admin/assets', methods=['GET'])
+def get_all_hostel_assets():
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff', 'warden']:
+        return jsonify({"message": "Forbidden: Admin privileges required"}), 403
+
+    assets = HostelAsset.query.order_by(HostelAsset.hostel_name, HostelAsset.room_number).all()
+    student_ids = {a.assigned_student_id for a in assets if a.assigned_student_id}
+    students_by_id = {}
+    if student_ids:
+        for s in User.query.filter(User.id.in_(student_ids)).all():
+            students_by_id[s.id] = s
+
+    results = []
+    for asset in assets:
+        d = asset.to_dict()
+        st = students_by_id.get(asset.assigned_student_id)
+        if st:
+            d["studentName"] = st.name
+            d["registrationNumber"] = st.registration_number
+        results.append(d)
+
+    return jsonify(results), 200
+
+
+@hostel_bp.route('/hostel/admin/assets', methods=['POST'])
+def create_hostel_asset():
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff', 'warden']:
+        return jsonify({"message": "Forbidden: Admin privileges required"}), 403
+
+    data = request.json or {}
+    hostel_name = (data.get('hostelName') or '').strip()
+    room_number = (data.get('roomNumber') or '').strip()
+    asset_code = (data.get('assetCode') or '').strip().upper()
+    asset_name = (data.get('assetName') or '').strip()
+    condition = (data.get('condition') or 'GOOD').strip().upper()
+
+    if not hostel_name or not room_number or not asset_code or not asset_name:
+        return jsonify({"message": "hostelName, roomNumber, assetCode, and assetName are required"}), 400
+
+    if HostelAsset.query.filter_by(asset_code=asset_code).first():
+        return jsonify({"message": f"Asset code '{asset_code}' already exists"}), 409
+
+    asset = HostelAsset(
+        hostel_name=hostel_name,
+        room_number=room_number,
+        asset_code=asset_code,
+        asset_name=asset_name,
+        condition=condition,
+        assigned_student_id=data.get('assignedStudentId') or None,
+        installed_date=datetime.date.today().isoformat(),
+        last_inspected_at=datetime.datetime.now().isoformat(),
+    )
+    db.session.add(asset)
+    db.session.add(RequestAudit(
+        entity_type='HOSTEL_ASSET',
+        entity_id=asset.id,
+        actor_id=requester.id,
+        action='CREATED',
+        remarks=f"Added {asset_name} ({asset_code}) to {hostel_name} Room {room_number}",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+
+    return jsonify({
+        "message": "Hostel asset added successfully",
+        "asset": asset.to_dict()
+    }), 201
+
+
+@hostel_bp.route('/hostel/admin/allocations', methods=['POST'])
+def upsert_hostel_allocation():
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff', 'warden']:
+        return jsonify({"message": "Forbidden: Admin privileges required"}), 403
+
+    data = request.json or {}
+    student_id = data.get('studentId')
+    hostel_name = (data.get('hostelName') or '').strip()
+    room_number = (data.get('roomNumber') or '').strip()
+    bed_number = (data.get('bedNumber') or '').strip()
+    block = (data.get('block') or '').strip()
+    occupancy_type = (data.get('occupancyType') or 'DOUBLE').strip().upper()
+
+    if not student_id or not hostel_name or not room_number:
+        return jsonify({"message": "studentId, hostelName, and roomNumber are required"}), 400
+
+    student = User.query.get(student_id)
+    if not student:
+        return jsonify({"message": "Student not found"}), 404
+
+    alloc = HostelAllocation.query.filter_by(student_id=student_id).first()
+    if alloc:
+        alloc.hostel_name = hostel_name
+        alloc.block = block or alloc.block
+        alloc.room_number = room_number
+        alloc.bed_number = bed_number
+        alloc.occupancy_type = occupancy_type
+        alloc.status = 'ACTIVE'
+        alloc.allocated_at = datetime.datetime.now().isoformat()
+        action_name = 'TRANSFERRED'
+    else:
+        alloc = HostelAllocation(
+            student_id=student_id,
+            hostel_name=hostel_name,
+            block=block,
+            room_number=room_number,
+            bed_number=bed_number,
+            occupancy_type=occupancy_type,
+            status='ACTIVE',
+        )
+        db.session.add(alloc)
+        db.session.flush()
+        action_name = 'ALLOCATED'
+
+    db.session.add(RequestAudit(
+        entity_type='HOSTEL_ALLOCATION',
+        entity_id=alloc.id,
+        actor_id=requester.id,
+        action=action_name,
+        remarks=f"{action_name} {student.name} to {hostel_name} Rm {room_number} Bed {bed_number}",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+
+    return jsonify({
+        "message": f"Hostel room {action_name.lower()} successfully",
+        "allocation": {**alloc.to_dict(), "studentName": student.name, "registrationNumber": student.registration_number}
+    }), 200
+
+
+@hostel_bp.route('/hostel/admin/allocations/<id>/vacate', methods=['POST'])
+def vacate_hostel_allocation(id):
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['admin', 'staff', 'warden']:
+        return jsonify({"message": "Forbidden: Admin privileges required"}), 403
+
+    alloc = HostelAllocation.query.get(id)
+    if not alloc:
+        return jsonify({"message": "Allocation not found"}), 404
+
+    alloc.status = 'VACATED'
+    db.session.add(RequestAudit(
+        entity_type='HOSTEL_ALLOCATION',
+        entity_id=alloc.id,
+        actor_id=requester.id,
+        action='VACATED',
+        remarks=f"Vacated {alloc.hostel_name} Rm {alloc.room_number} Bed {alloc.bed_number}",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+
+    return jsonify({"message": "Hostel bed vacated", "allocation": alloc.to_dict()}), 200

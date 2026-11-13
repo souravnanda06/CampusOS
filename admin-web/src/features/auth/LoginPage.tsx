@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { ShieldCheck, Lock, Mail, AlertCircle, ArrowRight } from "lucide-react"
+import { ShieldCheck, Lock, Mail, AlertCircle, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "./AuthContext"
@@ -23,8 +23,9 @@ export function LoginPage() {
   const location = useLocation()
   const { toast } = useToast()
   const [authError, setAuthError] = React.useState<string | null>(null)
+  const [showPassword, setShowPassword] = React.useState(false)
 
-  const from = (location.state as any)?.from?.pathname || "/"
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/"
 
   React.useEffect(() => {
     if (isAuthenticated) {
@@ -35,7 +36,6 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -55,14 +55,10 @@ export function LoginPage() {
         type: "success",
       })
       navigate(from, { replace: true })
-    } catch (err: any) {
-      setAuthError(err.message || "Invalid institutional credentials.")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Invalid institutional credentials."
+      setAuthError(msg)
     }
-  }
-
-  const fillQuickCredentials = (email: string, password = "Admin@1234") => {
-    setValue("email", email)
-    setValue("password", password)
   }
 
   return (
@@ -76,7 +72,7 @@ export function LoginPage() {
               CampusOS Control Plane
             </h1>
             <p className="text-xs text-muted-foreground">
-              Unified Institutional Administration & Operations
+              Unified Institutional Administration &amp; Operations
             </p>
           </div>
         </div>
@@ -119,13 +115,21 @@ export function LoginPage() {
                 <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   {...register("password")}
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  className="pl-9 h-9 text-xs"
+                  className="pl-9 pr-9 h-9 text-xs"
                   error={!!errors.password}
                   disabled={isSubmitting}
                   autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
               {errors.password && (
                 <p className="text-[11px] text-destructive">{errors.password.message}</p>
@@ -142,29 +146,11 @@ export function LoginPage() {
             </Button>
           </form>
 
-          {/* Institutional Note & Development Quick Fill */}
-          <div className="pt-2 border-t border-border/60 text-center space-y-2">
+          {/* Institutional Access Notice */}
+          <div className="pt-2 border-t border-border/60 text-center">
             <p className="text-[11px] text-muted-foreground">
-              Institutional accounts are provisioned by Campus Administration.
+              Restricted to Dean, Admin, Warden, Faculty, Security, and Mess Staff accounts.
             </p>
-            <div className="flex items-center justify-center gap-2 pt-1 text-[11px]">
-              <span className="text-muted-foreground">Quick test:</span>
-              <button
-                type="button"
-                onClick={() => fillQuickCredentials("admin@campusos.edu", "Admin@1234")}
-                className="font-medium text-primary hover:underline"
-              >
-                Dean Admin
-              </button>
-              <span className="text-muted-foreground/40">•</span>
-              <button
-                type="button"
-                onClick={() => fillQuickCredentials("warden@campusos.edu", "Warden@1234")}
-                className="font-medium text-primary hover:underline"
-              >
-                Chief Warden
-              </button>
-            </div>
           </div>
         </div>
 

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  openwa:
+    image: ghcr.io/rmyndharis/openwa:latest
+    container_name: campusos-openwa
+    restart: unless-stopped
+    ports:
+      - "2785:2785"
+    environment:
+      - PORT=2785
+      - NODE_ENV=production
+      # Engine options: 'baileys' (recommended: lightweight, fast, no Chromium needed) or 'whatsapp-web.js'
+      - WA_ENGINE=baileys
+      # Database storage for sessions and credentials
+      - DB_TYPE=sqlite
+      - DB_SQLITE_PATH=/app/data/openwa.db
+      # Webhook URL to deliver incoming WhatsApp messages back into CampusOS Copilot
+      - WEBHOOK_URL=http://host.docker.internal:5000/api/whatsapp/webhook
+      - WEBHOOK_EVENTS=message.received
+    volumes:
+      - ./openwa_data:/app/data
+    extra_hosts:
+      # Allows the container to communicate with CampusOS Flask running on the host machine
+      - "host.docker.internal:host-gateway"

@@ -11,6 +11,7 @@ import '../../auth/services/auth_service.dart';
 import '../../shared/services/session_service.dart';
 import '../../router/app_routes.dart';
 import '../../data/syllabus/syllabus_data.dart';
+import '../../student/services/passport_location_service.dart';
 
 class CreateSessionScreen extends StatefulWidget {
   const CreateSessionScreen({Key? key}) : super(key: key);
@@ -129,6 +130,13 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     try {
       UserModel? teacher = _authService.currentUser;
 
+      // Attempt high-accuracy GPS capture for 20m radius location-based attendance
+      PassportLocationSnapshot? locationSnap;
+      try {
+        locationSnap = await const PassportLocationService()
+            .captureSnapshot(timeout: const Duration(seconds: 2));
+      } catch (_) {}
+
       String sessionId = await _sessionService.createSession(
         name: _selectedSubject!,
         instructorName: teacher?.name ?? "Unknown Teacher",
@@ -139,6 +147,9 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
         startTime: DateTime.now(),
         endTime: DateTime.now().add(const Duration(minutes: 60)),
         txPowerLevel: _selectedPower,
+        latitude: locationSnap?.latitude,
+        longitude: locationSnap?.longitude,
+        radiusMeters: 20.0,
       );
 
       await _saveToken();
@@ -159,6 +170,9 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
         location: _locationController.text.trim(),
         isActive: true,
         txPowerLevel: _selectedPower,
+        latitude: locationSnap?.latitude,
+        longitude: locationSnap?.longitude,
+        radiusMeters: 20.0,
       );
 
       if (!mounted) return;

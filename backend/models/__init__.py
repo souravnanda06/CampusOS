@@ -8,6 +8,7 @@ from models.notice import Notice
 from models.notification import NotificationDelivery, DeviceToken
 from models.mess import MessMenu, MessMeal, MessFeedback, MealEntry, SUPPORTED_FEEDBACK_CATEGORIES
 from models.passport import DeviceIdentityKey, DeviceCertificate
+from models.mesh_chat import MeshChannel, MeshMessage, MeshModerationFlag, MeshAccountRestriction
 from models.expansion import (
     DocumentRequest,
     FeeRecord,
@@ -18,6 +19,17 @@ from models.expansion import (
     AssetIssue,
     VisitorRequest,
     SUPPORTED_DOCUMENT_TYPES
+)
+from models.career import (
+    PlacementDrive,
+    OpportunityListing,
+    PlacementApplication,
+    StudentCareerProfile,
+    DRIVE_STATUSES,
+    APPLICATION_STATUSES,
+    EMPLOYMENT_TYPES,
+    WORK_MODES,
+    EXPERIENCE_LEVELS
 )
 from models.schema import init_db
 
@@ -42,6 +54,10 @@ __all__ = [
     'SUPPORTED_FEEDBACK_CATEGORIES',
     'DeviceIdentityKey',
     'DeviceCertificate',
+    'MeshChannel',
+    'MeshMessage',
+    'MeshModerationFlag',
+    'MeshAccountRestriction',
     'DocumentRequest',
     'FeeRecord',
     'ClassUpdate',
@@ -51,5 +67,14 @@ __all__ = [
     'AssetIssue',
     'VisitorRequest',
     'SUPPORTED_DOCUMENT_TYPES',
+    'PlacementDrive',
+    'OpportunityListing',
+    'PlacementApplication',
+    'StudentCareerProfile',
+    'DRIVE_STATUSES',
+    'APPLICATION_STATUSES',
+    'EMPLOYMENT_TYPES',
+    'WORK_MODES',
+    'EXPERIENCE_LEVELS',
     'init_db'
 ]

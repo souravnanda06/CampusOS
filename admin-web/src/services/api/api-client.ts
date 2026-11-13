@@ -19,7 +19,10 @@ interface RequestOptions extends RequestInit {
   timeoutMs?: number
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api"
+const DEFAULT_DEPLOYED_BACKEND = "https://campusos.pythonanywhere.com"
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? "/api" : DEFAULT_DEPLOYED_BACKEND)
 
 class ApiClient {
   private baseUrl: string
@@ -53,8 +56,11 @@ class ApiClient {
     const url = this.buildUrl(endpoint, params)
 
     const headers = new Headers(customHeaders)
-    if (!headers.has("Content-Type") && !(fetchOpts.body instanceof FormData)) {
-      headers.set("Content-Type", "application/json")
+    const method = (fetchOpts.method || "GET").toUpperCase()
+    if (method !== "GET" && method !== "HEAD") {
+      if (!headers.has("Content-Type") && !(fetchOpts.body instanceof FormData)) {
+        headers.set("Content-Type", "application/json")
+      }
     }
     if (!headers.has("Accept")) {
       headers.set("Accept", "application/json")

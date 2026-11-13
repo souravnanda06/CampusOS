@@ -34,7 +34,7 @@ export function ActionVisitorDialog({ request, action, open, onOpenChange }: Act
     onSuccess: (data) => {
       toast({
         title: `Visitor Pass ${action === "APPROVE" ? "Approved" : "Rejected"}`,
-        description: `Pass for ${data.request.visitor_name} (${data.request.relation}) processed.`,
+        description: `Pass for ${data.request.visitorName} (${data.request.relation}) processed.`,
         type: "success",
       })
       queryClient.invalidateQueries({ queryKey: ["visitors"] })
@@ -61,7 +61,7 @@ export function ActionVisitorDialog({ request, action, open, onOpenChange }: Act
             {isReject ? "Reject Visitor Pass" : "Approve Visitor Gate Pass"}
           </DialogTitle>
           <DialogDescription>
-            {request.visitor_name} visiting {request.studentName} for "{request.purpose}".
+            {request.visitorName} visiting {request.studentName || "resident"} for &quot;{request.purpose}&quot;.
           </DialogDescription>
         </DialogHeader>
 

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { useSearchParams, useParams } from "react-router-dom"
+import { useSearchParams, useParams, useNavigate } from "react-router-dom"
 import { ColumnDef } from "@tanstack/react-table"
 import { PageHeader } from "@/components/ui/page-header"
 import { DataTable } from "@/components/data-table/data-table"
@@ -11,20 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { useToast } from "@/components/ui/toast"
 import { ComplaintDetailSheet } from "./components/complaint-detail-sheet"
-import { complaintsApi, AdminComplaint, RecurringCluster } from "./api/complaints-api"
-import { formatDate, formatRelativeTime } from "@/lib/utils"
+import { RecurringClusterSheet } from "./components/recurring-cluster-sheet"
+import { complaintsApi, AdminComplaint } from "./api/complaints-api"
+import { formatRelativeTime } from "@/lib/utils"
 import {
   AlertCircle,
   Clock,
   Repeat,
-  MapPin,
   ExternalLink,
   Flame,
-  CheckCircle2,
-  Filter,
   ShieldCheck,
   Zap,
-  TrendingUp,
   AlertTriangle,
   RotateCw,
 } from "lucide-react"
@@ -32,23 +29,23 @@ import {
 export function ComplaintsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { id: routeComplaintId } = useParams()
+  const navigate = useNavigate()
 
   const [selectedComplaintId, setSelectedComplaintId] = React.useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [selectedRecurrenceId, setSelectedRecurrenceId] = React.useState<string | null>(null)
+  const [clusterSheetOpen, setClusterSheetOpen] = React.useState(false)
   const [isEvaluating, setIsEvaluating] = React.useState(false)
   const { toast } = useToast()
 
-  React.useEffect(() => {
-    if (routeComplaintId) {
-      setSelectedComplaintId(routeComplaintId)
-      setSheetOpen(true)
-    }
-  }, [routeComplaintId])
+  const activeComplaintId = selectedComplaintId || routeComplaintId || null
+  const isDetailOpen = sheetOpen || !!routeComplaintId
 
   const statusParam = searchParams.get("status") || "ALL"
   const priorityParam = searchParams.get("priority") || "ALL"
   const categoryParam = searchParams.get("category") || "ALL"
   const ageingParam = searchParams.get("ageing") === "true"
+  const tabParam = searchParams.get("tab") || "all"
 
   const {
     data: complaints = [],
@@ -66,7 +63,6 @@ export function ComplaintsPage() {
       }),
   })
 
-  // Slingshot Executive Metrics
   const {
     data: slingshotData,
     isLoading: isSlingshotLoading,
@@ -76,7 +72,6 @@ export function ComplaintsPage() {
     queryFn: complaintsApi.getSlingshotDashboard,
   })
 
-  // Recurring clusters
   const { data: recurringClusters = [], isLoading: isRecurringLoading } = useQuery({
     queryKey: ["admin", "complaints", "recurring"],
     queryFn: complaintsApi.getRecurringClusters,
@@ -88,14 +83,14 @@ export function ComplaintsPage() {
       const res = await complaintsApi.evaluateSlingshot()
       await Promise.all([refetch(), refetchSlingshot()])
       toast({
-        title: "⚡ SLA Slingshot Evaluated",
-        description: `Evaluated ${res.evaluatedCount} active tickets. ${res.escalatedToTier2Count} escalated to Tier 2 (Warden Alert), ${res.escalatedToTier3Count} escalated to Tier 3 (Dean Slingshot + ₹500 Vendor Penalty).`,
+        title: "SLA Slingshot Evaluated",
+        description: `Evaluated ${res.evaluatedCount} active tickets. ${res.escalatedToTier2Count} escalated to Tier 2, ${res.escalatedToTier3Count} escalated to Tier 3 (₹500 Vendor Penalty).`,
         type: "success",
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Evaluation Failed",
-        description: err?.response?.data?.error || err.message || "Failed to trigger SLA Slingshot evaluation",
+        description: err instanceof Error ? err.message : "Failed to trigger SLA Slingshot evaluation",
         type: "error",
       })
     } finally {
@@ -106,6 +101,16 @@ export function ComplaintsPage() {
   const handleRowClick = (complaint: AdminComplaint) => {
     setSelectedComplaintId(complaint.id)
     setSheetOpen(true)
+  }
+
+  const handleDetailOpenChange = (open: boolean) => {
+    setSheetOpen(open)
+    if (!open) {
+      setSelectedComplaintId(null)
+      if (routeComplaintId) {
+        navigate("/complaints", { replace: true })
+      }
+    }
   }
 
   const handleStatusFilterChange = (val: string) => {
@@ -135,6 +140,41 @@ export function ComplaintsPage() {
     else next.set("ageing", "true")
     setSearchParams(next)
   }
+
+  const handleTabChange = (val: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (val === "all") next.delete("tab")
+    else next.set("tab", val)
+    setSearchParams(next, { replace: true })
+  }
+
+  // Ageing brackets & OTP verified count computed from live tickets
+  const metrics = React.useMemo(() => {
+    let under24h = 0
+    let day1to3 = 0
+    let day3to7 = 0
+    let over7d = 0
+    let otpVerified = 0
+
+    for (const c of complaints) {
+      if (c.otpVerifiedAt || c.status === "RESOLVED" || c.status === "CLOSED") {
+        otpVerified++
+      }
+      if (["PENDING", "ASSIGNED", "IN_PROGRESS", "REOPENED"].includes(c.status)) {
+        const hrs = c.ageHours ?? 0
+        if (hrs < 24) under24h++
+        else if (hrs <= 72) day1to3++
+        else if (hrs <= 168) day3to7++
+        else over7d++
+      }
+    }
+    return { under24h, day1to3, day3to7, over7d, otpVerified }
+  }, [complaints])
+
+  const categories = React.useMemo(
+    () => Array.from(new Set(complaints.map((c) => c.category).filter(Boolean))).sort(),
+    [complaints]
+  )
 
   const columns: ColumnDef<AdminComplaint>[] = [
     {
@@ -299,7 +339,7 @@ export function ComplaintsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Complaints Control Desk"
-        description="Operational incident triage, institutional assignment, Proof-of-Fix OTP closure verification, and automated SLA Slingshot escalation."
+        description="Operational incident triage, institutional assignment, Proof-of-Fix OTP closure verification, ageing brackets, and SLA Slingshot escalation."
         badge={
           <span className="text-xs font-mono text-muted-foreground">
             {complaints.length} Total Complaints
@@ -320,20 +360,20 @@ export function ComplaintsPage() {
         }
       />
 
-      {/* Proof-of-Fix & SLA Slingshot Executive Metrics Bar */}
+      {/* Executive Metrics Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="rounded-xl border border-emerald-500/30 bg-card p-4 space-y-1 relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Proof-of-Fix Handshake</span>
+            <span className="text-xs font-medium text-muted-foreground">OTP Verified Closures</span>
             <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <ShieldCheck className="h-4 w-4" />
             </span>
           </div>
           <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-            100% Locked
+            {metrics.otpVerified} / {complaints.length}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            2-Way Mutual OTP required for closure
+            2-Way Mutual OTP handshake enforced
           </p>
         </div>
 
@@ -390,7 +430,27 @@ export function ComplaintsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="all" className="space-y-4">
+      {/* Active Ageing Brackets Strip (mirrors Flutter AdminAnalyticsScreen) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-medium">&lt; 24 Hours</span>
+          <span className="font-mono text-base font-bold text-blue-600 dark:text-blue-400">{metrics.under24h}</span>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-medium">1–3 Days</span>
+          <span className="font-mono text-base font-bold text-amber-600 dark:text-amber-400">{metrics.day1to3}</span>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-medium">3–7 Days</span>
+          <span className="font-mono text-base font-bold text-orange-600 dark:text-orange-400">{metrics.day3to7}</span>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-medium">7+ Days</span>
+          <span className="font-mono text-base font-bold text-rose-600 dark:text-rose-400">{metrics.over7d}</span>
+        </div>
+      </div>
+
+      <Tabs value={tabParam} onValueChange={handleTabChange} className="space-y-4">
         <TabsList className="bg-muted/60">
           <TabsTrigger value="all" className="text-xs gap-1.5">
             <AlertCircle className="h-3.5 w-3.5" />
@@ -406,7 +466,6 @@ export function ComplaintsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ALL COMPLAINTS TAB */}
         <TabsContent value="all" className="space-y-4">
           <DataTable
             columns={columns}
@@ -414,14 +473,12 @@ export function ComplaintsPage() {
             isLoading={isLoading}
             error={error}
             onRetry={refetch}
-            searchPlaceholder="Search complaints by title, location or ID..."
-            searchColumnId="title"
+            searchPlaceholder="Search complaints by title, location, category or ID..."
             onRowClick={handleRowClick}
             emptyTitle="No Complaints Found"
             emptyDescription="There are no active complaint tickets matching your selected status and priority filters."
             toolbarSlot={
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Status filter */}
                 <Select value={statusParam} onValueChange={handleStatusFilterChange}>
                   <SelectTrigger className="w-32 h-8 text-xs bg-card">
                     <SelectValue placeholder="Status" />
@@ -438,7 +495,6 @@ export function ComplaintsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Priority filter */}
                 <Select value={priorityParam} onValueChange={handlePriorityFilterChange}>
                   <SelectTrigger className="w-28 h-8 text-xs bg-card">
                     <SelectValue placeholder="Priority" />
@@ -452,7 +508,22 @@ export function ComplaintsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Ageing toggle */}
+                {categories.length > 0 && (
+                  <Select value={categoryParam} onValueChange={handleCategoryFilterChange}>
+                    <SelectTrigger className="w-32 h-8 text-xs bg-card">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Categories</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
                 <Button
                   variant={ageingParam ? "destructive" : "outline"}
                   size="sm"
@@ -467,7 +538,6 @@ export function ComplaintsPage() {
           />
         </TabsContent>
 
-        {/* SLA SLINGSHOT TAB */}
         <TabsContent value="slingshot" className="space-y-4">
           <div className="rounded-xl border border-rose-500/20 bg-card p-5 space-y-4">
             <div className="flex items-center justify-between">
@@ -554,16 +624,15 @@ export function ComplaintsPage() {
           </div>
         </TabsContent>
 
-        {/* RECURRING CLUSTERS TAB */}
         <TabsContent value="recurring" className="space-y-4">
           <div className="rounded-xl border border-border/80 bg-card p-5 space-y-4">
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
                 <Repeat className="h-4 w-4 text-primary" />
-                Recurring Complaint Patterns & Hotspots
+                Recurring Complaint Patterns &amp; Hotspots
               </h2>
               <p className="text-xs text-muted-foreground">
-                Automated clustering of repeated complaints at the same campus facility or room
+                Deterministic clustering of repeated complaints at the same campus facility — click any pattern to inspect linked tickets.
               </p>
             </div>
 
@@ -578,16 +647,28 @@ export function ComplaintsPage() {
                 {recurringClusters.map((cluster) => (
                   <div
                     key={cluster.recurrenceId}
-                    className="py-3.5 flex items-center justify-between gap-4 text-xs hover:bg-muted/20 px-2 rounded-lg"
+                    onClick={() => {
+                      setSelectedRecurrenceId(cluster.recurrenceId)
+                      setClusterSheetOpen(true)
+                    }}
+                    className="py-3.5 flex items-center justify-between gap-4 text-xs hover:bg-muted/30 px-2 rounded-lg cursor-pointer transition-colors"
                   >
                     <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">
                           {cluster.location || "General Location"}
                         </span>
                         <Badge variant="outline" className="font-mono text-[10px]">
                           {cluster.category}
                         </Badge>
+                        {cluster.escalationLevel && (
+                          <Badge
+                            variant={cluster.escalationLevel === "HIGH" ? "destructive" : "warning"}
+                            className="text-[10px] font-mono"
+                          >
+                            {cluster.escalationLevel}
+                          </Badge>
+                        )}
                         <Badge
                           variant={cluster.recurrenceStatus === "ACTIVE" ? "destructive" : "success"}
                           className="text-[10px]"
@@ -600,11 +681,14 @@ export function ComplaintsPage() {
                       </p>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <span className="text-base font-bold font-mono text-foreground">
-                        {cluster.complaintCount}
-                      </span>
-                      <p className="text-[10px] text-muted-foreground">Repeat Incidents</p>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className="text-base font-bold font-mono text-foreground">
+                          {cluster.complaintCount}
+                        </span>
+                        <p className="text-[10px] text-muted-foreground">Repeat Incidents</p>
+                      </div>
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
                   </div>
                 ))}
@@ -618,11 +702,17 @@ export function ComplaintsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Complaint Detail Sheet */}
       <ComplaintDetailSheet
-        complaintId={selectedComplaintId}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        complaintId={activeComplaintId}
+        open={isDetailOpen}
+        onOpenChange={handleDetailOpenChange}
+      />
+
+      <RecurringClusterSheet
+        recurrenceId={selectedRecurrenceId}
+        open={clusterSheetOpen}
+        onOpenChange={setClusterSheetOpen}
+        onSelectComplaint={handleRowClick}
       />
     </div>
   )

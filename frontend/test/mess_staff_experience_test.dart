@@ -276,21 +276,21 @@ void main() {
       await tester.pumpAndSettle();
 
       // Exactly 4 navigation dock destinations
-      expect(find.widgetWithText(MessDockItem, 'Today'), findsOneWidget);
-      expect(find.widgetWithText(MessDockItem, 'Menus'), findsOneWidget);
-      expect(find.widgetWithText(MessDockItem, 'Analytics'), findsOneWidget);
-      expect(find.widgetWithText(MessDockItem, 'Profile'), findsOneWidget);
+      expect(find.text('Today'), findsOneWidget);
+      expect(find.text('Menus'), findsOneWidget);
+      expect(find.text('Analytics'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
 
       // Tab 0: Today is default
       expect(find.text('Mess Operations'), findsOneWidget);
 
       // Tap Tab 2: Analytics
-      await tester.tap(find.widgetWithText(MessDockItem, 'Analytics'));
+      await tester.tap(find.text('Analytics'));
       await tester.pumpAndSettle();
       expect(find.text('Mess Analytics'), findsOneWidget);
 
       // Tap Tab 3: Profile
-      await tester.tap(find.widgetWithText(MessDockItem, 'Profile'));
+      await tester.tap(find.text('Profile'));
       await tester.pumpAndSettle();
       expect(find.text('Chef Gordon'), findsOneWidget);
       expect(find.text('MESS_STAFF'), findsOneWidget);

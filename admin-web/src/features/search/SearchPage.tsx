@@ -24,12 +24,10 @@ export const SearchPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryParam = searchParams.get('q') || '';
-  const [inputValue, setInputValue] = React.useState(queryParam);
+  const [draftQuery, setDraftQuery] = React.useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = React.useState<string>('ALL');
 
-  React.useEffect(() => {
-    setInputValue(queryParam);
-  }, [queryParam]);
+  const inputValue = draftQuery !== null ? draftQuery : queryParam;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['global-search', queryParam],
@@ -39,17 +37,19 @@ export const SearchPage: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim()) {
-      setSearchParams({ q: inputValue.trim() });
+    const trimmed = inputValue.trim();
+    if (trimmed) {
+      setDraftQuery(null);
+      setSearchParams({ q: trimmed });
     }
   };
 
-  const getAdminRouteForCategory = (category: string) => {
-    switch (category.toLowerCase()) {
+  const getAdminRouteForItem = (item: SearchResultItem) => {
+    switch (item.category.toLowerCase()) {
       case 'document':
         return '/documents';
       case 'complaint':
-        return '/complaints';
+        return `/complaints/${item.id}`;
       case 'fee record':
       case 'fee':
         return '/fees';
@@ -89,7 +89,7 @@ export const SearchPage: React.FC = () => {
     }
   };
 
-  const results = data?.results || [];
+  const results = React.useMemo(() => data?.results ?? [], [data]);
   const categories = ['ALL', ...Array.from(new Set(results.map((r) => r.category)))];
 
   const filteredResults = React.useMemo(() => {
@@ -101,7 +101,7 @@ export const SearchPage: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="Global Institutional Search"
-        subtitle="Universal index across notices, documents, complaints, fee ledgers, hostel records, and visitor passes."
+        description="Universal index across notices, documents, complaints, fee ledgers, hostel records, and visitor passes."
       />
 
       {/* Search Input Bar */}
@@ -110,7 +110,7 @@ export const SearchPage: React.FC = () => {
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => setDraftQuery(e.target.value)}
             placeholder="Search students, document types, complaint keywords, notices, fee receipts..."
             className="pl-9 h-10 text-sm"
           />
@@ -174,7 +174,7 @@ export const SearchPage: React.FC = () => {
           {filteredResults.map((item: SearchResultItem) => (
             <div
               key={`${item.category}-${item.id}`}
-              onClick={() => navigate(getAdminRouteForCategory(item.category))}
+              onClick={() => navigate(getAdminRouteForItem(item))}
               className="group flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/40 hover:shadow-xs transition-all cursor-pointer"
             >
               <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -196,9 +196,7 @@ export const SearchPage: React.FC = () => {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {item.subtitle}
-                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{item.subtitle}</p>
                 </div>
               </div>
 

@@ -182,13 +182,15 @@ def get_authenticated_requester():
         request.args.get('requesterId') or
         request.args.get('studentId')
     )
-    if not requester_id and request.is_json and request.json:
-        requester_id = (
-            request.json.get('userId') or
-            request.json.get('requesterId') or
-            request.json.get('actorId') or
-            request.json.get('createdBy')
-        )
+    if not requester_id and request.is_json:
+        body = request.get_json(silent=True) or {}
+        if isinstance(body, dict):
+            requester_id = (
+                body.get('userId') or
+                body.get('requesterId') or
+                body.get('actorId') or
+                body.get('createdBy')
+            )
     if not requester_id:
         return None, None
 

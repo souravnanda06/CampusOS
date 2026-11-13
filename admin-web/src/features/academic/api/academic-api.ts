@@ -2,22 +2,24 @@ import { apiClient } from "@/services/api/api-client"
 
 export interface ClassUpdateItem {
   id: string
-  course_code: string
-  course_name: string
-  update_type: "CANCELLED" | "RESCHEDULED" | "ROOM_CHANGE" | "TIME_CHANGE" | "ANNOUNCEMENT"
-  original_date: string
-  original_time?: string
-  original_room?: string
-  new_date?: string
-  new_time?: string
-  new_room?: string
-  message: string
-  affected_branch?: string
-  affected_year?: number
-  affected_section?: string
-  teacher_id: string
+  teacherId: string
   teacherName?: string
-  created_at: string
+  courseCode: string
+  courseName: string
+  updateType: "CANCELLED" | "RESCHEDULED" | "ROOM_CHANGE" | "TIME_CHANGE" | "ANNOUNCEMENT" | string
+  originalDate?: string | null
+  originalTime?: string | null
+  originalRoom?: string | null
+  newDate?: string | null
+  newTime?: string | null
+  newRoom?: string | null
+  message: string
+  affectedBranch?: string | null
+  affectedYear?: number | null
+  affectedSection?: string | null
+  status: "ACTIVE" | "CANCELLED" | "ARCHIVED" | string
+  createdAt: string
+  updatedAt?: string | null
 }
 
 export interface TodayUpdatesSummary {
@@ -50,5 +52,10 @@ export const academicApi = {
     apiClient.post<{ message: string; update: ClassUpdateItem; affectedStudentsCount: number }>(
       "/academic-updates",
       payload
+    ),
+  cancelUpdate: (id: string) =>
+    apiClient.post<{ message: string; update: ClassUpdateItem }>(
+      `/academic-updates/${id}/cancel`,
+      {}
     ),
 }

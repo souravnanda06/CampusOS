@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { PageHeader } from "@/components/ui/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -7,24 +7,24 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ErrorState } from "@/components/ui/error-state"
 import { StatusIndicator } from "@/components/ui/status-indicator"
+import { useToast } from "@/components/ui/toast"
 import { CreateUpdateDialog } from "./components/create-update-dialog"
-import { academicApi, ClassUpdateItem } from "./api/academic-api"
-import { formatDate, formatRelativeTime } from "@/lib/utils"
+import { academicApi } from "./api/academic-api"
+import { formatRelativeTime } from "@/lib/utils"
 import {
-  GraduationCap,
   Plus,
-  AlertTriangle,
   Calendar,
   Clock,
   MapPin,
   Megaphone,
-  Info,
-  CalendarX,
   FileSpreadsheet,
+  Ban,
 } from "lucide-react"
 
 export function AcademicPage() {
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
 
   const {
     data: updates = [],
@@ -39,6 +39,17 @@ export function AcademicPage() {
   const { data: summary } = useQuery({
     queryKey: ["academic", "today-summary"],
     queryFn: academicApi.getTodaySummary,
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => academicApi.cancelUpdate(id),
+    onSuccess: () => {
+      addToast({ title: "Update Cancelled", message: "Academic notice marked as cancelled.", type: "success" })
+      queryClient.invalidateQueries({ queryKey: ["academic"] })
+    },
+    onError: (err: Error) => {
+      addToast({ title: "Cancel Failed", message: err.message || "Could not cancel update.", type: "error" })
+    },
   })
 
   const getBadgeVariant = (type: string) => {
@@ -131,59 +142,84 @@ export function AcademicPage() {
               />
             ) : updates && updates.length > 0 ? (
               <div className="space-y-3">
-                {updates.map((update) => (
-                  <div
-                    key={update.id}
-                    className="p-4 rounded-xl border border-border/70 bg-card hover:border-border transition-colors space-y-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-bold text-foreground">
-                            {update.course_code}
-                          </span>
-                          <span className="text-xs font-semibold text-foreground">
-                            {update.course_name}
-                          </span>
-                          <Badge variant={getBadgeVariant(update.update_type)} className="text-[10px]">
-                            {update.update_type.replace("_", " ")}
-                          </Badge>
+                {updates.map((update) => {
+                  const typeLabel = (update.updateType || "ANNOUNCEMENT").replace(/_/g, " ")
+                  const isActive = (update.status || "ACTIVE") === "ACTIVE"
+                  return (
+                    <div
+                      key={update.id}
+                      className="p-4 rounded-xl border border-border/70 bg-card hover:border-border transition-colors space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs font-bold text-foreground">
+                              {update.courseCode}
+                            </span>
+                            <span className="text-xs font-semibold text-foreground">
+                              {update.courseName}
+                            </span>
+                            <Badge variant={getBadgeVariant(update.updateType)} className="text-[10px]">
+                              {typeLabel}
+                            </Badge>
+                            {!isActive && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {update.status}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Instructor: {update.teacherName || "Assigned Faculty"} • Target: {update.affectedBranch || "All Branches"}
+                            {update.affectedYear ? ` • Year ${update.affectedYear}` : ""}
+                            {update.affectedSection ? ` • Sec ${update.affectedSection}` : ""}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Instructor: {update.teacherName || "Assigned Faculty"} • Target: {update.affected_branch || "All Branches"}
-                        </p>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] text-muted-foreground font-mono">
+                            {formatRelativeTime(update.createdAt)}
+                          </span>
+                          {isActive && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                              loading={cancelMutation.isPending && cancelMutation.variables === update.id}
+                              onClick={() => cancelMutation.mutate(update.id)}
+                            >
+                              <Ban className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
-                      <span className="text-[11px] text-muted-foreground font-mono shrink-0">
-                        {formatRelativeTime(update.created_at)}
-                      </span>
+                      <p className="text-xs text-foreground bg-muted/20 p-2.5 rounded-lg border border-border/40 leading-relaxed">
+                        {update.message}
+                      </p>
+
+                      {(update.newDate || update.newTime || update.newRoom) && (
+                        <div className="flex items-center gap-4 text-[11px] text-muted-foreground font-mono bg-muted/40 p-2 rounded-md flex-wrap">
+                          {update.newDate && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-primary" /> New Date: {update.newDate}
+                            </span>
+                          )}
+                          {update.newTime && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-primary" /> New Time: {update.newTime}
+                            </span>
+                          )}
+                          {update.newRoom && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-primary" /> New Room: {update.newRoom}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-
-                    <p className="text-xs text-foreground bg-muted/20 p-2.5 rounded-lg border border-border/40 leading-relaxed">
-                      {update.message}
-                    </p>
-
-                    {(update.new_date || update.new_time || update.new_room) && (
-                      <div className="flex items-center gap-4 text-[11px] text-muted-foreground font-mono bg-muted/40 p-2 rounded-md">
-                        {update.new_date && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3 text-primary" /> New Date: {update.new_date}
-                          </span>
-                        )}
-                        {update.new_time && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-primary" /> New Time: {update.new_time}
-                          </span>
-                        )}
-                        {update.new_room && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-primary" /> New Room: {update.new_room}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <EmptyState

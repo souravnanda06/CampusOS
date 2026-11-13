@@ -107,6 +107,58 @@ enum EmergencyRelayPriority {
   }
 }
 
+/// Audible siren pattern transmitted alongside emergency flares & SOS beacons.
+enum EmergencySirenPattern {
+  none('n', 'Silent', 'Notification only without audible siren'),
+  alertChime('a', 'Alert Chime', 'High-visibility attention chime pulse'),
+  wail('w', 'Civil Siren', 'Rising & falling campus-wide disaster siren'),
+  yelp('y', 'Rapid Pulse', 'Urgent rapid sweep for fire or evacuation'),
+  lockdown('l', 'Lockdown Horn', 'Dual-tone klaxon horn for security alerts');
+
+  final String code;
+  final String label;
+  final String description;
+  const EmergencySirenPattern(this.code, this.label, this.description);
+
+  static EmergencySirenPattern fromCode(String? code) {
+    if (code == null || code.trim().isEmpty) {
+      return EmergencySirenPattern.none;
+    }
+    final normalized = code.trim().toLowerCase();
+    for (final p in EmergencySirenPattern.values) {
+      if (p.code == normalized || p.name.toLowerCase() == normalized) {
+        return p;
+      }
+    }
+    return EmergencySirenPattern.wail;
+  }
+
+  /// Picks the default siren pattern suited to an emergency [severity] and [category].
+  static EmergencySirenPattern defaultFor({
+    required EmergencySeverity severity,
+    required EmergencyCategory category,
+  }) {
+    switch (category) {
+      case EmergencyCategory.fire:
+      case EmergencyCategory.evacuation:
+        return EmergencySirenPattern.yelp;
+      case EmergencyCategory.security:
+        return EmergencySirenPattern.lockdown;
+      case EmergencyCategory.cyclone:
+      case EmergencyCategory.weather:
+      case EmergencyCategory.hostel:
+      case EmergencyCategory.power:
+      case EmergencyCategory.other:
+        if (severity == EmergencySeverity.critical) {
+          return EmergencySirenPattern.wail;
+        }
+        return severity == EmergencySeverity.warning
+            ? EmergencySirenPattern.alertChime
+            : EmergencySirenPattern.none;
+    }
+  }
+}
+
 /// Local transmission and delivery status for an emergency alert.
 enum EmergencyDeliveryState {
   queued('Queued'),
@@ -189,6 +241,12 @@ class EmergencyAlert {
   /// Whether the local user has explicitly acknowledged reading this emergency alert.
   final bool isAcknowledged;
 
+  /// Whether this emergency alert triggers an audible siren on receiving devices.
+  final bool sirenEnabled;
+
+  /// Audible siren pattern to play when [sirenEnabled] is true.
+  final EmergencySirenPattern sirenPattern;
+
   const EmergencyAlert({
     required this.alertId,
     required this.issuerDeviceId,
@@ -210,7 +268,13 @@ class EmergencyAlert {
     this.verificationState = 'TRUSTED',
     this.relayCount = 1,
     this.isAcknowledged = false,
+    this.sirenEnabled = false,
+    this.sirenPattern = EmergencySirenPattern.none,
   });
+
+  /// Whether this alert carries an active audible siren directive.
+  bool get hasSiren =>
+      sirenEnabled && sirenPattern != EmergencySirenPattern.none;
 
   /// Whether this alert is still active (not yet expired).
   bool isActive([DateTime? now]) {
@@ -251,6 +315,8 @@ class EmergencyAlert {
     String? verificationState,
     int? relayCount,
     bool? isAcknowledged,
+    bool? sirenEnabled,
+    EmergencySirenPattern? sirenPattern,
   }) {
     return EmergencyAlert(
       alertId: alertId ?? this.alertId,
@@ -273,6 +339,8 @@ class EmergencyAlert {
       verificationState: verificationState ?? this.verificationState,
       relayCount: relayCount ?? this.relayCount,
       isAcknowledged: isAcknowledged ?? this.isAcknowledged,
+      sirenEnabled: sirenEnabled ?? this.sirenEnabled,
+      sirenPattern: sirenPattern ?? this.sirenPattern,
     );
   }
 }
@@ -293,6 +361,8 @@ class EmergencyPayload {
   final EmergencyRelayPriority priority;
   final DateTime expiresAt;
   final String? issuerUserId;
+  final bool sirenEnabled;
+  final EmergencySirenPattern sirenPattern;
 
   EmergencyPayload({
     required this.title,
@@ -303,6 +373,8 @@ class EmergencyPayload {
     required this.priority,
     required this.expiresAt,
     this.issuerUserId,
+    this.sirenEnabled = false,
+    this.sirenPattern = EmergencySirenPattern.none,
   }) {
     final trimmedTitle = title.trim();
     final trimmedMessage = message.trim();
@@ -340,6 +412,15 @@ class EmergencyPayload {
     };
     if (issuerUserId != null && issuerUserId!.isNotEmpty) {
       map['u'] = issuerUserId;
+    }
+    if (sirenEnabled) {
+      map['sr'] = 1;
+      map['sp'] = sirenPattern == EmergencySirenPattern.none
+          ? EmergencySirenPattern.defaultFor(
+              severity: severity,
+              category: category,
+            ).code
+          : sirenPattern.code;
     }
     return Uint8List.fromList(utf8.encode(jsonEncode(map)));
   }
@@ -412,6 +493,18 @@ class EmergencyPayload {
       isUtc: true,
     );
 
+    final rawSiren = decoded['sr'];
+    final bool sirenEnabled = rawSiren == true || rawSiren == 1 || rawSiren == '1';
+    final rawSirenPattern = decoded['sp']?.toString();
+    final EmergencySirenPattern sirenPattern = sirenEnabled
+        ? (rawSirenPattern != null
+            ? EmergencySirenPattern.fromCode(rawSirenPattern)
+            : EmergencySirenPattern.defaultFor(
+                severity: severity,
+                category: category,
+              ))
+        : EmergencySirenPattern.none;
+
     return EmergencyPayload(
       title: rawTitle,
       message: rawMessage,
@@ -421,6 +514,8 @@ class EmergencyPayload {
       priority: priority,
       expiresAt: expiresAt,
       issuerUserId: decoded['u']?.toString(),
+      sirenEnabled: sirenEnabled,
+      sirenPattern: sirenPattern,
     );
   }
 }

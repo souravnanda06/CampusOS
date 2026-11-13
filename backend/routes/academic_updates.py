@@ -195,3 +195,28 @@ def get_today_updates_summary():
         "rescheduledCount": len(rescheduled),
         "updates": [u.to_dict() for u in today_updates]
     }), 200
+
+
+@academic_updates_bp.route('/academic-updates/<id>/cancel', methods=['POST'])
+def cancel_class_update(id):
+    requester, err_resp = get_authenticated_requester()
+    if err_resp:
+        return err_resp
+    if not requester or requester.role not in ['teacher', 'faculty', 'admin', 'staff']:
+        return jsonify({"message": "Forbidden: Admin or faculty privileges required"}), 403
+
+    update = ClassUpdate.query.get(id)
+    if not update:
+        return jsonify({"message": "Class update not found"}), 404
+
+    update.status = 'CANCELLED'
+    db.session.add(RequestAudit(
+        entity_type='CLASS_UPDATE',
+        entity_id=update.id,
+        actor_id=requester.id,
+        action='CANCELLED',
+        remarks=f"Archived/cancelled class update for {update.course_code}",
+        ip_address=request.remote_addr,
+    ))
+    db.session.commit()
+    return jsonify({"message": "Class update archived", "update": update.to_dict()}), 200

@@ -8,25 +8,22 @@ import { Button } from "@/components/ui/button"
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { SessionDetailSheet } from "./components/session-detail-sheet"
 import { attendanceApi, LectureSession } from "./api/attendance-api"
-import { formatDate, formatRelativeTime } from "@/lib/utils"
-import { CalendarCheck, Radio, User, MapPin, ExternalLink, RefreshCw } from "lucide-react"
+import { formatDate } from "@/lib/utils"
+import { Radio, ExternalLink, RefreshCw } from "lucide-react"
 
 export function AttendancePage() {
   const [selectedSession, setSelectedSession] = React.useState<LectureSession | null>(null)
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
-  // Fetch active sessions
   const {
     data: activeSessions = [],
-    isLoading: isActiveLoading,
     refetch: refetchActive,
   } = useQuery({
     queryKey: ["attendance", "sessions", "active"],
     queryFn: attendanceApi.getActiveSessions,
-    refetchInterval: 10000, // Poll active sessions every 10s
+    refetchInterval: 10000,
   })
 
-  // Fetch session history
   const {
     data: historySessions = [],
     isLoading: isHistoryLoading,
@@ -49,18 +46,18 @@ export function AttendancePage() {
       cell: ({ row }) => (
         <div className="space-y-0.5">
           <p className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
-            {row.original.subject}
+            {row.original.subject || row.original.name}
           </p>
           <p className="text-[11px] text-muted-foreground">{row.original.name}</p>
         </div>
       ),
     },
     {
-      accessorKey: "instructor_name",
+      accessorKey: "instructorName",
       header: "Instructor",
       cell: ({ row }) => (
         <span className="text-xs text-foreground font-medium">
-          {row.getValue("instructor_name")}
+          {row.original.instructorName || row.original.instructor_name || "Faculty"}
         </span>
       ),
     },
@@ -69,33 +66,33 @@ export function AttendancePage() {
       header: "Class / Cohort",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {row.original.branch} Yr {row.original.year}
+          {row.original.branch || "Gen"} Yr {row.original.year || "—"}
         </span>
       ),
     },
     {
-      accessorKey: "attendance_count",
+      accessorKey: "attendanceCount",
       header: "Present Count",
       cell: ({ row }) => (
         <span className="font-mono text-xs font-semibold text-foreground">
-          {row.getValue("attendance_count") || 0} students
+          {row.original.attendanceCount ?? row.original.attendance_count ?? 0} students
         </span>
       ),
     },
     {
-      accessorKey: "start_time",
+      accessorKey: "startTime",
       header: "Session Time",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatDate(row.getValue("start_time"))}
+          {formatDate(row.original.startTime || row.original.start_time)}
         </span>
       ),
     },
     {
-      accessorKey: "is_active",
+      accessorKey: "isActive",
       header: "State",
       cell: ({ row }) => {
-        const active = row.getValue("is_active") as boolean
+        const active = !!(row.original.isActive ?? row.original.is_active)
         return (
           <StatusIndicator
             status={active ? "success" : "neutral"}
@@ -129,7 +126,7 @@ export function AttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Attendance Operations"
-        description="Live lecture monitoring, cryptographic session nonces, and historical class attendance records."
+        description="Live lecture monitoring, cryptographic session nonces, force-stop controls, and historical attendance records."
         badge={
           activeSessions.length > 0 ? (
             <StatusIndicator
@@ -157,7 +154,6 @@ export function AttendancePage() {
         }
       />
 
-      {/* Active Recording Sessions Banner */}
       {activeSessions.length > 0 && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.03] p-5 space-y-3">
           <div className="flex items-center justify-between">
@@ -177,15 +173,19 @@ export function AttendancePage() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-xs font-semibold text-foreground">{sess.subject}</h3>
-                    <p className="text-[11px] text-muted-foreground">{sess.instructor_name}</p>
+                    <h3 className="text-xs font-semibold text-foreground">{sess.subject || sess.name}</h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      {sess.instructorName || sess.instructor_name}
+                    </p>
                   </div>
                   <Badge variant="success" className="text-[10px]">LIVE</Badge>
                 </div>
                 <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
-                  <span className="text-muted-foreground text-[11px]">{sess.branch} Yr {sess.year}</span>
+                  <span className="text-muted-foreground text-[11px]">
+                    {sess.branch} Yr {sess.year}
+                  </span>
                   <span className="font-mono font-semibold text-foreground">
-                    {sess.attendance_count || 0} Attending
+                    {sess.attendanceCount ?? sess.attendance_count ?? 0} Attending
                   </span>
                 </div>
               </div>
@@ -194,11 +194,10 @@ export function AttendancePage() {
         </div>
       )}
 
-      {/* Session History Table */}
       <div className="space-y-3">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            Class Attendance Records & History
+            Class Attendance Records &amp; History
           </h2>
           <p className="text-xs text-muted-foreground">
             Audit logs of concluded class sessions and verified student attendance
@@ -211,15 +210,13 @@ export function AttendancePage() {
           isLoading={isHistoryLoading}
           error={historyError}
           onRetry={refetchHistory}
-          searchPlaceholder="Search by subject or instructor..."
-          searchColumnId="subject"
+          searchPlaceholder="Search by subject, instructor, or branch..."
           onRowClick={handleRowClick}
           emptyTitle="No Recorded Sessions"
           emptyDescription="There are no past lecture sessions logged in the attendance system."
         />
       </div>
 
-      {/* Session Detail Sheet */}
       <SessionDetailSheet
         session={selectedSession}
         open={sheetOpen}

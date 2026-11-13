@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../../auth/models/user_model.dart';
 import '../../core/network/api_client.dart';
 import '../models/admin_dashboard_models.dart';
 
@@ -302,6 +303,62 @@ class AdminDashboardService {
       }
     } catch (e) {
       debugPrint("❌ [ADMIN_SERVICE] getRecurringIssueDetail error: $e");
+      rethrow;
+    }
+  }
+
+  Future<List<UserModel>> getPendingStudents({String? requesterId}) async {
+    try {
+      final response = await _apiClient.get(
+        '/admin/students/pending',
+        headers: _headers(requesterId),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((item) => UserModel.fromMap(item as Map<String, dynamic>)).toList();
+      } else {
+        final data = jsonDecode(response.body);
+        throw data['message'] ?? 'Failed to load pending student registrations';
+      }
+    } catch (e) {
+      debugPrint("❌ [ADMIN_SERVICE] getPendingStudents error: $e");
+      rethrow;
+    }
+  }
+
+  Future<UserModel> approveStudent(String studentId, {String? requesterId}) async {
+    try {
+      final response = await _apiClient.post(
+        '/admin/students/$studentId/approve',
+        headers: _headers(requesterId),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return UserModel.fromMap(data['student'] as Map<String, dynamic>);
+      } else {
+        throw data['message'] ?? 'Failed to approve student account';
+      }
+    } catch (e) {
+      debugPrint("❌ [ADMIN_SERVICE] approveStudent error: $e");
+      rethrow;
+    }
+  }
+
+  Future<UserModel> rejectStudent(String studentId, {String? reason, String? requesterId}) async {
+    try {
+      final response = await _apiClient.post(
+        '/admin/students/$studentId/reject',
+        headers: _headers(requesterId),
+        body: {'reason': reason},
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return UserModel.fromMap(data['student'] as Map<String, dynamic>);
+      } else {
+        throw data['message'] ?? 'Failed to reject student registration';
+      }
+    } catch (e) {
+      debugPrint("❌ [ADMIN_SERVICE] rejectStudent error: $e");
       rethrow;
     }
   }

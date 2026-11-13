@@ -358,11 +358,11 @@ class CampusMeshCryptoService implements MeshCryptoService {
       );
     }
 
-    // 5. Lookup sender identity in trust bundle
+    // 5. Lookup sender identity in trust bundle (exact userId or keyId match only)
     PassportTrustIdentity? identity = bundle.findIdentity(packet.senderDeviceId);
     if (identity == null) {
       for (final idEntry in bundle.identities) {
-        if (idEntry.userId == packet.senderDeviceId) {
+        if (idEntry.userId == packet.senderDeviceId || idEntry.keyId == packet.senderDeviceId) {
           identity = idEntry;
           break;
         }

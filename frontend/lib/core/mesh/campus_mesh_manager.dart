@@ -5,6 +5,8 @@ import 'campus_mesh_service.dart';
 import 'mesh_crypto.dart';
 import 'chat/mesh_chat_service.dart';
 import 'chat/mesh_chat_repository.dart';
+import 'chat/mesh_chat_sync_service.dart';
+import '../network/connectivity_service.dart';
 import 'emergency/campus_mesh_emergency_service.dart';
 import 'emergency/mesh_emergency_repository.dart';
 import 'emergency/dispatcher/emergency_dispatcher_service.dart';
@@ -104,8 +106,16 @@ class CampusMeshManager with ChangeNotifier {
 
   /// Initializes the mesh stack with the current user credentials and certified keys.
   Future<void> initialize({UserModel? user}) async {
-    if (_isInitialized && user?.id == _localDeviceId && user?.role == _localRole) {
+    if (_isInitialized && (user == null || (user.id == _localDeviceId && user.role.toLowerCase() == _localRole))) {
       return;
+    }
+
+    // Dispose previous runtime cleanly if re-initializing with an authenticated user
+    if (_isInitialized) {
+      await _peerSubscription?.cancel();
+      _peerSubscription = null;
+      await _chatService?.dispose();
+      await _meshService?.dispose();
     }
 
     if (user != null) {
@@ -117,6 +127,7 @@ class CampusMeshManager with ChangeNotifier {
     // 1. Cryptographic Identity & Trust Services
     final passportCrypto = PassportCryptoService();
     final trustBundleService = PassportTrustBundleService();
+    unawaited(trustBundleService.downloadAndSaveBundle().then((_) {}, onError: (_) {}));
     _cryptoService = CampusMeshCryptoService(
       passportCryptoService: passportCrypto,
       trustBundleService: trustBundleService,
@@ -125,12 +136,14 @@ class CampusMeshManager with ChangeNotifier {
     // 2. Core BLE Mesh Transport Service (M1 & M2)
     _meshService = CampusMeshService(
       localDeviceId: _localDeviceId,
+      localDisplayName: _localDisplayName,
       localRole: _localRole,
       cryptoService: _cryptoService,
+      allowUncertifiedChatPeers: true,
     );
 
-    // 3. Offline P2P Chat Service (M3)
-    final chatRepo = MeshChatRepository.inMemory();
+    // 3. Offline P2P Chat Service (M3) — persistent SQLite + MongoDB cloud sync
+    final chatRepo = MeshChatRepository();
     _chatService = MeshChatService(
       meshService: _meshService!,
       repository: chatRepo,
@@ -138,7 +151,16 @@ class CampusMeshManager with ChangeNotifier {
       trustBundleService: trustBundleService,
       localDisplayName: _localDisplayName,
     );
-    unawaited(_chatService!.initialize());
+    final chatSyncService = MeshChatSyncService(
+      repository: chatRepo,
+      localDeviceId: _localDeviceId,
+      connectivityService: ConnectivityService.instance,
+      onChannelsDiscovered: (channels) async {
+        _chatService?.mergeChannels(channels);
+      },
+    );
+    _chatService!.attachSyncService(chatSyncService);
+    unawaited(_chatService!.initialize().then((_) => chatSyncService.syncPendingAndPull()));
 
     // 4. Disaster Flare Emergency Service (M4)
     final emergencyRepo = MeshEmergencyRepository.inMemory();
@@ -235,9 +257,77 @@ class CampusMeshManager with ChangeNotifier {
     } catch (_) {}
   }
 
+  void _initDefaultsSync() {
+    if (_meshService != null && _airdropService != null) return;
+
+    final passportCrypto = PassportCryptoService();
+    final trustBundleService = PassportTrustBundleService();
+    _cryptoService ??= CampusMeshCryptoService(
+      passportCryptoService: passportCrypto,
+      trustBundleService: trustBundleService,
+    );
+
+    _meshService ??= CampusMeshService(
+      localDeviceId: _localDeviceId,
+      localRole: _localRole,
+      cryptoService: _cryptoService,
+      allowUncertifiedChatPeers: true,
+    );
+
+    if (_chatService == null) {
+      final chatRepo = MeshChatRepository();
+      _chatService = MeshChatService(
+        meshService: _meshService!,
+        repository: chatRepo,
+        cryptoService: _cryptoService,
+        trustBundleService: trustBundleService,
+        localDisplayName: _localDisplayName,
+      );
+    }
+
+    if (_emergencyService == null) {
+      final emergencyRepo = MeshEmergencyRepository.inMemory();
+      _emergencyService = CampusMeshEmergencyService(
+        meshService: _meshService!,
+        repository: emergencyRepo,
+        cryptoService: _cryptoService,
+        trustBundleService: trustBundleService,
+      );
+    }
+
+    if (_airdropService == null) {
+      final airdropRepo = MeshAirDropRepository.inMemory();
+      _airdropService = CampusMeshAirDropService(
+        meshService: _meshService!,
+        repository: airdropRepo,
+        cryptoService: _cryptoService,
+        trustBundleService: trustBundleService,
+      );
+    }
+
+    if (_dispatcherService == null) {
+      final dispatcherRepo = MeshEmergencyDispatcherRepository.inMemory();
+      final auditRepo = EmergencyAuditRepository.inMemory();
+      _dispatcherService = MeshEmergencyDispatcherService(
+        emergencyService: _emergencyService!,
+        dispatcherRepository: dispatcherRepo,
+        auditRepository: auditRepo,
+        meshService: _meshService!,
+        cryptoService: _cryptoService,
+      );
+    }
+
+    _radarService ??= MeshNodeRadarService(liveMeshService: _meshService!);
+    _physicalHarness ??= PhysicalValidationHarnessService(
+      meshService: _meshService!,
+      cryptoService: _cryptoService,
+    );
+  }
+
   void _ensureInitialized() {
+    _initDefaultsSync();
     if (!_isInitialized) {
-      initialize();
+      unawaited(initialize());
     }
   }
 

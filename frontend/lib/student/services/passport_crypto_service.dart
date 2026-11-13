@@ -119,6 +119,9 @@ class PassportCryptoService {
   })  : _storage = storage ?? SecurePassportKeyStorage(),
         _algorithm = algorithm ?? Ed25519();
 
+  /// Returns the underlying storage implementation
+  PassportKeyStorage get storage => _storage;
+
   /// Initializes the service by attempting to restore an existing identity key from storage.
   Future<void> initialize() async {
     try {

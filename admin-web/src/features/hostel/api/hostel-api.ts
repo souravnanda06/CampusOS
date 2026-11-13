@@ -1,29 +1,46 @@
-import { apiClient } from "@/services/api/api-client"
+import { apiClient, ApiError } from "@/services/api/api-client"
 
 export interface HostelAllocationRecord {
   id: string
-  hostel_name: string
-  room_number: string
-  bed_number: string
-  student_id: string
+  studentId: string
+  hostelName: string
+  block?: string | null
+  roomNumber: string
+  bedNumber?: string | null
+  occupancyType?: string | null
+  allocatedAt: string
+  status: "ACTIVE" | "VACATED" | string
+  notes?: string | null
   studentName?: string
   registrationNumber?: string
   branch?: string
   year?: string | number
-  status: string
-  allocated_at: string
+}
+
+export interface HostelAssetItem {
+  id: string
+  hostelName: string
+  roomNumber: string
+  assetCode: string
+  assetName: string
+  condition: "GOOD" | "FAIR" | "DAMAGED" | "MISSING" | "REPLACED" | string
+  assignedStudentId?: string | null
+  installedDate?: string | null
+  lastInspectedAt?: string | null
+  studentName?: string
+  registrationNumber?: string
 }
 
 export interface HostelAssetIssue {
   id: string
-  asset_id: string
-  student_id: string
-  issue_type: "DAMAGED" | "MISSING" | "REPAIR_NEEDED" | "REPLACEMENT_REQUESTED"
+  assetId: string
+  studentId: string
+  issueType: "DAMAGED" | "MISSING" | "REPAIR_NEEDED" | "REPLACEMENT_REQUESTED" | string
   description: string
-  status: "REPORTED" | "ACKNOWLEDGED" | "IN_REPAIR" | "RESOLVED" | "CLOSED"
-  reported_at: string
-  resolved_at?: string | null
-  resolution_notes?: string
+  status: "REPORTED" | "ACKNOWLEDGED" | "IN_REPAIR" | "RESOLVED" | "CLOSED" | string
+  resolutionNotes?: string | null
+  reportedAt: string
+  resolvedAt?: string | null
   assetName?: string
   assetCode?: string
   hostelName?: string
@@ -34,16 +51,37 @@ export interface HostelAssetIssue {
 
 export interface HostelResidentRequest {
   id: string
-  student_id: string
-  request_type: string
+  studentId: string
+  requestType: string
+  preferredHostel?: string | null
+  preferredRoom?: string | null
   reason: string
-  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
-  created_at: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | string
+  wardenId?: string | null
+  wardenRemarks?: string | null
+  createdAt: string
+  updatedAt?: string | null
   studentName?: string
   registrationNumber?: string
   branch?: string
   year?: string | number
-  warden_remarks?: string
+}
+
+export interface UpsertAllocationPayload {
+  studentId: string
+  hostelName: string
+  block?: string
+  roomNumber: string
+  bedNumber?: string
+  occupancyType?: string
+}
+
+export interface CreateAssetPayload {
+  hostelName: string
+  roomNumber: string
+  assetCode: string
+  assetName: string
+  condition?: string
 }
 
 export const hostelApi = {
@@ -58,6 +96,35 @@ export const hostelApi = {
 
   getAllocations: () =>
     apiClient.get<HostelAllocationRecord[]>("/hostel/admin/allocations"),
+
+  upsertAllocation: (payload: UpsertAllocationPayload) =>
+    apiClient.post<{ message: string; allocation: HostelAllocationRecord }>(
+      "/hostel/admin/allocations",
+      payload
+    ),
+
+  vacateAllocation: (id: string) =>
+    apiClient.post<{ message: string; allocation: HostelAllocationRecord }>(
+      `/hostel/admin/allocations/${id}/vacate`,
+      {}
+    ),
+
+  getAssets: async () => {
+    try {
+      return await apiClient.get<HostelAssetItem[]>("/hostel/admin/assets")
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        return []
+      }
+      throw err
+    }
+  },
+
+  createAsset: (payload: CreateAssetPayload) =>
+    apiClient.post<{ message: string; asset: HostelAssetItem }>(
+      "/hostel/admin/assets",
+      payload
+    ),
 
   getAssetIssues: () =>
     apiClient.get<HostelAssetIssue[]>("/hostel/warden/asset-issues"),

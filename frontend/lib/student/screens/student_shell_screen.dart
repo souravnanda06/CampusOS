@@ -13,7 +13,8 @@ import 'requests_screen.dart';
 import 'profile_screen.dart';
 import '../../core/localization/language_provider.dart';
 import '../../core/localization/app_strings.dart';
-import '../../shared/widgets/dock/apple_glass_dock.dart';
+import '../../shared/widgets/dock/app_dock.dart';
+import '../../shared/widgets/copilot/copilot_sheet.dart';
 import '../../core/mesh/campus_mesh_manager.dart';
 
 
@@ -159,26 +160,36 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
               child: IgnorePointer(
                 ignoring: isPassportFullScreen,
                 child: RepaintBoundary(
-                  child: AppleGlassDock(
+                  child: AppDock(
                     currentIndex: _currentIndex,
                     onTap: (index) => _onNavigateToTab(index),
+                    centerAction: AppDockCenterAction(
+                      buttonKey: const Key('campus_ai_dock_student'),
+                      label: 'Campus AI',
+                      onTap: () => CopilotSheet.show(
+                        context,
+                        user: widget.user,
+                        role: 'student',
+                        screenContext: 'student_tab_$_currentIndex',
+                      ),
+                    ),
                     items: [
-                      AppleDockItem(
+                      AppDockItem(
                         icon: Icons.home_outlined,
                         activeIcon: Icons.home_rounded,
                         label: AppStrings.tr('home', lang: lang),
                       ),
-                      AppleDockItem(
+                      AppDockItem(
                         icon: Icons.account_balance_wallet_outlined,
                         activeIcon: Icons.account_balance_wallet_rounded,
                         label: AppStrings.tr('wallet', lang: lang),
                       ),
-                      AppleDockItem(
+                      AppDockItem(
                         icon: Icons.inbox_outlined,
                         activeIcon: Icons.inbox_rounded,
                         label: AppStrings.tr('requests', lang: lang),
                       ),
-                      AppleDockItem(
+                      AppDockItem(
                         icon: Icons.person_outline_rounded,
                         activeIcon: Icons.person_rounded,
                         label: AppStrings.tr('profile', lang: lang),

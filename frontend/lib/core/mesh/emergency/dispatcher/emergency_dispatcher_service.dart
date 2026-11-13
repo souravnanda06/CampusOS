@@ -121,6 +121,8 @@ class MeshEmergencyDispatcherService {
     required String scope,
     Duration duration = const Duration(minutes: 30),
     EmergencyRelayPriority? relayPriority,
+    bool? sendSiren,
+    EmergencySirenPattern? sirenPattern,
   }) async {
     final normalizedScope = scope.trim().toLowerCase();
 
@@ -195,6 +197,8 @@ class MeshEmergencyDispatcherService {
         scope: normalizedScope,
         duration: duration,
         relayPriority: relayPriority,
+        sendSiren: sendSiren,
+        sirenPattern: sirenPattern,
       );
     } catch (e) {
       await _auditRepository.recordEvent(EmergencyAuditEvent(
@@ -254,6 +258,8 @@ class MeshEmergencyDispatcherService {
       acknowledgementCount: 0,
       lastPropagationAt: now,
       signatureVerificationState: 'TRUSTED',
+      sirenEnabled: alert.sirenEnabled,
+      sirenPattern: alert.sirenPattern,
     );
 
     await _dispatcherRepository.saveIncident(incident);
@@ -319,6 +325,7 @@ class MeshEmergencyDispatcherService {
         : cancelPacket;
 
     await _meshService.broadcastPacket(packetToBroadcast);
+    await _emergencyService.stopActiveSiren(alertId: incident.alertId);
 
     // 2. Update repository state
     await _dispatcherRepository.markCancelled(

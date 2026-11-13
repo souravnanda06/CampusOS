@@ -7,6 +7,7 @@ from models.leave import LeaveRequest
 from models.gate_pass import GatePass
 from models.audit import RequestAudit
 from middleware.roles import is_warden
+from services.whatsapp_service import send_leave_approval_alert
 
 leave_bp = Blueprint('leave_bp', __name__)
 
@@ -177,6 +178,22 @@ def action_leave_request(request_id):
         )
         db.session.add(audit)
         db.session.commit()
+
+        if action == 'APPROVE':
+            try:
+                student_user = User.query.get(leave_req.student_id)
+                if student_user and student_user.parent_phone:
+                    gp_id = gp.id if gp else None
+                    send_leave_approval_alert(
+                        parent_phone=student_user.parent_phone,
+                        student_name=student_user.name,
+                        reason=leave_req.reason,
+                        from_date=str(leave_req.start_date),
+                        to_date=str(leave_req.end_date),
+                        gate_pass_code=gp_id
+                    )
+            except Exception:
+                pass
 
         return jsonify({
             "message": f"Leave request {leave_req.status.lower()} successfully",

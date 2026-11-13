@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../models/notice_model.dart';
 import '../../services/notice_service.dart';
+import '../../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 class NoticeDetailSheet extends StatefulWidget {
   final NoticeModel notice;
@@ -289,7 +290,7 @@ class _NoticeDetailSheetState extends State<NoticeDetailSheet> {
               maxHeight: MediaQuery.of(context).size.height * 0.45,
             ),
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: AppleSpringScrollPhysics.always,
               child: Text(
                 _notice.body,
                 style: GoogleFonts.plusJakartaSans(

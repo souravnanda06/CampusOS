@@ -8,6 +8,7 @@ from models.gate_pass import GatePass
 from models.audit import RequestAudit
 from middleware.auth import get_authenticated_security_guard
 from utils.crypto import verify_signed_credential
+from services.whatsapp_service import send_gate_exit_alert, send_gate_entry_alert
 
 security_bp = Blueprint('security_bp', __name__)
 
@@ -429,6 +430,21 @@ def exit_gate_pass(id):
         db.session.add(audit)
         db.session.commit()
 
+        # Dispatch automated WhatsApp transit alert to parent via OpenWA
+        try:
+            student_user = User.query.get(gp.student_id)
+            if student_user and student_user.parent_phone:
+                send_gate_exit_alert(
+                    parent_phone=student_user.parent_phone,
+                    student_name=student_user.name,
+                    reg_no=student_user.registration_number or '',
+                    gate_name=gate_name,
+                    timestamp_str=gp.actual_exit_time,
+                    destination=gp.destination
+                )
+        except Exception:
+            pass
+
         return jsonify({
             "message": "Student exit recorded successfully",
             "resultCode": "EXITED",
@@ -513,6 +529,20 @@ def return_gate_pass(id):
         )
         db.session.add(audit)
         db.session.commit()
+
+        # Dispatch automated WhatsApp transit alert to parent via OpenWA
+        try:
+            student_user = User.query.get(gp.student_id)
+            if student_user and student_user.parent_phone:
+                send_gate_entry_alert(
+                    parent_phone=student_user.parent_phone,
+                    student_name=student_user.name,
+                    reg_no=student_user.registration_number or '',
+                    gate_name=gate_name,
+                    timestamp_str=gp.actual_entry_time
+                )
+        except Exception:
+            pass
 
         return jsonify({
             "message": "Student return recorded successfully",

@@ -9,6 +9,11 @@ import 'package:attendance_app/core/mesh/chat/mesh_chat_delivery_state.dart';
 import 'package:attendance_app/core/mesh/chat/mesh_chat_message.dart';
 import 'package:attendance_app/core/mesh/chat/mesh_chat_repository.dart';
 import 'package:attendance_app/core/mesh/chat/mesh_chat_service.dart';
+import 'package:attendance_app/core/mesh/chat/mesh_chat_sync_service.dart';
+import 'package:attendance_app/core/mesh/chat/mesh_moderation_filter.dart';
+import 'package:attendance_app/core/network/api_client.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:attendance_app/core/mesh/mesh_crypto.dart';
 import 'package:attendance_app/core/mesh/mesh_deduplication_store.dart';
 import 'package:attendance_app/core/mesh/mesh_packet.dart';
@@ -614,6 +619,98 @@ void main() {
       expect(received.text, equals('Check this diagram'));
       expect(received.hasImage, isTrue);
       expect(received.imageBase64, equals(sampleImageBase64));
+    });
+
+    test('TEST 23: Offline moderation blocks critical crime/threat and queues flag', () async {
+      await expectLater(
+        () => aliceChatService.sendMessage(
+          channelId: MeshChatChannel.general.id,
+          text: 'going to plant a b0mb in hostel',
+        ),
+        throwsA(isA<MeshModerationException>()),
+      );
+
+      final pendingFlags = await aliceRepo.getPendingModerationFlags();
+      expect(pendingFlags.length, equals(1));
+      expect(pendingFlags.first.category, equals('CRIME_THREAT'));
+      expect(pendingFlags.first.severity, equals('CRITICAL'));
+
+      final generalMsgs = await aliceRepo.getMessagesForChannel(MeshChatChannel.general.id);
+      expect(generalMsgs, isEmpty);
+    });
+
+    test('TEST 24: Delayed MongoDB sync delivers offline messages when Device B opens channel later', () async {
+      final storedOnServer = <Map<String, dynamic>>[];
+
+      final mockClient = MockClient((req) async {
+        if (req.url.path.endsWith('/mesh-chat/sync') && req.method == 'POST') {
+          final body = jsonDecode(req.body) as Map<String, dynamic>;
+          final msgs = (body['messages'] as List).cast<Map<String, dynamic>>();
+          storedOnServer.addAll(msgs);
+          return http.Response(
+            jsonEncode({
+              'syncedIds': msgs.map((m) => m['messageId']).toList(),
+              'verdicts': {
+                for (final m in msgs)
+                  m['messageId']: {
+                    'moderationStatus': 'CLEAN',
+                    'moderationSeverity': 'NONE',
+                    'flagReasons': [],
+                  }
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path.contains('/mesh-chat/channels/') && req.url.path.endsWith('/messages')) {
+          return http.Response(
+            jsonEncode({
+              'channelId': MeshChatChannel.general.id,
+              'messages': storedOnServer,
+              'count': storedOnServer.length,
+            }),
+            200,
+          );
+        }
+        if (req.url.path.endsWith('/mesh-chat/channels') && req.method == 'GET') {
+          return http.Response(jsonEncode({'channels': []}), 200);
+        }
+        return http.Response('{}', 200);
+      });
+
+      final apiClient = ApiClient(baseUrl: 'http://localhost:5000', client: mockClient);
+      final aliceSync = MeshChatSyncService(
+        repository: aliceRepo,
+        localDeviceId: 'user_alice',
+        apiClient: apiClient,
+      );
+      final bobSync = MeshChatSyncService(
+        repository: bobRepo,
+        localDeviceId: 'user_bob',
+        apiClient: apiClient,
+      );
+
+      aliceChatService.attachSyncService(aliceSync);
+      bobChatService.attachSyncService(bobSync);
+
+      // Alice sends while Bob is completely disconnected (not receiving BLE)
+      final sent = await aliceChatService.sendMessage(
+        channelId: MeshChatChannel.general.id,
+        text: 'Exam postponed to Monday!',
+      );
+      await aliceSync.syncPendingAndPull();
+
+      // Bob opens #general later and pulls from MongoDB
+      final pulled = await bobChatService.pullChannelFromCloud(MeshChatChannel.general.id);
+      expect(pulled, equals(1));
+
+      final bobMessages = await bobRepo.getMessagesForChannel(MeshChatChannel.general.id);
+      expect(bobMessages.length, equals(1));
+      expect(bobMessages.first.messageId, equals(sent.messageId));
+      expect(bobMessages.first.text, equals('Exam postponed to Monday!'));
+
+      await aliceSync.dispose();
+      await bobSync.dispose();
     });
   });
 }

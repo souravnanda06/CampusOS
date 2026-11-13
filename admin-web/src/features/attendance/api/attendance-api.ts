@@ -4,16 +4,23 @@ export interface LectureSession {
   id: string
   name: string
   subject: string
-  instructor_name: string
-  course: string
-  branch: string
-  year: string | number
-  start_time: string
+  instructorName?: string
+  instructor_name?: string
+  course?: string
+  branch?: string
+  year?: string | number
+  startTime?: string
+  start_time?: string
+  endTime?: string
   end_time?: string
   location?: string
-  is_active: boolean
-  attendance_count: number
+  isActive?: boolean
+  is_active?: boolean
+  attendanceCount?: number
+  attendance_count?: number
+  sessionNonce?: string
   session_nonce?: string
+  teacherKeyId?: string
   teacher_key_id?: string
 }
 
@@ -29,13 +36,15 @@ export interface SessionAttendee {
 }
 
 export const attendanceApi = {
-  getActiveSessions: () => apiClient.get<LectureSession[]>("/sessions/active"),
+  getActiveSessions: () => apiClient.get<LectureSession[]>("/sessions/active").catch(() => []),
   getSessionHistory: (instructorName?: string) =>
-    apiClient.get<LectureSession[]>("/sessions/history", {
-      params: instructorName ? { instructorName } : undefined,
-    }).catch(() => []),
+    apiClient
+      .get<LectureSession[]>("/sessions/history", {
+        params: instructorName ? { instructorName } : undefined,
+      })
+      .catch(() => []),
   getSessionAttendance: (sessionId: string) =>
-    apiClient.get<SessionAttendee[]>(`/attendance/session/${sessionId}`),
+    apiClient.get<SessionAttendee[]>(`/attendance/session/${sessionId}`).catch(() => []),
   stopSession: (sessionId: string) =>
     apiClient.post<{ message: string }>(`/sessions/stop/${sessionId}`),
 }

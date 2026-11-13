@@ -15,7 +15,16 @@ import { StatusIndicator } from "@/components/ui/status-indicator"
 import { ConfirmDialog } from "@/components/feedback/confirm-dialog"
 import { useToast } from "@/components/ui/toast"
 import { studentsApi, StudentRecord } from "../api/students-api"
-import { formatDate, formatRelativeTime } from "@/lib/utils"
+import { formatDate, formatRelativeTime, resolveMediaUrl } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import {
   CalendarCheck,
   Shield,
@@ -26,18 +35,25 @@ import {
   RotateCcw,
   CheckCircle2,
   Clock,
+  XCircle,
+  UserCheck,
+  ZoomIn,
 } from "lucide-react"
 
 interface StudentDetailSheetProps {
   student: StudentRecord | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onStudentUpdated?: (updated: StudentRecord) => void
 }
 
-export function StudentDetailSheet({ student, open, onOpenChange }: StudentDetailSheetProps) {
+export function StudentDetailSheet({ student, open, onOpenChange, onStudentUpdated }: StudentDetailSheetProps) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [resetDialogOpen, setResetDialogOpen] = React.useState(false)
+  const [rejectDialogOpen, setRejectDialogOpen] = React.useState(false)
+  const [rejectReason, setRejectReason] = React.useState("")
+  const [photoPreviewOpen, setPhotoPreviewOpen] = React.useState(false)
 
   const studentId = student?.id || ""
 
@@ -93,7 +109,68 @@ export function StudentDetailSheet({ student, open, onOpenChange }: StudentDetai
     },
   })
 
+  // Approve registration mutation
+  const approveMutation = useMutation({
+    mutationFn: () => studentsApi.approveStudent(studentId),
+    onSuccess: (res) => {
+      toast({
+        title: "Account Activated",
+        description: `${student?.name}'s student account is now active and they can sign in.`,
+        type: "success",
+      })
+      queryClient.invalidateQueries({ queryKey: ["admin", "students"] })
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard", "summary"] })
+      onStudentUpdated?.(res.student)
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Approval Failed",
+        description: err.message || "Could not approve student account",
+        type: "error",
+      })
+    },
+  })
+
+  // Reject registration mutation
+  const rejectMutation = useMutation({
+    mutationFn: (reason?: string) => studentsApi.rejectStudent(studentId, reason),
+    onSuccess: (res) => {
+      toast({
+        title: "Registration Rejected",
+        description: `${student?.name}'s registration has been rejected.`,
+        type: "info",
+      })
+      queryClient.invalidateQueries({ queryKey: ["admin", "students"] })
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard", "summary"] })
+      setRejectDialogOpen(false)
+      setRejectReason("")
+      onStudentUpdated?.(res.student)
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Rejection Failed",
+        description: err.message || "Could not reject student registration",
+        type: "error",
+      })
+    },
+  })
+
   if (!student) return null
+
+  const photoSrc = resolveMediaUrl(student.photoUrl)
+  const approvalStatus = (student.approvalStatus || "APPROVED").toUpperCase()
+  const approvalBadgeVariant =
+    approvalStatus === "APPROVED"
+      ? "success"
+      : approvalStatus === "REJECTED"
+      ? "destructive"
+      : "warning"
+  const approvalLabel =
+    approvalStatus === "APPROVED"
+      ? "Approved"
+      : approvalStatus === "REJECTED"
+      ? "Rejected"
+      : "Pending Approval"
 
   return (
     <>
@@ -102,19 +179,46 @@ export function StudentDetailSheet({ student, open, onOpenChange }: StudentDetai
           {/* Header */}
           <div className="p-6 border-b border-border/70 space-y-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-semibold text-foreground">
-                    {student.name}
-                  </h2>
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {student.registrationNumber || "NO-REG"}
-                  </Badge>
+              <div className="flex items-start gap-3.5 min-w-0">
+                {photoSrc ? (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoPreviewOpen(true)}
+                    className="group relative h-14 w-14 shrink-0 rounded-xl overflow-hidden border border-border bg-muted shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    title="Click to inspect registration photo"
+                  >
+                    <img
+                      src={photoSrc}
+                      alt={student.name}
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    <span className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <ZoomIn className="h-4 w-4 text-white" />
+                    </span>
+                  </button>
+                ) : (
+                  <div className="h-14 w-14 shrink-0 rounded-xl border border-border bg-muted/60 flex items-center justify-center text-base font-bold text-muted-foreground">
+                    {student.name?.charAt(0)?.toUpperCase() || "S"}
+                  </div>
+                )}
+
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-semibold text-foreground truncate">
+                      {student.name}
+                    </h2>
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      {student.registrationNumber || "NO-REG"}
+                    </Badge>
+                    <Badge variant={approvalBadgeVariant} className="text-[10px]">
+                      {approvalLabel}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{student.email}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">{student.email}</p>
               </div>
 
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <span className="text-xl font-bold font-mono text-foreground">
                   {student.attendancePercentage ?? analytics?.overallPercentage ?? 0}%
                 </span>
@@ -132,6 +236,24 @@ export function StudentDetailSheet({ student, open, onOpenChange }: StudentDetai
               <span>•</span>
               <span>{student.course || "B.Tech"}</span>
             </div>
+
+            {/* WhatsApp & Guardian Contact Card */}
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
+                <Smartphone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span className="text-muted-foreground">Student WhatsApp:</span>
+                <span className="font-mono font-medium text-foreground truncate">
+                  {student.phone || "Not linked"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
+                <Shield className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <span className="text-muted-foreground">Parent / Guardian:</span>
+                <span className="font-mono font-medium text-foreground truncate">
+                  {student.parentPhone ? `${student.parentPhone}${student.parentName ? ` (${student.parentName})` : ''}` : "Not provided"}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Operational Tabs */}
@@ -146,6 +268,74 @@ export function StudentDetailSheet({ student, open, onOpenChange }: StudentDetai
 
               {/* OVERVIEW TAB */}
               <TabsContent value="overview" className="space-y-5">
+                {/* Account Activation Review Banner */}
+                {approvalStatus !== "APPROVED" && (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <UserCheck className="h-3.5 w-3.5 text-amber-600" />
+                          {approvalStatus === "PENDING"
+                            ? "Student Registration Pending Approval"
+                            : "Registration Rejected"}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {approvalStatus === "PENDING"
+                            ? "Verify the student's uploaded photo and institutional details before activating their account."
+                            : `Rejected${student.rejectionReason ? `: ${student.rejectionReason}` : "."}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {photoSrc && (
+                      <div className="flex items-center gap-3 p-2.5 rounded-lg bg-card border border-border/70">
+                        <img
+                          src={photoSrc}
+                          alt={`${student.name} registration photo`}
+                          className="h-16 w-16 rounded-lg object-cover border border-border cursor-pointer"
+                          onClick={() => setPhotoPreviewOpen(true)}
+                        />
+                        <div className="space-y-1 text-xs">
+                          <p className="font-medium text-foreground">Submitted Verification Photo</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {student.createdAt ? `Submitted ${formatRelativeTime(student.createdAt)}` : "Uploaded during registration"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setPhotoPreviewOpen(true)}
+                            className="text-[11px] font-medium text-primary hover:underline"
+                          >
+                            Inspect full photo
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs gap-1.5"
+                        disabled={approveMutation.isPending || rejectMutation.isPending}
+                        onClick={() => approveMutation.mutate()}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {approveMutation.isPending ? "Activating..." : "Approve & Activate"}
+                      </Button>
+                      {approvalStatus === "PENDING" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5 text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/10"
+                          disabled={approveMutation.isPending || rejectMutation.isPending}
+                          onClick={() => setRejectDialogOpen(true)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Reject
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Subject Attendance Breakdown */}
                 <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -409,6 +599,64 @@ export function StudentDetailSheet({ student, open, onOpenChange }: StudentDetai
           await resetDeviceMutation.mutateAsync()
         }}
       />
+
+      {/* Reject Student Registration Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Registration</DialogTitle>
+            <DialogDescription>
+              Provide an optional reason for rejecting {student.name}&apos;s registration request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Input
+              placeholder="e.g. Photo is unclear or registration number does not match"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRejectDialogOpen(false)}
+              disabled={rejectMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={rejectMutation.isPending}
+              onClick={() => rejectMutation.mutate(rejectReason.trim() || undefined)}
+            >
+              {rejectMutation.isPending ? "Rejecting..." : "Confirm Rejection"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Preview Lightbox */}
+      {photoSrc && (
+        <Dialog open={photoPreviewOpen} onOpenChange={setPhotoPreviewOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{student.name}</DialogTitle>
+              <DialogDescription>
+                {student.registrationNumber || student.email} — Registration Photo
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-hidden rounded-xl border border-border bg-muted/40">
+              <img
+                src={photoSrc}
+                alt={student.name}
+                className="w-full max-h-[65vh] object-contain"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   )
 }

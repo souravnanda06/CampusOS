@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   Dialog,
@@ -12,28 +13,52 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { noticesApi, type CreateNoticePayload, type NoticeCategory, type NoticePriority, type NoticeTargetType, type NoticeStatus } from '../api/notices-api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  noticesApi,
+  type CreateNoticePayload,
+  type Notice,
+  type NoticeCategory,
+  type NoticePriority,
+  type NoticeTargetType,
+  type NoticeStatus,
+} from '../api/notices-api';
 import { useToast } from '@/components/ui/toast';
 import { Megaphone, AlertCircle } from 'lucide-react';
 
-const noticeSchema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters'),
-  body: z.string().min(5, 'Notice body must be at least 5 characters'),
-  category: z.enum(['GENERAL', 'ACADEMIC', 'EXAM', 'HOSTEL', 'MESS', 'SECURITY', 'EVENT', 'FEE', 'OTHER'] as const),
-  priority: z.enum(['NORMAL', 'HIGH', 'URGENT'] as const),
-  target_type: z.enum(['ALL', 'BRANCH', 'YEAR', 'STUDENT'] as const),
-  target_value: z.string().optional(),
-  expires_at: z.string().optional(),
-  status: z.enum(['PUBLISHED', 'DRAFT'] as const),
-}).refine(data => {
-  if (['BRANCH', 'YEAR', 'STUDENT'].includes(data.target_type) && !data.target_value?.trim()) {
-    return false;
-  }
-  return true;
-}, {
-  message: 'Target value is required when targeting by Branch, Year, or Student',
-  path: ['target_value'],
-});
+const noticeSchema = z
+  .object({
+    title: z.string().min(3, 'Title must be at least 3 characters'),
+    body: z.string().min(5, 'Notice body must be at least 5 characters'),
+    category: z.enum([
+      'GENERAL',
+      'ACADEMIC',
+      'EXAM',
+      'HOSTEL',
+      'MESS',
+      'SECURITY',
+      'EVENT',
+      'FEE',
+      'OTHER',
+    ] as const),
+    priority: z.enum(['NORMAL', 'HIGH', 'URGENT'] as const),
+    target_type: z.enum(['ALL', 'BRANCH', 'YEAR', 'STUDENT'] as const),
+    target_value: z.string().optional(),
+    expires_at: z.string().optional(),
+    status: z.enum(['PUBLISHED', 'DRAFT'] as const),
+  })
+  .refine(
+    (data) => {
+      if (['BRANCH', 'YEAR', 'STUDENT'].includes(data.target_type) && !data.target_value?.trim()) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Target value is required when targeting by Branch, Year, or Student',
+      path: ['target_value'],
+    }
+  );
 
 type FormValues = z.infer<typeof noticeSchema>;
 
@@ -41,21 +66,23 @@ interface CreateNoticeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  noticeToEdit?: Notice | null;
 }
 
 export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
   open,
   onOpenChange,
   onSuccess,
+  noticeToEdit,
 }) => {
   const { addToast } = useToast();
-  const [submitting, setSubmitting] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     reset,
     formState: { errors },
   } = useForm<FormValues>({
@@ -72,13 +99,35 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
     },
   });
 
-  const selectedTargetType = watch('target_type');
+  React.useEffect(() => {
+    if (!open) return;
+    if (noticeToEdit) {
+      reset({
+        title: noticeToEdit.title,
+        body: noticeToEdit.body || noticeToEdit.content || '',
+        category: noticeToEdit.category,
+        priority: noticeToEdit.priority,
+        target_type: noticeToEdit.targetType,
+        target_value: noticeToEdit.targetValue || '',
+        expires_at: noticeToEdit.expiresAt ? noticeToEdit.expiresAt.slice(0, 10) : '',
+        status: noticeToEdit.status === 'DRAFT' ? 'DRAFT' : 'PUBLISHED',
+      });
+    } else {
+      reset({
+        title: '',
+        body: '',
+        category: 'GENERAL',
+        priority: 'NORMAL',
+        target_type: 'ALL',
+        target_value: '',
+        expires_at: '',
+        status: 'PUBLISHED',
+      });
+    }
+  }, [open, noticeToEdit, reset]);
 
-  const onSubmit = async (data: FormValues) => {
-    setSubmitting(true);
-    setFormError(null);
-
-    try {
+  const mutation = useMutation({
+    mutationFn: (data: FormValues) => {
       const payload: CreateNoticePayload = {
         title: data.title.trim(),
         body: data.body.trim(),
@@ -89,23 +138,31 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
         expires_at: data.expires_at || undefined,
         status: data.status as NoticeStatus,
       };
-
-      await noticesApi.createNotice(payload);
+      if (noticeToEdit) {
+        return noticesApi.updateNotice(noticeToEdit.id, payload);
+      }
+      return noticesApi.createNotice(payload);
+    },
+    onSuccess: (_, variables) => {
       addToast({
         type: 'success',
-        title: 'Notice Created',
-        message: data.status === 'PUBLISHED' ? 'Notice published and queued for push notification dispatch.' : 'Notice saved as draft.',
+        title: noticeToEdit ? 'Notice Updated' : 'Notice Created',
+        message:
+          variables.status === 'PUBLISHED'
+            ? 'Notice published and queued for push notification dispatch.'
+            : 'Notice saved as draft.',
       });
+      queryClient.invalidateQueries({ queryKey: ['notices'] });
       reset();
       onOpenChange(false);
       onSuccess();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to publish notice';
-      setFormError(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+  });
+
+  const selectedCategory = watch('category');
+  const selectedPriority = watch('priority');
+  const selectedTargetType = watch('target_type');
+  const selectedStatus = watch('status');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,18 +170,22 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
         <DialogHeader>
           <div className="flex items-center gap-2 text-primary">
             <Megaphone className="h-5 w-5" />
-            <DialogTitle>Broadcast Notice</DialogTitle>
+            <DialogTitle>{noticeToEdit ? 'Edit Notice' : 'Broadcast Notice'}</DialogTitle>
           </div>
           <DialogDescription>
-            Publish an institutional broadcast to students, specific cohorts, or departments.
+            {noticeToEdit
+              ? 'Modify notice details, target audience, or publication status.'
+              : 'Publish an institutional broadcast to students, specific cohorts, or departments.'}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
-          {formError && (
+        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 py-2">
+          {mutation.error && (
             <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-xs text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{formError}</span>
+              <span>
+                {mutation.error instanceof Error ? mutation.error.message : 'Failed to save notice'}
+              </span>
             </div>
           )}
 
@@ -136,9 +197,7 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
               placeholder="e.g., Mid-Term Examination Schedule Announcement"
               {...register('title')}
             />
-            {errors.title && (
-              <p className="text-xs text-destructive">{errors.title.message}</p>
-            )}
+            {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -146,34 +205,44 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Category
               </label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                {...register('category')}
+              <Select
+                value={selectedCategory}
+                onValueChange={(v) => setValue('category', v as FormValues['category'])}
               >
-                <option value="GENERAL">General</option>
-                <option value="ACADEMIC">Academic</option>
-                <option value="EXAM">Exam</option>
-                <option value="HOSTEL">Hostel</option>
-                <option value="MESS">Mess</option>
-                <option value="SECURITY">Security</option>
-                <option value="EVENT">Event</option>
-                <option value="FEE">Fee</option>
-                <option value="OTHER">Other</option>
-              </select>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GENERAL">General</SelectItem>
+                  <SelectItem value="ACADEMIC">Academic</SelectItem>
+                  <SelectItem value="EXAM">Exam</SelectItem>
+                  <SelectItem value="HOSTEL">Hostel</SelectItem>
+                  <SelectItem value="MESS">Mess</SelectItem>
+                  <SelectItem value="SECURITY">Security</SelectItem>
+                  <SelectItem value="EVENT">Event</SelectItem>
+                  <SelectItem value="FEE">Fee</SelectItem>
+                  <SelectItem value="OTHER">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Priority
               </label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                {...register('priority')}
+              <Select
+                value={selectedPriority}
+                onValueChange={(v) => setValue('priority', v as FormValues['priority'])}
               >
-                <option value="NORMAL">Normal</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent (Immediate Push)</option>
-              </select>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NORMAL">Normal</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                  <SelectItem value="URGENT">Urgent (Immediate Push)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -182,28 +251,38 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Target Audience
               </label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                {...register('target_type')}
+              <Select
+                value={selectedTargetType}
+                onValueChange={(v) => setValue('target_type', v as FormValues['target_type'])}
               >
-                <option value="ALL">All Students (Campus-wide)</option>
-                <option value="BRANCH">Specific Branch</option>
-                <option value="YEAR">Specific Academic Year</option>
-                <option value="STUDENT">Single Student ID</option>
-              </select>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Students (Campus-wide)</SelectItem>
+                  <SelectItem value="BRANCH">Specific Branch</SelectItem>
+                  <SelectItem value="YEAR">Specific Academic Year</SelectItem>
+                  <SelectItem value="STUDENT">Single Student ID</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Status
               </label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                {...register('status')}
+              <Select
+                value={selectedStatus}
+                onValueChange={(v) => setValue('status', v as FormValues['status'])}
               >
-                <option value="PUBLISHED">Publish Immediately</option>
-                <option value="DRAFT">Save as Draft</option>
-              </select>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PUBLISHED">Publish Immediately</SelectItem>
+                  <SelectItem value="DRAFT">Save as Draft</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -220,8 +299,8 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
                   selectedTargetType === 'BRANCH'
                     ? 'CSE'
                     : selectedTargetType === 'YEAR'
-                    ? '3'
-                    : 'User UUID'
+                      ? '3'
+                      : 'User UUID'
                 }
                 {...register('target_value')}
               />
@@ -241,19 +320,14 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
               placeholder="Enter full notice body text. Plain text or markdown supported..."
               {...register('body')}
             />
-            {errors.body && (
-              <p className="text-xs text-destructive">{errors.body.message}</p>
-            )}
+            {errors.body && <p className="text-xs text-destructive">{errors.body.message}</p>}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Expiry Date (Optional)
             </label>
-            <Input
-              type="date"
-              {...register('expires_at')}
-            />
+            <Input type="date" {...register('expires_at')} />
           </div>
 
           <DialogFooter className="pt-2">
@@ -261,12 +335,12 @@ export const CreateNoticeDialog: React.FC<CreateNoticeDialogProps> = ({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={submitting}
+              disabled={mutation.isPending}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Broadcasting...' : 'Broadcast Notice'}
+            <Button type="submit" loading={mutation.isPending}>
+              {noticeToEdit ? 'Save Changes' : 'Broadcast Notice'}
             </Button>
           </DialogFooter>
         </form>

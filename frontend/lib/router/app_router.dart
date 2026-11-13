@@ -18,7 +18,9 @@ import '../student/screens/profile_screen.dart';
 import '../student/screens/mess_screen.dart';
 import '../student/screens/campus_scanner_screen.dart';
 import '../student/screens/settings_screen.dart';
+import '../student/screens/student_emergency_screen.dart';
 import '../student/screens/face_enrollment_screen.dart';
+import '../student/screens/career_hub_screen.dart';
 import '../teacher/screens/create_session_screen.dart';
 import '../teacher/screens/broadcasting_screen.dart';
 import '../teacher/screens/teacher_classes_screen.dart';
@@ -154,6 +156,20 @@ class AppRouter {
         }
         return MaterialPageRoute(
           builder: (_) => SettingsScreen(user: user, onNavigateToTab: onNavigateToTab),
+          settings: settings,
+        );
+
+      case AppRoutes.studentEmergency:
+        final user = settings.arguments as UserModel?;
+        return MaterialPageRoute(
+          builder: (_) => StudentEmergencyScreen(user: user),
+          settings: settings,
+        );
+
+      case AppRoutes.careerHub:
+        final tabIdx = settings.arguments is int ? settings.arguments as int : 0;
+        return MaterialPageRoute(
+          builder: (_) => CareerHubScreen(initialTabIndex: tabIdx),
           settings: settings,
         );
 

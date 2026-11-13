@@ -7,7 +7,8 @@ import '../widgets/admin_home_content.dart';
 import 'admin_operations_screen.dart';
 import 'admin_analytics_screen.dart';
 import 'admin_profile_screen.dart';
-import '../../shared/widgets/dock/apple_glass_dock.dart';
+import '../../shared/widgets/dock/app_dock.dart';
+import '../../shared/widgets/copilot/copilot_sheet.dart';
 import '../../core/localization/language_provider.dart';
 import '../../core/localization/app_strings.dart';
 
@@ -94,26 +95,36 @@ class _AdminShellScreenState extends State<AdminShellScreen> {
             ),
           ),
           bottomNavigationBar: RepaintBoundary(
-            child: AppleGlassDock(
+            child: AppDock(
               currentIndex: _currentIndex,
               onTap: (index) => _onNavigateToTab(index),
+              centerAction: AppDockCenterAction(
+                buttonKey: const Key('campus_ai_dock_admin'),
+                label: 'Campus AI',
+                onTap: () => CopilotSheet.show(
+                  context,
+                  user: widget.user,
+                  role: 'admin',
+                  screenContext: 'admin_tab_$_currentIndex',
+                ),
+              ),
               items: [
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.home_outlined,
                   activeIcon: Icons.home_rounded,
                   label: AppStrings.tr('home', lang: lang),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.widgets_outlined,
                   activeIcon: Icons.widgets_rounded,
                   label: AppStrings.tr('operations', lang: lang),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.bar_chart_outlined,
                   activeIcon: Icons.bar_chart_rounded,
                   label: AppStrings.tr('analytics', lang: lang),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
                   label: AppStrings.tr('profile', lang: lang),

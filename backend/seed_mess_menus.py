@@ -9,11 +9,12 @@ def seed_menus():
         admin_id = admin.id if admin else None
         
         today = datetime.date.today()
-        dates_to_seed = [
-            (today - datetime.timedelta(days=1), "Yesterday"),
-            (today, "Today"),
-            (today + datetime.timedelta(days=1), "Tomorrow"),
-        ]
+        # Seed from 3 days in past to 14 days in future
+        dates_to_seed = []
+        for d_offset in range(-3, 15):
+            d = today + datetime.timedelta(days=d_offset)
+            label = "Today" if d_offset == 0 else ("Yesterday" if d_offset == -1 else ("Tomorrow" if d_offset == 1 else d.strftime('%A')))
+            dates_to_seed.append((d, label))
         
         created_count = 0
         now_iso = datetime.datetime.now().isoformat()

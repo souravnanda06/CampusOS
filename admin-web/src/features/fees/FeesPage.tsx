@@ -1,32 +1,52 @@
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useSearchParams } from "react-router-dom"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ColumnDef } from "@tanstack/react-table"
 import { PageHeader } from "@/components/ui/page-header"
 import { DataTable } from "@/components/data-table/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { StatusIndicator } from "@/components/ui/status-indicator"
+import { ConfirmDialog } from "@/components/feedback/confirm-dialog"
+import { useToast } from "@/components/ui/toast"
 import { CreateFeeDialog } from "./components/create-fee-dialog"
+import { EditFeeDialog } from "./components/edit-fee-dialog"
 import { RecordPaymentDialog } from "./components/record-payment-dialog"
 import { feesApi, FeeRecordItem } from "./api/fees-api"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency } from "@/lib/utils"
 import {
-  Receipt,
   Plus,
   CreditCard,
-  AlertCircle,
   FileCheck,
-  RefreshCw,
+  Pencil,
+  Trash2,
 } from "lucide-react"
 
 export function FeesPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+
   const [createFeeOpen, setCreateFeeOpen] = React.useState(false)
   const [selectedFee, setSelectedFee] = React.useState<FeeRecordItem | null>(null)
   const [paymentDialogOpen, setPaymentDialogOpen] = React.useState(false)
+  const [editDialogOpen, setEditDialogOpen] = React.useState(false)
+  const [feeToDelete, setFeeToDelete] = React.useState<FeeRecordItem | null>(null)
 
-  const [statusFilter, setStatusFilter] = React.useState<string>("ALL")
+  const initialStatus = searchParams.get("status")?.toUpperCase() || "ALL"
+  const [statusFilter, setStatusFilter] = React.useState<string>(initialStatus)
   const [categoryFilter, setCategoryFilter] = React.useState<string>("ALL")
+
+  const handleStatusChange = (val: string) => {
+    setStatusFilter(val)
+    const next = new URLSearchParams(searchParams)
+    if (val === "ALL") {
+      next.delete("status")
+    } else {
+      next.set("status", val)
+    }
+    setSearchParams(next, { replace: true })
+  }
 
   const { data: kpis } = useQuery({
     queryKey: ["fees", "kpis"],
@@ -47,15 +67,35 @@ export function FeesPage() {
       }),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => feesApi.deleteFee(id),
+    onSuccess: (res) => {
+      toast({
+        title: "Fee Demand Cancelled",
+        description: res.message || "Unpaid fee demand removed.",
+        type: "success",
+      })
+      queryClient.invalidateQueries({ queryKey: ["fees"] })
+      setFeeToDelete(null)
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Cannot Cancel Demand",
+        description: err.message || "Failed to delete fee record.",
+        type: "error",
+      })
+    },
+  })
+
   const columns: ColumnDef<FeeRecordItem>[] = [
     {
       accessorKey: "studentName",
       header: "Student",
       cell: ({ row }) => (
         <div className="space-y-0.5">
-          <p className="font-semibold text-xs text-foreground">{row.original.studentName}</p>
+          <p className="font-semibold text-xs text-foreground">{row.original.studentName || "Student"}</p>
           <p className="text-[10px] text-muted-foreground font-mono">
-            {row.original.registrationNumber || "—"} ({row.original.branch})
+            {row.original.registrationNumber || "—"} ({row.original.branch || "—"})
           </p>
         </div>
       ),
@@ -66,7 +106,9 @@ export function FeesPage() {
       cell: ({ row }) => (
         <div className="space-y-0.5">
           <p className="font-semibold text-xs text-foreground">{row.original.title}</p>
-          <p className="text-[10px] text-muted-foreground">{row.original.category} • Sem {row.original.semester}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {row.original.category} • Sem {row.original.semester}
+          </p>
         </div>
       ),
     },
@@ -80,20 +122,20 @@ export function FeesPage() {
       ),
     },
     {
-      accessorKey: "amount_paid",
+      accessorKey: "amountPaid",
       header: "Paid",
       cell: ({ row }) => (
         <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-          {formatCurrency(row.original.amount_paid)}
+          {formatCurrency(row.original.amountPaid)}
         </span>
       ),
     },
     {
-      accessorKey: "due_date",
+      accessorKey: "dueDate",
       header: "Due Date",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {row.original.due_date}
+          {row.original.dueDate}
         </span>
       ),
     },
@@ -103,13 +145,13 @@ export function FeesPage() {
       cell: ({ row }) => {
         const status = row.original.status
         const variant =
-          status === "PAID"
+          status === "PAID" || status === "WAIVED"
             ? "success"
             : status === "OVERDUE"
-            ? "destructive"
-            : status === "PARTIALLY_PAID"
-            ? "warning"
-            : "secondary"
+              ? "destructive"
+              : status === "PARTIALLY_PAID"
+                ? "warning"
+                : "secondary"
         return (
           <Badge variant={variant} className="text-[10px] font-mono">
             {status}
@@ -118,11 +160,11 @@ export function FeesPage() {
       },
     },
     {
-      accessorKey: "receipt_number",
+      accessorKey: "receiptNumber",
       header: "Receipt #",
       cell: ({ row }) => (
         <span className="text-[11px] text-muted-foreground font-mono">
-          {row.original.receipt_number || "—"}
+          {row.original.receiptNumber || "—"}
         </span>
       ),
     },
@@ -130,25 +172,51 @@ export function FeesPage() {
       id: "actions",
       header: "",
       cell: ({ row }) => {
-        if (row.original.status !== "PAID") {
-          return (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSelectedFee(row.original)
-                setPaymentDialogOpen(true)
-              }}
-              className="text-xs h-7 gap-1"
-            >
-              <CreditCard className="h-3 w-3" /> Record Payment
-            </Button>
-          )
-        }
+        const fee = row.original
+        const isSettled = fee.status === "PAID" || fee.status === "WAIVED"
         return (
-          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
-            <FileCheck className="h-3 w-3" /> Settled
-          </span>
+          <div className="flex items-center gap-1.5">
+            {!isSettled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedFee(fee)
+                  setPaymentDialogOpen(true)
+                }}
+                className="text-xs h-7 gap-1"
+              >
+                <CreditCard className="h-3 w-3" /> Record Payment
+              </Button>
+            ) : (
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium px-1">
+                <FileCheck className="h-3 w-3" /> {fee.status === "WAIVED" ? "Waived" : "Settled"}
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              title="Edit or Waive Fee"
+              onClick={() => {
+                setSelectedFee(fee)
+                setEditDialogOpen(true)
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            {fee.amountPaid === 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                title="Cancel Fee Demand"
+                onClick={() => setFeeToDelete(fee)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         )
       },
     },
@@ -213,14 +281,13 @@ export function FeesPage() {
         isLoading={isLoading}
         error={error}
         onRetry={refetch}
-        searchPlaceholder="Search by student name or fee description..."
-        searchColumnId="studentName"
+        searchPlaceholder="Search by student name, reg number, receipt, or fee title..."
         emptyTitle="No Fee Records Found"
         emptyDescription="There are no fee records matching the selected status or category parameters."
         toolbarSlot={
           <div className="flex items-center gap-2">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32 h-8 text-xs bg-card">
+            <Select value={statusFilter} onValueChange={handleStatusChange}>
+              <SelectTrigger className="w-36 h-8 text-xs bg-card">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -229,6 +296,7 @@ export function FeesPage() {
                 <SelectItem value="PARTIALLY_PAID">Partially Paid</SelectItem>
                 <SelectItem value="PAID">Paid</SelectItem>
                 <SelectItem value="OVERDUE">Overdue</SelectItem>
+                <SelectItem value="WAIVED">Waived</SelectItem>
               </SelectContent>
             </Select>
 
@@ -250,10 +318,23 @@ export function FeesPage() {
       />
 
       <CreateFeeDialog open={createFeeOpen} onOpenChange={setCreateFeeOpen} />
+      <EditFeeDialog fee={selectedFee} open={editDialogOpen} onOpenChange={setEditDialogOpen} />
       <RecordPaymentDialog
         fee={selectedFee}
         open={paymentDialogOpen}
         onOpenChange={setPaymentDialogOpen}
+      />
+      <ConfirmDialog
+        open={!!feeToDelete}
+        onOpenChange={(open) => !open && setFeeToDelete(null)}
+        title="Cancel Fee Demand"
+        description={`Remove unpaid fee demand "${feeToDelete?.title}" (${formatCurrency(feeToDelete?.amount || 0)}) for ${feeToDelete?.studentName || "student"}?`}
+        confirmLabel="Cancel Demand"
+        variant="destructive"
+        isLoading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (feeToDelete) deleteMutation.mutate(feeToDelete.id)
+        }}
       />
     </div>
   )

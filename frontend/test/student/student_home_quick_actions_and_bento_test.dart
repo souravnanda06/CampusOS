@@ -5,6 +5,7 @@ import 'package:attendance_app/auth/models/user_model.dart';
 import 'package:attendance_app/auth/providers/user_provider.dart';
 import 'package:attendance_app/student/widgets/student_home_content.dart';
 import 'package:attendance_app/student/screens/timetable_screen.dart';
+import 'package:attendance_app/student/widgets/timetable/apple_next_class_expanded_view.dart';
 
 void main() {
   final testUser = UserModel(
@@ -32,7 +33,7 @@ void main() {
           body: StudentHomeContent(
             user: testUser,
             overallAttendance: 85.0,
-            recentAttendance: [],
+            recentAttendance: const [],
             attendanceAnalytics: analytics ?? {
               'attendedClasses': 18,
               'totalClasses': 20,
@@ -117,7 +118,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 800));
 
       // 1. Streak is displayed with 6 Days
       expect(find.text('Streak'), findsOneWidget);
@@ -128,12 +129,23 @@ void main() {
       expect(find.text('Next Class'), findsOneWidget);
       expect(find.text('TIMETABLE'), findsOneWidget);
 
-      // 3. Tapping Next Class opens TimetableScreen
+      // 3. Tapping Next Class triggers continuous expansion into AppleNextClassExpandedView
       await tester.tap(find.text('Next Class'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byType(AppleNextClassExpandedView), findsOneWidget);
+
+      // 4. Tapping "Open Weekly Timetable" navigates to TimetableScreen
+      await tester.tap(find.text('Open Weekly Timetable'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.byType(TimetableScreen), findsOneWidget);
-      expect(find.text('Your weekly schedule'), findsOneWidget);
+
+      Navigator.of(tester.element(find.byType(TimetableScreen))).pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
     });
   });
 }

@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/haptics/app_haptics.dart';
 import '../../../auth/providers/user_provider.dart';
 import '../../models/leave_request_model.dart';
 import '../../services/leave_service.dart';
 import '../../services/gate_pass_service.dart';
+import '../../../shared/widgets/motion/apple_bounceable.dart';
+import '../../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 class GatePassForm extends StatefulWidget {
   final VoidCallback? onRequestSubmitted;
@@ -84,16 +86,30 @@ class _GatePassFormState extends State<GatePassForm> {
     }
   }
 
-  InputDecoration _buildInputDecoration(String label, {IconData? suffixIcon}) {
+  InputDecoration _buildInputDecoration(BuildContext context, String label, {IconData? suffixIcon, String? hint}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 14),
+      hintText: hint,
+      labelStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textSecondaryOf(context),
+        fontSize: 13.5,
+        fontWeight: FontWeight.w500,
+      ),
+      hintStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textTertiaryOf(context),
+        fontSize: 13,
+      ),
       filled: true,
-      fillColor: AppColors.bg,
-      suffixIcon: suffixIcon != null ? Icon(suffixIcon, color: AppColors.textSecondary, size: 20) : null,
+      fillColor: AppColors.surfaceAltOf(context),
+      suffixIcon: suffixIcon != null
+          ? Icon(suffixIcon, color: AppColors.primary, size: 18)
+          : null,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+        borderSide: BorderSide(
+          color: AppColors.borderOf(context).withValues(alpha: 0.6),
+          width: 0.5,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -101,17 +117,18 @@ class _GatePassFormState extends State<GatePassForm> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.danger),
+        borderSide: const BorderSide(color: AppColors.danger, width: 1.0),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: AppColors.danger, width: 1.5),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
 
   Future<void> _selectDateTime(BuildContext context, bool isExit) async {
+    AppHaptics.selectionClick();
     final DateTime initialDate = isExit
         ? (_exitDate ?? DateTime.now())
         : (_returnDate ?? _exitDate ?? DateTime.now());
@@ -128,10 +145,11 @@ class _GatePassFormState extends State<GatePassForm> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
+            colorScheme: ColorScheme.light(
               primary: AppColors.primary,
               onPrimary: Colors.white,
-              onSurface: AppColors.textPrimary,
+              surface: AppColors.surfaceOf(context),
+              onSurface: AppColors.textPrimaryOf(context),
             ),
           ),
           child: child!,
@@ -141,16 +159,18 @@ class _GatePassFormState extends State<GatePassForm> {
 
     if (pickedDate != null) {
       if (!context.mounted) return;
+      AppHaptics.selectionClick();
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: isExit ? (_exitTime ?? TimeOfDay.now()) : (_returnTime ?? TimeOfDay.now()),
         builder: (context, child) {
           return Theme(
             data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.light(
+              colorScheme: ColorScheme.light(
                 primary: AppColors.primary,
                 onPrimary: Colors.white,
-                onSurface: AppColors.textPrimary,
+                surface: AppColors.surfaceOf(context),
+                onSurface: AppColors.textPrimaryOf(context),
               ),
             ),
             child: child!,
@@ -159,6 +179,7 @@ class _GatePassFormState extends State<GatePassForm> {
       );
 
       if (pickedTime != null) {
+        AppHaptics.lightImpact();
         setState(() {
           if (isExit) {
             _exitDate = pickedDate;
@@ -177,7 +198,7 @@ class _GatePassFormState extends State<GatePassForm> {
   }
 
   String _formatDateTime(DateTime? date, TimeOfDay? time) {
-    if (date == null || time == null) return 'Select Time';
+    if (date == null || time == null) return 'Select time';
     final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     return DateFormat('MMM dd, hh:mm a').format(dt);
   }
@@ -187,15 +208,33 @@ class _GatePassFormState extends State<GatePassForm> {
 
     if (_formKey.currentState!.validate()) {
       if (_selectedLeaveId == null || _selectedLeaveId!.isEmpty) {
+        AppHaptics.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select an approved leave request.')),
+          SnackBar(
+            content: Text(
+              'Please select an approved leave request.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
 
       if (_exitDate == null || _exitTime == null || _returnDate == null || _returnTime == null) {
+        AppHaptics.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select both exit and return dates and times.')),
+          SnackBar(
+            content: Text(
+              'Please select both exit and return dates and times.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
@@ -217,8 +256,17 @@ class _GatePassFormState extends State<GatePassForm> {
       );
 
       if (!returnDt.isAfter(exitDt)) {
+        AppHaptics.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Return time must be strictly after exit time.')),
+          SnackBar(
+            content: Text(
+              'Return time must be strictly after exit time.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
@@ -226,11 +274,20 @@ class _GatePassFormState extends State<GatePassForm> {
       final studentId = Provider.of<UserProvider>(context, listen: false).user?.id;
       if (studentId == null || studentId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Student profile not loaded. Please log in again.')),
+          SnackBar(
+            content: Text(
+              'Student profile not loaded. Please log in again.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
         return;
       }
 
+      AppHaptics.lightImpact();
       setState(() => _isSubmitting = true);
 
       try {
@@ -244,25 +301,35 @@ class _GatePassFormState extends State<GatePassForm> {
         );
 
         if (!mounted) return;
+        AppHaptics.lightImpact();
         widget.onRequestSubmitted?.call();
         Navigator.pop(context, true);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              "Gate pass request submitted successfully",
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Gate pass request submitted successfully",
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor: AppColors.success,
+            backgroundColor: AppColors.emerald,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       } catch (e) {
         if (!mounted) return;
+        AppHaptics.mediumImpact();
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -286,73 +353,115 @@ class _GatePassFormState extends State<GatePassForm> {
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
+            physics: AppleSpringScrollPhysics.always,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Center(
                   child: Container(
-                    width: 48,
-                    height: 4,
+                    width: 36,
+                    height: 5,
                     decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+                      color: AppColors.borderOf(context),
+                      borderRadius: BorderRadius.circular(2.5),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "New Gate Pass",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "New Gate Pass",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimaryOf(context),
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Security clearance for campus exit & return",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondaryOf(context),
+                          ),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
-                      onPressed: () => Navigator.pop(context),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.bg,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    AppleBounceable(
+                      scaleFactor: 0.90,
+                      onTap: () {
+                        AppHaptics.selectionClick();
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceAltOf(context),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: AppColors.textSecondaryOf(context),
+                        ),
                       ),
                     ),
                   ],
-                ).animate().fadeIn().slideX(begin: -0.05),
-                const SizedBox(height: 24),
+                ),
+                const SizedBox(height: 22),
 
                 // Approved leave request requirement section
                 if (_isLoadingLeaves)
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.bg,
+                      color: AppColors.surfaceAltOf(context),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.borderOf(context).withValues(alpha: 0.5),
+                        width: 0.5,
+                      ),
                     ),
                     child: Row(
                       children: [
                         const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                         ),
                         const SizedBox(width: 12),
                         Text(
                           "Checking approved leave records...",
                           style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textSecondary,
+                            color: AppColors.textSecondaryOf(context),
                             fontSize: 13,
                           ),
                         ),
@@ -365,7 +474,10 @@ class _GatePassFormState extends State<GatePassForm> {
                     decoration: BoxDecoration(
                       color: (_leaveLoadError != null ? AppColors.danger : AppColors.warning).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: (_leaveLoadError != null ? AppColors.danger : AppColors.warning).withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: (_leaveLoadError != null ? AppColors.danger : AppColors.warning).withValues(alpha: 0.3),
+                        width: 0.5,
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,15 +487,15 @@ class _GatePassFormState extends State<GatePassForm> {
                             Icon(
                               _leaveLoadError != null ? Icons.error_outline_rounded : Icons.warning_amber_rounded,
                               color: _leaveLoadError != null ? AppColors.danger : AppColors.warning,
-                              size: 20,
+                              size: 18,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               _leaveLoadError != null ? "Failed to Load Leaves" : "Approved Leave Required",
                               style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimaryOf(context),
+                                fontSize: 13.5,
                               ),
                             ),
                           ],
@@ -393,20 +505,38 @@ class _GatePassFormState extends State<GatePassForm> {
                           _leaveLoadError ??
                               "Campus security policy requires an APPROVED leave request before a Gate Pass can be issued. You currently have no approved leaves.",
                           style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textSecondary,
+                            color: AppColors.textSecondaryOf(context),
                             fontSize: 12.5,
-                            height: 1.4,
+                            height: 1.45,
                           ),
                         ),
                       ],
                     ),
                   )
-                else
+                else ...[
+                  Text(
+                    "LINKED APPROVED LEAVE",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondaryOf(context),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: _selectedLeaveId,
-                    decoration: _buildInputDecoration("Linked Approved Leave", suffixIcon: Icons.verified_outlined),
-                    dropdownColor: AppColors.surface,
-                    style: GoogleFonts.plusJakartaSans(color: AppColors.textPrimary, fontSize: 14),
+                    decoration: _buildInputDecoration(
+                      context,
+                      "Select Approved Leave",
+                      suffixIcon: Icons.verified_outlined,
+                    ),
+                    dropdownColor: AppColors.surfaceOf(context),
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textPrimaryOf(context),
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                     items: _approvedLeaves.map((leave) {
                       final dates = "${DateFormat('MMM dd').format(leave.startDate)} - ${DateFormat('MMM dd').format(leave.endDate)}";
                       return DropdownMenuItem<String>(
@@ -414,107 +544,180 @@ class _GatePassFormState extends State<GatePassForm> {
                         child: Text(
                           "${leave.leaveType} ($dates)",
                           style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textPrimary,
+                            color: AppColors.textPrimaryOf(context),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       );
                     }).toList(),
                     onChanged: (val) {
+                      AppHaptics.selectionClick();
                       setState(() => _selectedLeaveId = val);
                     },
                     validator: (val) => val == null || val.isEmpty ? 'Please select a leave record' : null,
-                  ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.1),
+                  ),
+                ],
 
                 const SizedBox(height: 20),
+                Text(
+                  "DESTINATION",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondaryOf(context),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _destinationController,
-                  style: GoogleFonts.plusJakartaSans(color: AppColors.textPrimary),
-                  decoration: _buildInputDecoration("Destination", suffixIcon: Icons.location_on_outlined),
+                  style: GoogleFonts.plusJakartaSans(color: AppColors.textPrimaryOf(context), fontSize: 14),
+                  decoration: _buildInputDecoration(
+                    context,
+                    "Destination Location",
+                    suffixIcon: Icons.location_on_outlined,
+                    hint: "e.g. Railway Station, City Market, Home...",
+                  ),
                   validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter destination' : null,
-                ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1),
+                ),
                 const SizedBox(height: 20),
+
+                Text(
+                  "TRANSIT WINDOW",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondaryOf(context),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
-                      child: InkWell(
+                      child: AppleBounceable(
+                        scaleFactor: 0.98,
                         onTap: () => _selectDateTime(context, true),
-                        borderRadius: BorderRadius.circular(16),
                         child: InputDecorator(
-                          decoration: _buildInputDecoration("Exit Time", suffixIcon: Icons.access_time_rounded).copyWith(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: _buildInputDecoration(
+                            context,
+                            "Exit Time",
+                            suffixIcon: Icons.access_time_rounded,
                           ),
                           child: Text(
                             _formatDateTime(_exitDate, _exitTime),
                             style: GoogleFonts.plusJakartaSans(
-                              color: _exitDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                              color: _exitDate != null
+                                  ? AppColors.textPrimaryOf(context)
+                                  : AppColors.textTertiaryOf(context),
+                              fontSize: 13,
+                              fontWeight: _exitDate != null ? FontWeight.w600 : FontWeight.w400,
                             ),
                           ),
                         ),
                       ),
-                    ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
-                    const SizedBox(width: 16),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: InkWell(
+                      child: AppleBounceable(
+                        scaleFactor: 0.98,
                         onTap: () => _selectDateTime(context, false),
-                        borderRadius: BorderRadius.circular(16),
                         child: InputDecorator(
-                          decoration: _buildInputDecoration("Return Time", suffixIcon: Icons.access_time_rounded).copyWith(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: _buildInputDecoration(
+                            context,
+                            "Return Time",
+                            suffixIcon: Icons.access_time_rounded,
                           ),
                           child: Text(
                             _formatDateTime(_returnDate, _returnTime),
                             style: GoogleFonts.plusJakartaSans(
-                              color: _returnDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                              color: _returnDate != null
+                                  ? AppColors.textPrimaryOf(context)
+                                  : AppColors.textTertiaryOf(context),
+                              fontSize: 13,
+                              fontWeight: _returnDate != null ? FontWeight.w600 : FontWeight.w400,
                             ),
                           ),
                         ),
                       ),
-                    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
+
+                Text(
+                  "GATE EXIT REASON",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondaryOf(context),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _reasonController,
                   maxLines: 3,
-                  style: GoogleFonts.plusJakartaSans(color: AppColors.textPrimary),
-                  decoration: _buildInputDecoration("Reason for Gate Exit").copyWith(alignLabelWithHint: true),
-                  validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter a reason' : null,
-                ).animate().fadeIn(delay: 250.ms).slideY(begin: 0.1),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: (_isSubmitting || _approvedLeaves.isEmpty) ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: AppColors.textSecondary.withValues(alpha: 0.3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            "Submit Gate Pass Request",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimaryOf(context),
+                    fontSize: 14,
+                    height: 1.4,
                   ),
-                ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1),
-                const SizedBox(height: 16),
+                  decoration: _buildInputDecoration(
+                    context,
+                    "Reason for Exit",
+                    hint: "Short note on purpose of gate movement...",
+                  ).copyWith(alignLabelWithHint: true),
+                  validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter a reason' : null,
+                ),
+                const SizedBox(height: 28),
+
+                AppleBounceable(
+                  scaleFactor: 0.96,
+                  onTap: (_isSubmitting || _approvedLeaves.isEmpty) ? null : _submit,
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: (_approvedLeaves.isEmpty)
+                          ? AppColors.textSecondaryOf(context).withValues(alpha: 0.25)
+                          : AppColors.primary,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: (_approvedLeaves.isNotEmpty)
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.28),
+                                blurRadius: 14,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Center(
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              "Submit Gate Pass Request",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: (_approvedLeaves.isEmpty)
+                                    ? AppColors.textSecondaryOf(context)
+                                    : Colors.white,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
               ],
             ),
           ),

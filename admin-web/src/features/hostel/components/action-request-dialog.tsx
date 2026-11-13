@@ -61,7 +61,7 @@ export function ActionRequestDialog({ request, action, open, onOpenChange }: Act
             {isReject ? "Reject Hostel Request" : action === "APPROVE" ? "Approve Hostel Request" : "Complete Request"}
           </DialogTitle>
           <DialogDescription>
-            {request.studentName}'s request for {request.request_type} ({request.reason})
+            {request.studentName || "Resident"}&apos;s request for {request.requestType.replace(/_/g, " ")} ({request.reason})
           </DialogDescription>
         </DialogHeader>
 

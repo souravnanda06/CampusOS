@@ -48,3 +48,23 @@ export function formatCurrency(amount: number | null | undefined): string {
     maximumFractionDigits: 0,
   }).format(amount)
 }
+
+export function resolveMediaUrl(path?: string | null): string | null {
+  if (!path) return null
+  const trimmed = path.trim()
+  if (!trimmed) return null
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("data:")
+  ) {
+    return trimmed
+  }
+  const base = (
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.DEV ? "/api" : "https://campusos.pythonanywhere.com")
+  ).replace(/\/+$/, "")
+  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`
+  if (normalized.startsWith(`${base}/`)) return normalized
+  return `${base}${normalized}`
+}

@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ble_peripheral/flutter_ble_peripheral.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../../auth/models/user_model.dart';
 import '../../shared/models/session_model.dart';
 import '../../student/models/passport_attendance_model.dart';
@@ -14,11 +18,13 @@ import '../../student/models/passport_trust_bundle_model.dart';
 import '../../student/services/passport_attendance_ledger_service.dart';
 import '../../student/services/passport_crypto_service.dart';
 import '../../student/services/passport_identity_service.dart';
+import '../../student/services/passport_location_service.dart';
 import '../../student/services/passport_trust_bundle_service.dart';
 import '../../student/services/passport_offline_verifier_service.dart';
 import '../../student/models/passport_verification_result.dart';
 import '../../shared/services/session_service.dart';
 import '../../core/mesh/campus_mesh_manager.dart';
+import '../../core/network/api_client.dart';
 
 /// Summary metrics for teacher batch attendance session.
 class TeacherAttendanceMetrics {
@@ -55,14 +61,18 @@ class PassportTeacherAttendanceService {
   final PassportIdentityService _identityService;
   final FlutterBlePeripheral _blePeripheral;
   final PassportProximityConfig _proximityConfig;
+  final PassportLocationService _locationService;
 
   PassportTeacherBeaconModel? _activeBeacon;
   SessionModel? _activeSession;
+  PassportLocationSnapshot? _teacherLocation;
+  PassportLocationSnapshot? get teacherLocation => _teacherLocation;
 
   bool _isBroadcasting = false;
   bool _isCollecting = false;
   StreamSubscription? _bleScanSubscription;
   Timer? _beaconCycleTimer;
+  Timer? _gpsRetryTimer;
 
   /// Map of collected BLE response frames: streamId -> List<Uint8List>.
   final Map<int, List<Uint8List>> _collectedFramesByStream = {};
@@ -73,6 +83,107 @@ class PassportTeacherAttendanceService {
   /// Active per-stream reassembly buffers: 32-bit streamId -> buffer.
   final Map<int, _StreamReassemblyBuffer> _streamBuffers = {};
   Timer? _streamCleanupTimer;
+  bool _hasUserDeclinedBluetooth = false;
+
+  /// Checks whether Bluetooth permissions are granted across Android/iOS.
+  Future<bool> checkBlePermissions() async {
+    try {
+      if (Platform.isAndroid) {
+        int sdkInt = 31;
+        try {
+          sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+        } catch (_) {}
+
+        if (sdkInt >= 31) {
+          final scan = await Permission.bluetoothScan.status;
+          final adv = await Permission.bluetoothAdvertise.status;
+          final conn = await Permission.bluetoothConnect.status;
+          return (scan.isGranted || scan.isLimited) &&
+                 (adv.isGranted || adv.isLimited) &&
+                 (conn.isGranted || conn.isLimited);
+        } else {
+          final bt = await Permission.bluetooth.status;
+          final loc = await Permission.locationWhenInUse.status;
+          return (bt.isGranted || bt.isLimited) &&
+                 (loc.isGranted || loc.isLimited);
+        }
+      } else if (Platform.isIOS) {
+        final bt = await Permission.bluetooth.status;
+        return bt.isGranted || bt.isLimited;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] checkBlePermissions error: $e');
+    }
+    return false;
+  }
+
+  /// Requests Bluetooth permissions and returns true if granted.
+  Future<bool> requestBlePermissions() async {
+    try {
+      if (Platform.isAndroid) {
+        int sdkInt = 31;
+        try {
+          sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+        } catch (_) {}
+
+        if (sdkInt >= 31) {
+          final statuses = await [
+            Permission.bluetoothScan,
+            Permission.bluetoothAdvertise,
+            Permission.bluetoothConnect,
+          ].request();
+
+          final scanOk = (statuses[Permission.bluetoothScan]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothScan]?.isLimited ?? false);
+          final advOk = (statuses[Permission.bluetoothAdvertise]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothAdvertise]?.isLimited ?? false);
+          final connOk = (statuses[Permission.bluetoothConnect]?.isGranted ?? false) ||
+              (statuses[Permission.bluetoothConnect]?.isLimited ?? false);
+          return scanOk && advOk && connOk;
+        } else {
+          final statuses = await [
+            Permission.bluetooth,
+            Permission.locationWhenInUse,
+          ].request();
+          final btOk = (statuses[Permission.bluetooth]?.isGranted ?? false) ||
+              (statuses[Permission.bluetooth]?.isLimited ?? false);
+          final locOk = (statuses[Permission.locationWhenInUse]?.isGranted ?? false) ||
+              (statuses[Permission.locationWhenInUse]?.isLimited ?? false);
+          return btOk && locOk;
+        }
+      } else if (Platform.isIOS) {
+        final status = await Permission.bluetooth.request();
+        return status.isGranted || status.isLimited;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] requestBlePermissions error: $e');
+    }
+    return false;
+  }
+
+  String _formatBleError(dynamic e) {
+    final str = e.toString();
+    if (str.contains('NullPointerException')) {
+      return 'Bluetooth is turned off or BLE permissions were denied.';
+    }
+    if (str.contains('PERMISSION_DENIED') || str.contains('SecurityException')) {
+      return 'Nearby Devices Bluetooth permission is required.';
+    }
+    if (str.contains('ADVERTISE_FAILED_ALREADY_STARTED')) {
+      return 'BLE broadcast is already active.';
+    }
+    if (str.contains('ADVERTISE_FAILED_FEATURE_UNSUPPORTED')) {
+      return 'BLE peripheral advertising is not supported on this device.';
+    }
+    if (str.contains('ADVERTISE_FAILED_TOO_LARGE')) {
+      return 'BLE advertising data is too large for this device.';
+    }
+    return str
+        .replaceAll('PlatformException(', '')
+        .replaceAll('Exception: ', '')
+        .replaceAll(')', '')
+        .trim();
+  }
 
   /// Local session results: studentId -> result.
   final Map<String, PassportAttendanceVerificationResult> _verifiedResults = {};
@@ -93,6 +204,9 @@ class PassportTeacherAttendanceService {
   PassportTeacherBeaconModel? get activeBeacon => _activeBeacon;
   void setActiveBeacon(PassportTeacherBeaconModel beacon) {
     _activeBeacon = beacon;
+    if (beacon.routerBssid != null && beacon.routerBssid!.isNotEmpty) {
+      _classroomRouterBssid = beacon.routerBssid;
+    }
   }
   bool get isBroadcasting => _isBroadcasting;
   bool get isCollecting => _isCollecting;
@@ -101,12 +215,469 @@ class PassportTeacherAttendanceService {
   Map<String, PassportAttendanceVerificationResult> get inconclusiveResults =>
       Map.unmodifiable(_inconclusiveResults);
 
+  // --- Zero-BLE & Wi-Fi LAN / Hotspot Infrastructure ---
+  HttpServer? _localHttpServer;
+  RawDatagramSocket? _udpBroadcastSocket;
+  Timer? _udpBroadcastTimer;
+  bool _isSyncingAttendance = false;
+  Timer? _debounceSyncTimer;
+
+  void _syncVerifiedAttendanceToBackend() {
+    if (_activeSession == null) return;
+    _debounceSyncTimer?.cancel();
+    _debounceSyncTimer = Timer(const Duration(milliseconds: 500), () async {
+      if (_isSyncingAttendance) return;
+      _isSyncingAttendance = true;
+      try {
+        await syncAttendance();
+      } catch (e) {
+        debugPrint('ℹ️ [PASSPORT_TEACHER] Opportunistic backend sync deferred to ledger queue: $e');
+      } finally {
+        _isSyncingAttendance = false;
+      }
+    });
+  }
+
+  Future<void> _syncBeaconToBackend(
+    String sessionId,
+    PassportTeacherBeaconModel beacon,
+  ) async {
+    try {
+      final body = {
+        'sessionId': sessionId,
+        'sessionNonce': beacon.sessionNonce,
+        'latitude': beacon.teacherLatitude,
+        'longitude': beacon.teacherLongitude,
+        'radiusMeters': 20.0,
+        'beaconPayload': beacon.toCanonicalJson(),
+      };
+      await ApiClient.instance.post(
+        '/sessions/$sessionId/beacon',
+        body: body,
+      );
+      debugPrint('📍 [PASSPORT_TEACHER] Synced session beacon & GPS anchor to backend ($sessionId, lat=${beacon.teacherLatitude}, lng=${beacon.teacherLongitude})');
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] Failed syncing beacon to backend: $e');
+    }
+  }
+
+  String? _classroomRouterBssid;
+  String? get classroomRouterBssid => _classroomRouterBssid;
+  void setClassroomRouterBssid(String? bssid) {
+    _classroomRouterBssid = bssid;
+    if (_activeBeacon != null) {
+      _activeBeacon = _activeBeacon!.copyWith(routerBssid: bssid);
+    }
+  }
+
+  // --- 15-Second Rolling PIN ---
+  String get currentRollingPin {
+    if (_activeBeacon == null) return '----';
+    return PassportRollingPinModel.generatePin(
+      sessionId: _activeBeacon!.sessionId,
+      sessionNonce: _activeBeacon!.sessionNonce,
+    );
+  }
+
+  int get rollingPinRemainingSeconds => PassportRollingPinModel.getRemainingSeconds();
+  double get rollingPinProgress => PassportRollingPinModel.getProgress();
+
+  // --- 60-Second Ephemeral Hotspot Burst & Multi-Option Real Wi-Fi ---
+  static const MethodChannel _hotspotChannel = MethodChannel('campusos/hotspot');
+
+  bool _isHotspotActive = false;
+  bool get isHotspotActive => _isHotspotActive;
+  int _hotspotRemainingSeconds = 0;
+  int get hotspotRemainingSeconds => _hotspotRemainingSeconds;
+  String? _hotspotSsid;
+  String? get hotspotSsid => _hotspotSsid;
+  String? _hotspotPassword;
+  String? get hotspotPassword => _hotspotPassword;
+  Timer? _hotspotBurstTimer;
+  Timer? _hotspotPollTimer;
+
+  bool _isNativeHotspot = false;
+  bool get isNativeHotspot => _isNativeHotspot;
+
+  bool _isHardwareHotspotDetected = false;
+  bool get isHardwareHotspotDetected => _isHardwareHotspotDetected;
+
+  String? _detectedGatewayIp;
+  String? get detectedGatewayIp => _detectedGatewayIp;
+
+  bool _isLanWifiDetected = false;
+  bool get isLanWifiDetected => _isLanWifiDetected;
+
+  String? _lanWifiIp;
+  String? get lanWifiIp => _lanWifiIp;
+
+  String? _savedHotspotSsid;
+  String? get savedHotspotSsid => _savedHotspotSsid;
+  String? _savedHotspotPassword;
+  String? get savedHotspotPassword => _savedHotspotPassword;
+  String? _lastHotspotError;
+  String? get lastHotspotError => _lastHotspotError;
+
+  /// Opens Android Tethering / Hotspot settings page directly.
+  Future<bool> openHotspotSettings() async {
+    try {
+      if (Platform.isAndroid) {
+        final res = await _hotspotChannel.invokeMethod<bool>('openHotspotSettings');
+        return res ?? false;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] openHotspotSettings error: $e');
+    }
+    return false;
+  }
+
+  /// Loads saved teacher hotspot profile credentials (Option A).
+  Future<void> loadSavedHotspotCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _savedHotspotSsid = prefs.getString('teacher_saved_hotspot_ssid');
+      _savedHotspotPassword = prefs.getString('teacher_saved_hotspot_password');
+
+      if (_savedHotspotSsid == null || _savedHotspotSsid!.isEmpty) {
+        String defaultName = 'Teacher_Hotspot';
+        try {
+          final deviceInfo = DeviceInfoPlugin();
+          if (Platform.isAndroid) {
+            final androidInfo = await deviceInfo.androidInfo;
+            defaultName = 'Hotspot_${androidInfo.model.replaceAll(' ', '_')}';
+          } else if (Platform.isIOS) {
+            final iosInfo = await deviceInfo.iosInfo;
+            defaultName = 'Hotspot_${iosInfo.name.replaceAll(' ', '_')}';
+          }
+        } catch (_) {}
+        _savedHotspotSsid = defaultName;
+        _savedHotspotPassword = 'pass${Random.secure().nextInt(899999) + 100000}';
+        await prefs.setString('teacher_saved_hotspot_ssid', _savedHotspotSsid!);
+        await prefs.setString('teacher_saved_hotspot_password', _savedHotspotPassword!);
+      }
+    } catch (e) {
+      _savedHotspotSsid ??= 'Teacher_Hotspot';
+      _savedHotspotPassword ??= 'pass123456';
+    }
+    _hotspotSsid = _savedHotspotSsid;
+    _hotspotPassword = _savedHotspotPassword;
+  }
+
+  /// Saves custom teacher hotspot profile credentials (Option A).
+  Future<void> saveHotspotCredentials(String ssid, String password) async {
+    _savedHotspotSsid = ssid.trim();
+    _savedHotspotPassword = password.trim();
+    _hotspotSsid = _savedHotspotSsid;
+    _hotspotPassword = _savedHotspotPassword;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('teacher_saved_hotspot_ssid', _savedHotspotSsid!);
+      await prefs.setString('teacher_saved_hotspot_password', _savedHotspotPassword!);
+    } catch (_) {}
+
+    if (_activeBeacon != null) {
+      _activeBeacon = _activeBeacon!.copyWith(
+        hotspotSsid: _hotspotSsid,
+        hotspotPassword: _hotspotPassword,
+      );
+    }
+    _emitMetrics();
+  }
+
+  /// Starts native Android LocalOnlyHotspot (Option C).
+  Future<bool> startNativeLocalOnlyHotspot() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      _lastHotspotError = null;
+      // Request location and nearby wifi permissions if on Android
+      try {
+        await [
+          Permission.location,
+          Permission.nearbyWifiDevices,
+        ].request();
+      } catch (_) {}
+
+      final res = await _hotspotChannel.invokeMapMethod<String, dynamic>('startLocalOnlyHotspot');
+      if (res != null && res['success'] == true) {
+        final ssid = res['ssid']?.toString() ?? '';
+        final pass = res['password']?.toString() ?? '';
+        if (ssid.isNotEmpty) {
+          _hotspotSsid = ssid;
+          _hotspotPassword = pass;
+          _isNativeHotspot = true;
+          _isHardwareHotspotDetected = true;
+          _detectedGatewayIp = '192.168.43.1';
+          if (_activeBeacon != null) {
+            _activeBeacon = _activeBeacon!.copyWith(
+              hotspotSsid: _hotspotSsid,
+              hotspotPassword: _hotspotPassword,
+            );
+          }
+          _emitMetrics();
+          debugPrint('⚡ [PASSPORT_TEACHER] Native LocalOnlyHotspot active: SSID $ssid');
+          return true;
+        }
+      }
+    } catch (e) {
+      final msg = e is PlatformException ? (e.message ?? e.toString()) : e.toString();
+      _lastHotspotError = msg;
+      debugPrint('ℹ️ [PASSPORT_TEACHER] LocalOnlyHotspot error: $msg');
+    }
+    return false;
+  }
+
+  /// Stops native Android LocalOnlyHotspot.
+  Future<void> stopNativeLocalOnlyHotspot() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _hotspotChannel.invokeMethod('stopLocalOnlyHotspot');
+      _isNativeHotspot = false;
+    } catch (_) {}
+  }
+
+  /// Checks whether hardware hotspot interface (ap0, 192.168.43.1, 172.20.10.1) or LAN Wi-Fi is active.
+  Future<void> checkHardwareHotspotActive() async {
+    try {
+      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      bool hotspotFound = _isNativeHotspot;
+      String? gateway;
+      bool lanFound = false;
+      String? lanIp;
+
+      for (final iface in interfaces) {
+        final name = iface.name.toLowerCase();
+        final isTetherIface = name.startsWith('ap') ||
+            name.startsWith('swlan') ||
+            name.startsWith('softap') ||
+            name.contains('tether') ||
+            name.startsWith('rndis');
+
+        for (final addr in iface.addresses) {
+          if (addr.isLoopback) continue;
+          if (addr.address == '192.168.43.1' || addr.address == '172.20.10.1' || (isTetherIface && !addr.isLoopback)) {
+            hotspotFound = true;
+            gateway = addr.address;
+          } else if (name.contains('wlan') || name.contains('wi-fi') || name.contains('en')) {
+            lanFound = true;
+            lanIp = addr.address;
+          }
+        }
+      }
+
+      _isHardwareHotspotDetected = hotspotFound;
+      _detectedGatewayIp = gateway ?? (hotspotFound ? '192.168.43.1' : null);
+      _isLanWifiDetected = lanFound;
+      _lanWifiIp = lanIp;
+    } catch (_) {}
+  }
+
+  /// Starts a 60-second ephemeral hotspot burst with automatic countdown and termination.
+  Future<void> startHotspotBurst({bool tryNativeFirst = true}) async {
+    if (_activeBeacon == null) return;
+    _isHotspotActive = true;
+    _hotspotRemainingSeconds = 60;
+
+    await loadSavedHotspotCredentials();
+
+    bool nativeStarted = false;
+    if (tryNativeFirst) {
+      nativeStarted = await startNativeLocalOnlyHotspot();
+    }
+
+    if (!nativeStarted) {
+      _isNativeHotspot = false;
+      await checkHardwareHotspotActive();
+      _hotspotSsid = _savedHotspotSsid;
+      _hotspotPassword = _savedHotspotPassword;
+    }
+
+    _activeBeacon = _activeBeacon!.copyWith(
+      hotspotSsid: _hotspotSsid,
+      hotspotPassword: _hotspotPassword,
+    );
+
+    if (_localHttpServer == null) {
+      await _startLocalHttpServer();
+    }
+
+    _hotspotBurstTimer?.cancel();
+    _hotspotBurstTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_hotspotRemainingSeconds > 0) {
+        _hotspotRemainingSeconds--;
+        _emitMetrics();
+      } else {
+        stopHotspotBurst();
+      }
+    });
+
+    // Start background poll to detect when teacher toggles Hotspot switch ON in Quick Settings
+    _hotspotPollTimer?.cancel();
+    _hotspotPollTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+      if (!_isHotspotActive) return;
+      final prevDetected = _isHardwareHotspotDetected;
+      await checkHardwareHotspotActive();
+      if (_isHardwareHotspotDetected != prevDetected) {
+        _emitMetrics();
+      }
+    });
+
+    _emitMetrics();
+    debugPrint('🔥 [PASSPORT_TEACHER] Ephemeral Hotspot Burst active (Native: $_isNativeHotspot, Hardware: $_isHardwareHotspotDetected, SSID: $_hotspotSsid)');
+  }
+
+  /// Manually stops ephemeral hotspot burst.
+  void stopHotspotBurst() {
+    _isHotspotActive = false;
+    _hotspotRemainingSeconds = 0;
+    _hotspotBurstTimer?.cancel();
+    _hotspotBurstTimer = null;
+    _hotspotPollTimer?.cancel();
+    _hotspotPollTimer = null;
+
+    if (_isNativeHotspot) {
+      stopNativeLocalOnlyHotspot();
+    }
+
+    if (!_isBroadcasting) {
+      _localHttpServer?.close(force: true);
+      _localHttpServer = null;
+    }
+    debugPrint('🛑 [PASSPORT_TEACHER] Ephemeral Hotspot Burst terminated.');
+    _emitMetrics();
+  }
+
+  /// Verifies a student submitting the 15-second Classroom Rolling PIN manually.
+  Future<PassportAttendanceVerificationResult> verifyStudentPin({
+    required String studentId,
+    required String studentName,
+    required String pin,
+    double? studentLatitude,
+    double? studentLongitude,
+    double? studentAccuracy,
+    bool isMockedGps = false,
+  }) async {
+    if (_activeBeacon == null) {
+      return PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.sessionExpired,
+        reason: 'No active attendance session.',
+        verifiedAt: DateTime.now(),
+      );
+    }
+
+    final isValid = PassportRollingPinModel.verifyPin(
+      enteredPin: pin,
+      sessionId: _activeBeacon!.sessionId,
+      sessionNonce: _activeBeacon!.sessionNonce,
+    );
+
+    if (!isValid) {
+      return PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.cryptoInvalid,
+        reason: 'Invalid or expired room PIN.',
+        studentId: studentId,
+        studentName: studentName,
+        sessionId: _activeBeacon!.sessionId,
+        verificationMode: PassportAttendanceModel.modePinManual,
+        verifiedAt: DateTime.now(),
+      );
+    }
+
+    final gpsEval = PassportLocationService.evaluate(
+      teacherLatitude: _activeBeacon!.teacherLatitude ?? _teacherLocation?.latitude,
+      teacherLongitude: _activeBeacon!.teacherLongitude ?? _teacherLocation?.longitude,
+      teacherAccuracyMeters:
+          _activeBeacon!.teacherLocationAccuracy ?? _teacherLocation?.accuracyMeters,
+      studentLatitude: studentLatitude,
+      studentLongitude: studentLongitude,
+      studentAccuracyMeters: studentAccuracy,
+      studentIsMocked: isMockedGps,
+    );
+
+    if (gpsEval.status == PassportGeofenceStatus.mockDetected) {
+      return PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.fakeBeacon,
+        reason: gpsEval.summary,
+        studentId: studentId,
+        studentName: studentName,
+        sessionId: _activeBeacon!.sessionId,
+        verificationMode: PassportAttendanceModel.modePinManual,
+        gpsDistanceMeters: gpsEval.distanceMeters,
+        gpsStatus: gpsEval.statusCode,
+        verifiedAt: DateTime.now(),
+      );
+    }
+
+    if (gpsEval.status == PassportGeofenceStatus.outsideReview) {
+      final inconclusive = PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.proximityInconclusive,
+        reason: gpsEval.summary,
+        studentId: studentId,
+        studentName: studentName,
+        deviceKeyId: 'pin_$studentId',
+        sessionId: _activeBeacon!.sessionId,
+        responseNonce: pin,
+        idempotencyKey: 'pin_${_activeBeacon!.sessionId}_$studentId',
+        proximityTier: PassportProximityTier.far,
+        verificationMode: PassportAttendanceModel.modePinManual,
+        gpsDistanceMeters: gpsEval.distanceMeters,
+        gpsStatus: gpsEval.statusCode,
+        verifiedAt: DateTime.now(),
+      );
+      _inconclusiveResults[studentId] = inconclusive;
+      _emitMetrics();
+      return inconclusive;
+    }
+
+    if (_ledgerService.isStudentRecorded(_activeBeacon!.sessionId, studentId)) {
+      return PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.replayedResponse,
+        reason: 'Attendance already recorded for this student.',
+        studentId: studentId,
+        studentName: studentName,
+        sessionId: _activeBeacon!.sessionId,
+        verificationMode: PassportAttendanceModel.modePinManual,
+        verifiedAt: DateTime.now(),
+      );
+    }
+
+    final res = PassportAttendanceVerificationResult(
+      valid: true,
+      status: PassportAttendanceStatus.verifiedPresent,
+      reason: 'Verified present via Classroom Rolling PIN',
+      studentId: studentId,
+      studentName: studentName,
+      deviceKeyId: 'pin_$studentId',
+      sessionId: _activeBeacon!.sessionId,
+      responseNonce: pin,
+      idempotencyKey: 'pin_${_activeBeacon!.sessionId}_$studentId',
+      proximityTier: PassportProximityTier.near,
+      verificationMode: PassportAttendanceModel.modePinManual,
+      gpsDistanceMeters: gpsEval.distanceMeters,
+      gpsStatus: gpsEval.statusCode,
+      verifiedAt: DateTime.now(),
+    );
+
+    await _ledgerService.recordAttendance(res);
+    _verifiedResults[studentId] = res;
+    _inconclusiveResults.remove(studentId);
+    _emitMetrics();
+    return res;
+  }
+
   Future<void> pauseBeaconAdvertising() async {
     _isBroadcasting = false;
     try {
       await _blePeripheral.stop();
     } catch (_) {}
-    await CampusMeshManager.instance.resumeAdvertisingAfterAttendance();
+    try {
+      await CampusMeshManager.instance.resumeAdvertisingAfterAttendance();
+    } catch (_) {}
   }
 
   Future<void> resumeBeaconAdvertising() async {
@@ -122,12 +693,14 @@ class PassportTeacherAttendanceService {
     PassportIdentityService? identityService,
     FlutterBlePeripheral? blePeripheral,
     PassportProximityConfig? proximityConfig,
+    PassportLocationService? locationService,
   })  : _cryptoService = cryptoService ?? PassportCryptoService(),
         _trustBundleService = trustBundleService ?? PassportTrustBundleService(),
         _ledgerService = ledgerService ?? PassportAttendanceLedgerService(),
         _identityService = identityService ?? PassportIdentityService(),
         _blePeripheral = blePeripheral ?? FlutterBlePeripheral(),
-        _proximityConfig = proximityConfig ?? PassportProximityConfig.defaultConfig;
+        _proximityConfig = proximityConfig ?? PassportProximityConfig.defaultConfig,
+        _locationService = locationService ?? const PassportLocationService();
 
   /// Starts the batch attendance session:
   /// 1. Creates teacher beacon with cryptographically random session nonce.
@@ -154,23 +727,38 @@ class PassportTeacherAttendanceService {
     await restoreQueuedResults(session.id);
 
     // Request BLE permissions
-    await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothAdvertise,
-      Permission.bluetoothConnect,
-      Permission.location,
-    ].request();
+    final bool permissionsGranted = await requestBlePermissions();
 
-    try {
-      var adapterState = await FlutterBluePlus.adapterState.first
-          .timeout(const Duration(seconds: 2), onTimeout: () => BluetoothAdapterState.on);
-      if (adapterState != BluetoothAdapterState.on) {
-        try {
-          await FlutterBluePlus.turnOn();
-        } catch (_) {}
+    bool isBleOn = false;
+    if (permissionsGranted) {
+      try {
+        final isSupported = await FlutterBluePlus.isSupported;
+        if (isSupported) {
+          var adapterState = await FlutterBluePlus.adapterState.first
+              .timeout(const Duration(seconds: 1), onTimeout: () => BluetoothAdapterState.unknown);
+          if (adapterState == BluetoothAdapterState.on) {
+            isBleOn = true;
+          } else if (!_hasUserDeclinedBluetooth) {
+            try {
+              await FlutterBluePlus.turnOn();
+              adapterState = await FlutterBluePlus.adapterState.first
+                  .timeout(const Duration(seconds: 2), onTimeout: () => BluetoothAdapterState.off);
+              if (adapterState == BluetoothAdapterState.on) {
+                isBleOn = true;
+              } else {
+                _hasUserDeclinedBluetooth = true;
+              }
+            } catch (_) {
+              _hasUserDeclinedBluetooth = true;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ [PASSPORT_TEACHER] Adapter check notice: $e');
       }
-    } catch (_) {}
+    } else {
+      debugPrint('⚠️ [PASSPORT_TEACHER] BLE permissions denied. Running in Zero-BLE mode.');
+    }
 
     // 1. Resolve teacher keyId — used as an identifier in the beacon.
     //    Teachers are NOT enrolled in Passport (student-only), so this keyId
@@ -202,7 +790,22 @@ class PassportTeacherAttendanceService {
       } catch (_) {}
     }
 
-    // 2. Generate teacher beacon bound deterministically to this session ID
+    // 2. Discover local IP address & capture teacher reference GPS concurrently
+    final localIpFuture = _getLocalIpAddress();
+    final gpsFuture = _locationService.captureSnapshot(
+      timeout: const Duration(seconds: 2),
+    );
+    final localIp = await localIpFuture;
+    _teacherLocation = await gpsFuture;
+    if (_teacherLocation != null) {
+      debugPrint(
+        '📍 [PASSPORT_TEACHER] Teacher reference GPS anchored: '
+        '(${_teacherLocation!.latitude}, ${_teacherLocation!.longitude}) '
+        '±${_teacherLocation!.accuracyMeters}m',
+      );
+    }
+
+    // 3. Generate teacher beacon bound deterministically to this session ID
     final beacon = PassportTeacherBeaconModel.create(
       sessionId: session.id,
       teacherId: teacher.uid,
@@ -214,9 +817,17 @@ class PassportTeacherAttendanceService {
       validity: const Duration(minutes: 15),
       currentTimestampSeconds: currentTimestampSeconds,
       customSessionNonce: 'nonce_${session.id}',
+      routerBssid: _classroomRouterBssid,
+      localIp: localIp,
+      localPort: PassportAttendanceModel.defaultLocalHttpPort,
+      hotspotSsid: _isHotspotActive ? _hotspotSsid : null,
+      hotspotPassword: _isHotspotActive ? _hotspotPassword : null,
+      teacherLatitude: _teacherLocation?.latitude,
+      teacherLongitude: _teacherLocation?.longitude,
+      teacherLocationAccuracy: _teacherLocation?.accuracyMeters,
     );
 
-    // 3. Sign beacon canonically with teacher's Ed25519 key
+    // 4. Sign beacon canonically with teacher's Ed25519 key
     final hasKey = await _cryptoService.hasIdentityKey();
     if (!hasKey) {
       await _cryptoService.getOrCreatePublicKey();
@@ -225,11 +836,52 @@ class PassportTeacherAttendanceService {
     final signature = await _cryptoService.signPresentation(canonicalJson);
     _activeBeacon = beacon.withSignature(signature);
 
-    // 4. Start advertising teacher beacon frames
-    await _startBeaconAdvertising(_activeBeacon!);
+    // Sync session beacon & teacher reference GPS anchor to cloud backend
+    unawaited(_syncBeaconToBackend(session.id, _activeBeacon!));
 
-    // 5. Start concurrent batch scanner to capture direct BLE radio frames from students (offline & online)
-    await startBatchCollection();
+    // Lazy background GPS retry once if initial indoor lock wasn't ready
+    _gpsRetryTimer?.cancel();
+    if (_teacherLocation == null) {
+      _gpsRetryTimer = Timer(const Duration(seconds: 4), () async {
+        if (_activeBeacon == null || _metricsController.isClosed) return;
+        final snap = await _locationService.captureSnapshot(
+          timeout: const Duration(seconds: 3),
+        );
+        if (snap != null && _activeBeacon != null && !_metricsController.isClosed) {
+          _teacherLocation = snap;
+          final updated = _activeBeacon!.copyWith(
+            teacherLatitude: snap.latitude,
+            teacherLongitude: snap.longitude,
+            teacherLocationAccuracy: snap.accuracyMeters,
+          );
+          final sig = await _cryptoService.signPresentation(updated.toCanonicalJson());
+          _activeBeacon = updated.withSignature(sig);
+          unawaited(_syncBeaconToBackend(session.id, _activeBeacon!));
+          _emitMetrics();
+        }
+      });
+    }
+
+    // 5. Start advertising teacher beacon frames over BLE (if permitted and Bluetooth is ready)
+    if (permissionsGranted && isBleOn) {
+      await _startBeaconAdvertising(_activeBeacon!);
+      // 6. Start concurrent batch scanner to capture direct BLE radio frames from students (offline & online)
+      await startBatchCollection();
+    } else {
+      _isBroadcasting = false;
+      if (!permissionsGranted) {
+        _advertisingError = "Bluetooth permissions denied. Enable Nearby Devices in Settings.";
+      } else {
+        _advertisingError = "Bluetooth is turned off. Please turn on Bluetooth to broadcast beacon.";
+      }
+      debugPrint('ℹ️ [PASSPORT_TEACHER] BLE radio skipped ($_advertisingError). Zero-BLE & Wi-Fi LAN active.');
+    }
+
+    // 7. Start local offline HTTP server on port 53318 for Zero-BLE / Wi-Fi LAN / Hotspot attendance
+    await _startLocalHttpServer();
+
+    // 8. Start Wi-Fi UDP multicast broadcaster on port 53317 for automatic campus subnet discovery
+    await _startUdpBroadcasting();
 
     _emitMetrics();
     return _activeBeacon!;
@@ -260,6 +912,9 @@ class PassportTeacherAttendanceService {
             ),
             verificationMode: q['verificationMode']?.toString() ?? 'BLE_BATCH',
             verifiedAt: DateTime.tryParse(q['checkInTime']?.toString() ?? '') ?? DateTime.now(),
+            gpsDistanceMeters: (q['gpsDistanceMeters'] as num?)?.toDouble() ??
+                double.tryParse(q['gpsDistanceMeters']?.toString() ?? ''),
+            gpsStatus: q['gpsStatus']?.toString(),
           );
           _verifiedResults[sId] = res;
         }
@@ -292,6 +947,23 @@ class PassportTeacherAttendanceService {
   /// Advertises the teacher beacon over BLE.
   Future<void> _startBeaconAdvertising(PassportTeacherBeaconModel beacon) async {
     try {
+      final permsOk = await checkBlePermissions();
+      if (!permsOk) {
+        _isBroadcasting = false;
+        _advertisingError = "Bluetooth permissions denied. Enable Nearby Devices in Settings.";
+        return;
+      }
+
+      try {
+        var adapterState = await FlutterBluePlus.adapterState.first
+            .timeout(const Duration(milliseconds: 500), onTimeout: () => BluetoothAdapterState.unknown);
+        if (adapterState != BluetoothAdapterState.on && adapterState != BluetoothAdapterState.unknown) {
+          _isBroadcasting = false;
+          _advertisingError = "Bluetooth is turned off. Please turn on Bluetooth.";
+          return;
+        }
+      } catch (_) {}
+
       final isSupp = await _blePeripheral.isSupported;
       if (!isSupp) {
         _isAdvertisingSupported = false;
@@ -337,10 +1009,12 @@ class PassportTeacherAttendanceService {
           started = true;
           break;
         } catch (e) {
-          lastErr = e.toString().replaceAll('Exception: ', '').replaceAll('PlatformException: ', '');
+          lastErr = _formatBleError(e);
           debugPrint('⚠️ [PASSPORT_TEACHER] Teacher advertiser attempt $attempt failed: $e');
           if (attempt < 3) {
-            await _blePeripheral.stop();
+            try {
+              await _blePeripheral.stop();
+            } catch (_) {}
             await CampusMeshManager.instance.pauseAdvertisingForAttendance();
             await Future.delayed(Duration(milliseconds: 300 * attempt));
           }
@@ -358,7 +1032,7 @@ class PassportTeacherAttendanceService {
       }
     } catch (e) {
       _isBroadcasting = false;
-      _advertisingError = e.toString().replaceAll('Exception: ', '').replaceAll('PlatformException: ', '');
+      _advertisingError = _formatBleError(e);
       debugPrint('⚠️ [PASSPORT_TEACHER] Teacher advertising error: $e');
     }
   }
@@ -367,13 +1041,53 @@ class PassportTeacherAttendanceService {
   Future<void> retryBeaconAdvertising() async {
     if (_activeBeacon == null) return;
     _advertisingError = null;
+
+    bool permsOk = await checkBlePermissions();
+    if (!permsOk) {
+      permsOk = await requestBlePermissions();
+      if (!permsOk) {
+        _isBroadcasting = false;
+        _advertisingError = "Bluetooth permissions denied. Enable Nearby Devices in Settings.";
+        _emitMetrics();
+        return;
+      }
+    }
+
+    try {
+      var adapterState = await FlutterBluePlus.adapterState.first
+          .timeout(const Duration(seconds: 1), onTimeout: () => BluetoothAdapterState.unknown);
+      if (adapterState != BluetoothAdapterState.on) {
+        try {
+          await FlutterBluePlus.turnOn();
+          adapterState = await FlutterBluePlus.adapterState.first
+              .timeout(const Duration(seconds: 2), onTimeout: () => BluetoothAdapterState.off);
+        } catch (_) {}
+      }
+      if (adapterState != BluetoothAdapterState.on) {
+        _isBroadcasting = false;
+        _advertisingError = "Bluetooth is turned off. Please turn on Bluetooth.";
+        _emitMetrics();
+        return;
+      }
+    } catch (_) {}
+
     await _startBeaconAdvertising(_activeBeacon!);
+    if (_isBroadcasting && !_isCollecting) {
+      await startBatchCollection();
+    }
     _emitMetrics();
   }
 
   /// Starts concurrent batch collection of student responses.
   Future<void> startBatchCollection({Duration? timeout}) async {
     _stopCollection();
+
+    final permsOk = await checkBlePermissions();
+    if (!permsOk) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] Skipping BLE scan: permissions not granted.');
+      return;
+    }
+
     _isCollecting = true;
     _startStreamCleanupTimer();
 
@@ -401,6 +1115,7 @@ class PassportTeacherAttendanceService {
 
       debugPrint('🔍 [PASSPORT_TEACHER] Batch BLE response collection active (lowLatency continuous)...');
     } catch (e) {
+      _isCollecting = false;
       debugPrint('⚠️ [PASSPORT_TEACHER] Scan error: $e');
     }
   }
@@ -498,42 +1213,84 @@ class PassportTeacherAttendanceService {
     }
 
     final resolvedStudentId = transmittedId.isNotEmpty ? transmittedId : streamId.toString();
-    String studentName = transmittedName;
-    if (studentName.isEmpty) {
-      try {
-        final bundle = await _trustBundleService.getLocalBundle();
-        final match = bundle?.identities.where((id) => id.userId == resolvedStudentId).toList();
-        if (match != null && match.isNotEmpty && match.first.userName != null && match.first.userName!.isNotEmpty) {
-          studentName = match.first.userName!;
+    String finalStudentId = resolvedStudentId;
+    String finalStudentName = transmittedName;
+
+    // Resolve full student ID & name against trust bundle and class roster
+    try {
+      final bundle = await _trustBundleService.getLocalBundle();
+      if (bundle != null && bundle.identities.isNotEmpty) {
+        final match = bundle.identities.firstWhere(
+          (id) =>
+              id.userId == resolvedStudentId ||
+              id.keyId == resolvedStudentId ||
+              (resolvedStudentId.length >= 4 && (id.userId.startsWith(resolvedStudentId) || id.keyId.startsWith(resolvedStudentId))) ||
+              (transmittedName.isNotEmpty && id.userName != null && id.userName!.trim().toLowerCase() == transmittedName.toLowerCase()),
+          orElse: () => const PassportTrustIdentity(
+            keyId: '',
+            userId: '',
+            publicKey: '',
+            certificateId: '',
+            issuerKeyId: '',
+            validFrom: 0,
+            validTo: 0,
+            status: '',
+          ),
+        );
+        if (match.userId.isNotEmpty) {
+          finalStudentId = match.userId;
+          if (match.userName != null && match.userName!.trim().isNotEmpty) {
+            finalStudentName = match.userName!.trim();
+          }
         }
-      } catch (_) {}
-    }
-    if (studentName.isEmpty) {
-      studentName = 'Student ${resolvedStudentId.substring(0, min(6, resolvedStudentId.length))}';
+      }
+
+      if (finalStudentId == resolvedStudentId && _classRosterStudentIds.isNotEmpty) {
+        final rosterMatch = _classRosterStudentIds.firstWhere(
+          (rId) => rId == resolvedStudentId || (resolvedStudentId.length >= 4 && rId.startsWith(resolvedStudentId)),
+          orElse: () => '',
+        );
+        if (rosterMatch.isNotEmpty) {
+          finalStudentId = rosterMatch;
+        }
+      }
+    } catch (_) {}
+
+    if (finalStudentName.isEmpty) {
+      finalStudentName = transmittedName.isNotEmpty
+          ? transmittedName
+          : 'Student ${finalStudentId.substring(0, min(6, finalStudentId.length))}';
     }
 
     final res = PassportAttendanceVerificationResult(
       valid: true,
       status: PassportAttendanceStatus.verifiedPresent,
       reason: 'Verified present via direct BLE Radio frame',
-      studentId: resolvedStudentId,
-      studentName: studentName,
-      deviceKeyId: 'key_$resolvedStudentId',
+      studentId: finalStudentId,
+      studentName: finalStudentName,
+      deviceKeyId: 'key_$finalStudentId',
       sessionId: _activeSession?.id ?? _activeBeacon?.sessionId ?? '',
       responseNonce: streamId.toString(),
-      idempotencyKey: '${_activeSession?.id ?? _activeBeacon?.sessionId}_$resolvedStudentId',
+      idempotencyKey: '${_activeSession?.id ?? _activeBeacon?.sessionId}_$finalStudentId',
       proximityTier: PassportProximityTier.near,
       medianRssi: rssi,
       verificationMode: 'BLE_BATCH',
       verifiedAt: DateTime.now(),
     );
 
-    if (!_verifiedResults.containsKey(resolvedStudentId)) {
+    if (!_verifiedResults.containsKey(finalStudentId) && !_verifiedResults.containsKey(resolvedStudentId)) {
       await _ledgerService.recordAttendance(res);
-      _verifiedResults[resolvedStudentId] = res;
+      _verifiedResults[finalStudentId] = res;
+      if (finalStudentId != resolvedStudentId) {
+        _verifiedResults[resolvedStudentId] = res;
+      }
+      _inconclusiveResults.remove(finalStudentId);
       _inconclusiveResults.remove(resolvedStudentId);
       _emitMetrics();
-      debugPrint('🎯 [PASSPORT_TEACHER] Verified student $studentName (ID: $resolvedStudentId) over direct BLE radio (RSSI: $rssi dBm)!');
+      debugPrint('🎯 [PASSPORT_TEACHER] Verified student $finalStudentName (ID: $finalStudentId) over direct BLE radio (RSSI: $rssi dBm)!');
+
+      // Opportunistically sync to central backend so live attendance updates immediately
+      _syncVerifiedAttendanceToBackend();
     }
   }
 
@@ -628,6 +1385,77 @@ class PassportTeacherAttendanceService {
       );
     }
 
+    // 6b. Classroom Router BSSID Lock (Anti-hostel Wi-Fi spoofing)
+    final expectedBssid = _classroomRouterBssid ?? _activeBeacon?.routerBssid;
+    if (verificationMode == PassportAttendanceModel.modeWifiLan &&
+        expectedBssid != null &&
+        expectedBssid.isNotEmpty &&
+        response.routerBssid != null &&
+        response.routerBssid!.isNotEmpty) {
+      if (expectedBssid.toLowerCase() != response.routerBssid!.toLowerCase()) {
+        return PassportAttendanceVerificationResult(
+          valid: false,
+          status: PassportAttendanceStatus.proximityInconclusive,
+          reason: 'BSSID_MISMATCH: Connected to different Wi-Fi access point (${response.routerBssid}). Classroom lock failed.',
+          sessionId: response.sessionId,
+          studentId: response.studentId,
+          routerBssid: response.routerBssid,
+          verifiedAt: DateTime.now(),
+        );
+      }
+    }
+
+    // 6c. Room PIN Verification Lock
+    if (verificationMode == PassportAttendanceModel.modePinManual) {
+      final pin = response.responseNonce;
+      final expectedNonce = _activeBeacon?.sessionNonce ?? 'nonce_';
+      final activeSessionId = _activeBeacon?.sessionId ?? response.sessionId;
+      final isPinValid = PassportRollingPinModel.verifyPin(
+        enteredPin: pin,
+        sessionId: activeSessionId,
+        sessionNonce: expectedNonce,
+        timestampSeconds: now,
+      );
+      if (!isPinValid) {
+        return PassportAttendanceVerificationResult(
+          valid: false,
+          status: PassportAttendanceStatus.cryptoInvalid,
+          reason: 'PIN_INVALID: Room PIN is incorrect or expired. Check classroom display.',
+          sessionId: response.sessionId,
+          studentId: response.studentId,
+          verifiedAt: DateTime.now(),
+        );
+      }
+    }
+
+    // 6d. Hybrid GPS Geofence & Anti-Mock Location Check
+    final gpsEval = PassportLocationService.evaluate(
+      teacherLatitude:
+          _activeBeacon?.teacherLatitude ?? _teacherLocation?.latitude,
+      teacherLongitude:
+          _activeBeacon?.teacherLongitude ?? _teacherLocation?.longitude,
+      teacherAccuracyMeters: _activeBeacon?.teacherLocationAccuracy ??
+          _teacherLocation?.accuracyMeters,
+      studentLatitude: response.latitude,
+      studentLongitude: response.longitude,
+      studentAccuracyMeters: response.gpsAccuracy,
+      studentIsMocked: response.isMockedGps,
+    );
+
+    if (gpsEval.status == PassportGeofenceStatus.mockDetected) {
+      return PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.fakeBeacon,
+        reason: gpsEval.summary,
+        sessionId: response.sessionId,
+        studentId: response.studentId,
+        verificationMode: verificationMode,
+        gpsDistanceMeters: gpsEval.distanceMeters,
+        gpsStatus: gpsEval.statusCode,
+        verifiedAt: DateTime.now(),
+      );
+    }
+
     // 7. Check cached trust bundle for student registered key & certificate
     var bundle = await _trustBundleService.getLocalBundle();
     if (bundle == null) {
@@ -656,19 +1484,43 @@ class PassportTeacherAttendanceService {
         completedAt: DateTime.now(),
         config: _proximityConfig,
       );
+      final fallbackName =
+          'Student ${response.studentId.substring(0, min(6, response.studentId.length))}';
+      if (gpsEval.status == PassportGeofenceStatus.outsideReview &&
+          verificationMode != 'QR_FALLBACK') {
+        return PassportAttendanceVerificationResult(
+          valid: false,
+          status: PassportAttendanceStatus.proximityInconclusive,
+          reason: gpsEval.summary,
+          sessionId: response.sessionId,
+          studentId: response.studentId,
+          studentName: fallbackName,
+          deviceKeyId: response.deviceKeyId,
+          responseNonce: response.responseNonce,
+          idempotencyKey: response.idempotencyKey,
+          proximityTier: proximity.proximityTier,
+          medianRssi: proximity.medianRssi,
+          verificationMode: verificationMode,
+          gpsDistanceMeters: gpsEval.distanceMeters,
+          gpsStatus: gpsEval.statusCode,
+          verifiedAt: DateTime.now(),
+        );
+      }
       return PassportAttendanceVerificationResult(
         valid: true,
         status: PassportAttendanceStatus.verifiedPresent,
         reason: 'OFFLINE_TRUST_DATA_MISSING: Verified present offline (structural validation)',
         sessionId: response.sessionId,
         studentId: response.studentId,
-        studentName: 'Student ${response.studentId.substring(0, min(6, response.studentId.length))}',
+        studentName: fallbackName,
         deviceKeyId: response.deviceKeyId,
         responseNonce: response.responseNonce,
         idempotencyKey: response.idempotencyKey,
         proximityTier: proximity.proximityTier,
         medianRssi: proximity.medianRssi,
         verificationMode: verificationMode,
+        gpsDistanceMeters: gpsEval.distanceMeters,
+        gpsStatus: gpsEval.statusCode,
         verifiedAt: DateTime.now(),
       );
     }
@@ -771,9 +1623,11 @@ class PassportTeacherAttendanceService {
       );
     }
 
-    // 10. Proximity / RSSI evaluation
+    // 9b. Classroom Router BSSID Lock evaluated at Step 6b
+
+    // 10. Proximity / Multi-rail evaluation
     PassportProximityObservation proximity;
-    if (verificationMode == 'QR_FALLBACK') {
+    if (verificationMode == 'QR_FALLBACK' || verificationMode == PassportAttendanceModel.modeQrOptical) {
       proximity = PassportProximityObservation.compute(
         challengeId: response.challengeNonce,
         samples: const [-50], // Direct visual proximity confirmed by camera scan
@@ -793,9 +1647,36 @@ class PassportTeacherAttendanceService {
 
     final studentName = studentIdentity.userName ?? 'Student ${response.studentId.substring(0, min(6, response.studentId.length))}';
 
-    // If cryptographically valid AND proximity is NEAR: VERIFIED PRESENT
-    if (proximity.proximityTier == PassportProximityTier.near ||
-        verificationMode == 'QR_FALLBACK') {
+    if (gpsEval.status == PassportGeofenceStatus.outsideReview &&
+        verificationMode != 'QR_FALLBACK') {
+      return PassportAttendanceVerificationResult(
+        valid: false,
+        status: PassportAttendanceStatus.proximityInconclusive,
+        reason: gpsEval.summary,
+        studentId: response.studentId,
+        studentName: studentName,
+        deviceKeyId: response.deviceKeyId,
+        sessionId: response.sessionId,
+        responseNonce: response.responseNonce,
+        idempotencyKey: idempotencyKey,
+        proximityTier: proximity.proximityTier,
+        medianRssi: proximity.medianRssi,
+        verificationMode: verificationMode,
+        gpsDistanceMeters: gpsEval.distanceMeters,
+        gpsStatus: gpsEval.statusCode,
+        verifiedAt: DateTime.now(),
+      );
+    }
+
+    final isProximityGuaranteed = proximity.proximityTier == PassportProximityTier.near ||
+        verificationMode == 'QR_FALLBACK' ||
+        verificationMode == PassportAttendanceModel.modeQrOptical ||
+        verificationMode == PassportAttendanceModel.modeWifiLan ||
+        verificationMode == PassportAttendanceModel.modeWifiHotspot ||
+        verificationMode == PassportAttendanceModel.modePinManual;
+
+    // If cryptographically valid AND proximity is guaranteed: VERIFIED PRESENT
+    if (isProximityGuaranteed) {
       final res = PassportAttendanceVerificationResult(
         valid: true,
         status: PassportAttendanceStatus.verifiedPresent,
@@ -809,11 +1690,15 @@ class PassportTeacherAttendanceService {
         proximityTier: proximity.proximityTier,
         medianRssi: proximity.medianRssi,
         verificationMode: verificationMode,
+        routerBssid: response.routerBssid,
+        gpsDistanceMeters: gpsEval.distanceMeters,
+        gpsStatus: gpsEval.statusCode,
         verifiedAt: DateTime.now(),
       );
       await _ledgerService.recordAttendance(res);
       _verifiedResults[response.studentId] = res;
       _inconclusiveResults.remove(response.studentId);
+      _syncVerifiedAttendanceToBackend();
       return res;
     }
 
@@ -831,6 +1716,8 @@ class PassportTeacherAttendanceService {
       proximityTier: proximity.proximityTier,
       medianRssi: proximity.medianRssi,
       verificationMode: verificationMode,
+      gpsDistanceMeters: gpsEval.distanceMeters,
+      gpsStatus: gpsEval.statusCode,
       verifiedAt: DateTime.now(),
     );
   }
@@ -883,6 +1770,7 @@ class PassportTeacherAttendanceService {
       _inconclusiveResults.remove(result.studentId);
       await _ledgerService.recordAttendance(result);
       debugPrint('✅ [PASSPORT_TEACHER] Verified Present: ${result.studentName} (${result.studentId})');
+      _syncVerifiedAttendanceToBackend();
     } else if (result.status == PassportAttendanceStatus.proximityInconclusive) {
       _inconclusiveResults[result.studentId!] = result;
       debugPrint('⚠️ [PASSPORT_TEACHER] Proximity Inconclusive: ${result.studentName} (${result.studentId}) -> QR Fallback');
@@ -1189,7 +2077,30 @@ class PassportTeacherAttendanceService {
     return _activeBeacon!.toQrString();
   }
 
+  /// Builds the hybrid Wi-Fi MECARD + `X-CAMPUSOS` QR payload including reference GPS coordinates when available.
+  String buildWifiHotspotQrPayload({
+    required String sessionId,
+    String? fallbackTeacherId,
+    String? gatewayIpOverride,
+  }) {
+    final ssid = _hotspotSsid ?? '';
+    final pass = _hotspotPassword ?? '';
+    final gatewayIp = gatewayIpOverride ?? _detectedGatewayIp ?? '192.168.43.1';
+    final nonce = _activeBeacon?.sessionNonce ?? '';
+    final teacherId = _activeBeacon?.teacherId ?? fallbackTeacherId ?? 'teacher';
+    const localPort = PassportAttendanceModel.defaultLocalHttpPort;
+    final lat = _activeBeacon?.teacherLatitude ?? _teacherLocation?.latitude;
+    final lng = _activeBeacon?.teacherLongitude ?? _teacherLocation?.longitude;
+    final acc = _activeBeacon?.teacherLocationAccuracy ??
+        _teacherLocation?.accuracyMeters;
+    final gpsSuffix = (lat != null && lng != null)
+        ? ',$lat,$lng,${acc ?? 15.0}'
+        : '';
+    return 'WIFI:S:$ssid;T:WPA;P:$pass;X-CAMPUSOS:$sessionId,$nonce,$teacherId,$gatewayIp,$localPort$gpsSuffix;;';
+  }
+
   void _emitMetrics() {
+    if (_metricsController.isClosed) return;
     final verified = _verifiedResults.length;
     final inconclusive = _inconclusiveResults.length;
     final total = max(_classRosterStudentIds.length, verified + inconclusive);
@@ -1239,8 +2150,195 @@ class PassportTeacherAttendanceService {
     } catch (_) {}
   }
 
+  /// Starts the local HTTP attendance receiver on port 53318.
+  Future<void> _startLocalHttpServer() async {
+    try {
+      await _localHttpServer?.close(force: true);
+      _localHttpServer = await HttpServer.bind(
+        InternetAddress.anyIPv4,
+        PassportAttendanceModel.defaultLocalHttpPort,
+        shared: true,
+      );
+      debugPrint('🌐 [PASSPORT_TEACHER] Local attendance HTTP server listening on port ${_localHttpServer!.port}');
+      _localHttpServer!.listen((HttpRequest request) async {
+        request.response.headers.add('Access-Control-Allow-Origin', '*');
+        request.response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+        request.response.headers.add('Access-Control-Allow-Headers', 'Content-Type');
+
+        if (request.method == 'OPTIONS') {
+          request.response.statusCode = HttpStatus.ok;
+          await request.response.close();
+          return;
+        }
+
+        if (request.method == 'POST' &&
+            (request.uri.path == '/attendance/submit' ||
+             request.uri.path == '/api/attendance/submit')) {
+          try {
+            final content = await utf8.decoder.bind(request).join();
+            final map = jsonDecode(content) as Map<String, dynamic>;
+            final response = PassportAttendanceResponseModel.fromMap(map);
+            final verificationMode = response.verificationMode.isNotEmpty
+                ? response.verificationMode
+                : PassportAttendanceModel.modeWifiLan;
+
+            final result = await verifyResponseOffline(
+              response: response,
+              rssiSamples: const [-45], // Wi-Fi LAN / Hotspot direct TCP socket
+              verificationMode: verificationMode,
+            );
+
+            if (result.valid && result.status == PassportAttendanceStatus.verifiedPresent) {
+              if (result.studentId != null &&
+                  !_verifiedResults.containsKey(result.studentId)) {
+                await _ledgerService.recordAttendance(result);
+                _verifiedResults[result.studentId!] = result;
+                _inconclusiveResults.remove(result.studentId);
+              }
+              request.response.statusCode = HttpStatus.ok;
+              request.response.headers.contentType = ContentType.json;
+              request.response.write(jsonEncode({
+                'status': 'verified',
+                'studentId': result.studentId,
+                'studentName': result.studentName,
+                'verificationMode': result.verificationMode,
+                'idempotencyKey': result.idempotencyKey,
+                if (result.gpsStatus != null) 'gpsStatus': result.gpsStatus,
+                if (result.gpsDistanceMeters != null)
+                  'gpsDistanceMeters': result.gpsDistanceMeters,
+              }));
+              _emitMetrics();
+            } else if (result.status ==
+                PassportAttendanceStatus.proximityInconclusive) {
+              if (result.studentId != null) {
+                _inconclusiveResults[result.studentId!] = result;
+                _emitMetrics();
+              }
+              request.response.statusCode = HttpStatus.badRequest;
+              request.response.headers.contentType = ContentType.json;
+              request.response.write(jsonEncode({
+                'status': 'inconclusive',
+                'reason': result.reason,
+                'studentId': result.studentId,
+                if (result.gpsStatus != null) 'gpsStatus': result.gpsStatus,
+                if (result.gpsDistanceMeters != null)
+                  'gpsDistanceMeters': result.gpsDistanceMeters,
+              }));
+            } else {
+              request.response.statusCode = HttpStatus.badRequest;
+              request.response.headers.contentType = ContentType.json;
+              request.response.write(jsonEncode({
+                'status': 'rejected',
+                'reason': result.reason,
+                'studentId': result.studentId,
+              }));
+            }
+          } catch (e) {
+            request.response.statusCode = HttpStatus.badRequest;
+            request.response.headers.contentType = ContentType.json;
+            request.response.write(jsonEncode({'error': e.toString()}));
+          }
+          await request.response.close();
+        } else if (request.method == 'GET' && request.uri.path == '/attendance/beacon') {
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(jsonEncode(_activeBeacon?.toMap() ?? {}));
+          await request.response.close();
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+        }
+      });
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] Failed to start local HTTP server: $e');
+    }
+  }
+
+  /// Starts UDP multicast / broadcast on port 53317 for automatic subnet discovery.
+  Future<void> _startUdpBroadcasting() async {
+    try {
+      _udpBroadcastSocket?.close();
+      _udpBroadcastSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      _udpBroadcastSocket!.broadcastEnabled = true;
+
+      _udpBroadcastTimer?.cancel();
+      _udpBroadcastTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+        if (!_isBroadcasting || _activeBeacon == null) return;
+        try {
+          final localIp = await _getLocalIpAddress();
+          final beaconPayload = jsonEncode({
+            'type': 'TEACHER_BEACON',
+            'sessionId': _activeBeacon!.sessionId,
+            'teacherId': _activeBeacon!.teacherId,
+            'nonce': _activeBeacon!.sessionNonce,
+            'ip': localIp,
+            'port': PassportAttendanceModel.defaultLocalHttpPort,
+            'pin': currentRollingPin,
+            if (_activeBeacon!.routerBssid != null) 'bssid': _activeBeacon!.routerBssid,
+            if (_isHotspotActive) 'hotspotSsid': _hotspotSsid,
+            if (_isHotspotActive) 'hotspotPassword': _hotspotPassword,
+            if (_activeBeacon!.teacherLatitude != null)
+              'tlat': _activeBeacon!.teacherLatitude,
+            if (_activeBeacon!.teacherLongitude != null)
+              'tlng': _activeBeacon!.teacherLongitude,
+            if (_activeBeacon!.teacherLocationAccuracy != null)
+              'tacc': _activeBeacon!.teacherLocationAccuracy,
+          });
+          final bytes = utf8.encode(beaconPayload);
+          _udpBroadcastSocket?.send(
+            bytes,
+            InternetAddress('255.255.255.255'),
+            PassportAttendanceModel.defaultUdpMulticastPort,
+          );
+        } catch (_) {}
+      });
+      debugPrint('📡 [PASSPORT_TEACHER] UDP Multicast Broadcaster active on port ${PassportAttendanceModel.defaultUdpMulticastPort}');
+    } catch (e) {
+      debugPrint('⚠️ [PASSPORT_TEACHER] UDP Broadcaster error: $e');
+    }
+  }
+
+  /// Discovers the local device IPv4 address.
+  Future<String> _getLocalIpAddress() async {
+    try {
+      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      // Priority 1: Physical Wi-Fi or Hotspot interface (wlan, ap, en, wi-fi, eth)
+      for (final interface in interfaces) {
+        final name = interface.name.toLowerCase();
+        if (name.contains('wlan') || name.contains('ap') || name.contains('en') || name.contains('wi-fi') || name.contains('eth')) {
+          for (final addr in interface.addresses) {
+            if (!addr.isLoopback && !addr.address.startsWith('127.')) {
+              return addr.address;
+            }
+          }
+        }
+      }
+      // Priority 2: Standard LAN private subnets (192.168.x, 10.x, 172.x)
+      for (final interface in interfaces) {
+        for (final addr in interface.addresses) {
+          if (!addr.isLoopback && (addr.address.startsWith('192.168.') || addr.address.startsWith('10.') || addr.address.startsWith('172.'))) {
+            return addr.address;
+          }
+        }
+      }
+      // Priority 3: Any non-loopback IPv4 address
+      for (final interface in interfaces) {
+        for (final addr in interface.addresses) {
+          if (!addr.isLoopback && addr.address.isNotEmpty) {
+            return addr.address;
+          }
+        }
+      }
+    } catch (_) {}
+    return '127.0.0.1';
+  }
+
   Future<void> stopSession() async {
     _isBroadcasting = false;
+    _gpsRetryTimer?.cancel();
+    _gpsRetryTimer = null;
+    _debounceSyncTimer?.cancel();
+    _debounceSyncTimer = null;
     _beaconCycleTimer?.cancel();
     _beaconCycleTimer = null;
     _streamCleanupTimer?.cancel();
@@ -1248,15 +2346,38 @@ class PassportTeacherAttendanceService {
     _streamBuffers.clear();
     _stopCollection();
 
+    // Clean up local Wi-Fi & Hotspot network services
+    _udpBroadcastTimer?.cancel();
+    _udpBroadcastTimer = null;
+    try {
+      _udpBroadcastSocket?.close();
+      _udpBroadcastSocket = null;
+    } catch (_) {}
+
+    try {
+      await _localHttpServer?.close(force: true);
+      _localHttpServer = null;
+    } catch (_) {}
+
+    stopHotspotBurst();
+
     try {
       await _blePeripheral.stop();
     } catch (_) {}
-    await CampusMeshManager.instance.resumeAdvertisingAfterAttendance();
+    try {
+      await CampusMeshManager.instance.resumeAdvertisingAfterAttendance();
+    } catch (_) {}
+
+    try {
+      await syncAttendance();
+    } catch (_) {}
 
     debugPrint('🏁 [PASSPORT_TEACHER] Attendance session stopped.');
   }
 
   void dispose() {
+    _debounceSyncTimer?.cancel();
+    _debounceSyncTimer = null;
     stopSession();
     _metricsController.close();
   }

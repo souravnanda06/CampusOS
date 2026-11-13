@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:attendance_app/core/haptics/app_haptics.dart';
-
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -13,7 +13,6 @@ import '../../core/services/expansion_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/localization/language_provider.dart';
 import '../../core/localization/app_strings.dart';
-import '../../core/localization/app_localizations.dart';
 import 'dart:math' as math;
 import '../screens/global_search_screen.dart';
 import '../screens/notifications_center_screen.dart';
@@ -25,8 +24,19 @@ import '../../shared/models/session_model.dart';
 import '../../shared/services/session_service.dart';
 import '../../data/syllabus/syllabus_data.dart';
 import 'attendance/attendance_card.dart';
+import 'attendance/apple_attendance_expanded_view.dart';
+import 'emergency/student_emergency_section.dart';
+import '../../shared/widgets/motion/apple_bounceable.dart';
+import '../../shared/widgets/motion/apple_spring_scroll_physics.dart';
+import '../../shared/widgets/motion/apple_context_menu.dart';
+import '../../shared/widgets/motion/apple_continuous_expansion.dart';
+import 'timetable/apple_next_class_expanded_view.dart';
 
 class StudentHomeContent extends StatelessWidget {
+  static final GlobalKey<AppleContinuousExpansionCardState> attendanceExpansionKey =
+      GlobalKey<AppleContinuousExpansionCardState>();
+  static final GlobalKey<AppleContinuousExpansionCardState> nextClassExpansionKey =
+      GlobalKey<AppleContinuousExpansionCardState>();
   final UserModel? user;
   final double overallAttendance;
   final List<AttendanceModel> recentAttendance;
@@ -46,126 +56,232 @@ class StudentHomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStartupHeader(context),
-            const SizedBox(height: 16),
-            _buildCampusMeshSection(context),
-            StudentActiveSessionBanner(
-              user: user,
-              onNavigateToTab: (index) => onNavigateToTab(index),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Stack(
+      children: [
+        // Subtle ambient lavender/indigo glow in the top-right corner
+        Positioned(
+          top: -80,
+          right: -40,
+          child: IgnorePointer(
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    isDark
+                        ? const Color(0xFF6366F1).withValues(alpha: 0.12)
+                        : const Color(0xFF818CF8).withValues(alpha: 0.18),
+                    isDark
+                        ? const Color(0xFF4F46E5).withValues(alpha: 0.05)
+                        : const Color(0xFFC7D2FE).withValues(alpha: 0.08),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 24),
-            AttendanceCard(
-              user: user,
-              overallAttendance: overallAttendance,
-              attendanceAnalytics: attendanceAnalytics,
-              onNavigateToTab: (index) => onNavigateToTab(index),
-            ),
-            const SizedBox(height: 24),
-            TodaysAcademicUpdatesSection(user: user),
-            const SizedBox(height: 24),
-            _buildBentoGrid(context),
-            const SizedBox(height: 24),
-            _buildPassportCTA(context),
-            const SizedBox(height: 24),
-            _buildQuickActions(context),
-            const SizedBox(height: 24),
-            _buildRecentActivitySection(context),
-          ],
+          ),
         ),
-      ),
+
+        SafeArea(
+          bottom: false,
+          child: RefreshIndicator(
+            color: const Color(0xFF4F46E5),
+            backgroundColor: isDark ? const Color(0xFF1E2130) : Colors.white,
+            onRefresh: () async {
+              AppHaptics.mediumImpact();
+              if (user?.id != null) {
+                try {
+                  final prov = Provider.of<AttendanceProvider>(context, listen: false);
+                  await prov.fetchAttendanceData(user!.id, silent: true);
+                } catch (_) {}
+              }
+              await Future.delayed(const Duration(milliseconds: 500));
+            },
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 165),
+              physics: AppleSpringScrollPhysics.always,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Header (Greeting + Name + Action Buttons + Avatar)
+                  _buildStartupHeader(context)
+                      .animate()
+                      .fadeIn(duration: 350.ms)
+                      .slideY(begin: -0.08, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 18),
+
+                  _buildCampusMeshSection(context),
+
+                  StudentActiveSessionBanner(
+                    user: user,
+                    onNavigateToTab: (index) => onNavigateToTab(index),
+                  ),
+
+                  // Hero Attendance Card with Apple HIG Continuous Expansion Transition
+                  Builder(
+                    builder: (context) {
+                      final expansionKey = attendanceExpansionKey;
+
+                      return AppleContinuousExpansionCard(
+                        key: expansionKey,
+                        cardRadius: 28,
+                        expandedBuilder: (ctx, dismiss) =>
+                            AppleAttendanceExpandedView(
+                          user: user,
+                          overallAttendance: overallAttendance,
+                          attendanceAnalytics: attendanceAnalytics,
+                          onDismiss: dismiss,
+                        ),
+                        child: AppleContextMenu(
+                          actions: [
+                            AppleContextMenuItem(
+                              title: "Attendance Analytics",
+                              icon: Icons.analytics_outlined,
+                              onTap: () => expansionKey.currentState?.open(),
+                            ),
+                            AppleContextMenuItem(
+                              title: "Attendance Policy (75%)",
+                              icon: Icons.policy_outlined,
+                              onTap: () => _showAttendancePolicySheet(context),
+                            ),
+                            AppleContextMenuItem(
+                              title: "Refresh Attendance",
+                              icon: Icons.refresh_rounded,
+                              onTap: () async {
+                                AppHaptics.mediumImpact();
+                                if (user?.id != null) {
+                                  try {
+                                    final prov = Provider.of<AttendanceProvider>(
+                                        context,
+                                        listen: false);
+                                    await prov.fetchAttendanceData(user!.id,
+                                        silent: true);
+                                  } catch (_) {}
+                                }
+                              },
+                            ),
+                          ],
+                          onTap: () => expansionKey.currentState?.open(),
+                          child: AttendanceCard(
+                            user: user,
+                            overallAttendance: overallAttendance,
+                            attendanceAnalytics: attendanceAnalytics,
+                            onNavigateToTab: (index) => onNavigateToTab(index),
+                            onCardTap: () => expansionKey.currentState?.open(),
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                      .animate()
+                      .fadeIn(delay: 80.ms, duration: 450.ms)
+                      .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 18),
+
+                  // Bento Grid: Streak & Next Class
+                  _buildBentoGrid(context)
+                      .animate()
+                      .fadeIn(delay: 160.ms, duration: 450.ms)
+                      .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 18),
+
+                  // Campus Passport CTA Banner
+                  _buildPassportCTA(context)
+                      .animate()
+                      .fadeIn(delay: 240.ms, duration: 450.ms)
+                      .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 18),
+
+                  // Career & Placements Hub Card (Door A)
+                  _buildCareerHubCard(context)
+                      .animate()
+                      .fadeIn(delay: 280.ms, duration: 450.ms)
+                      .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 26),
+
+                  // Quick Actions (2 rows x 4 items)
+                  _buildQuickActions(context)
+                      .animate()
+                      .fadeIn(delay: 320.ms, duration: 450.ms)
+                      .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 26),
+
+                  // Recent Activity
+                  _buildRecentActivitySection(context)
+                      .animate()
+                      .fadeIn(delay: 400.ms, duration: 450.ms)
+                      .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildStartupHeader(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Good morning,'
+        : hour < 17
+            ? 'Good afternoon,'
+            : 'Good evening,';
+
+    final displayName = (user?.name != null && user!.name.trim().isNotEmpty)
+        ? user!.name.trim().split(' ')[0]
+        : 'Sourav';
+
+    final avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // Left: Greeting + Bold Name
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListenableBuilder(
-                listenable: LanguageProvider.instance,
-                builder: (context, _) {
-                  final lang = LanguageProvider.instance.currentLanguage;
-                  final hour = DateTime.now().hour;
-                  final greeting = hour < 12
-                      ? (lang == 'hi' ? 'सुप्रभात,' : (lang == 'or' ? 'ଶୁଭ ସକାଳ,' : (lang == 'bn' ? 'সুপ্রভাত,' : 'Good Morning,')))
-                      : hour < 17
-                          ? (lang == 'hi' ? 'शुभ दोपहर,' : (lang == 'or' ? 'ଶୁଭ ଅପରାହ୍ନ,' : (lang == 'bn' ? 'শুভ অপরাহ্ন,' : 'Good Afternoon,')))
-                          : (lang == 'hi' ? 'शुभ संध्या,' : (lang == 'or' ? 'ଶୁଭ ସନ୍ଧ୍ୟା,' : (lang == 'bn' ? 'শুভ সন্ধ্যা,' : 'Good Evening,')));
-                  return Text(
-                    greeting,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
-                  );
-                },
+              Text(
+                greeting,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF6B7280),
+                  letterSpacing: -0.1,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
-                user?.name.split(' ')[0] ?? 'Student',
+                displayName,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  height: 1.2,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  letterSpacing: -0.6,
+                  height: 1.15,
                 ),
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.success.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      "Online",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
         ),
+
+        // Right: Search Button + Notification Bell + Avatar with Online Dot
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              tooltip: "Search Campus",
-              onPressed: () {
+            // Search Button
+            AppleBounceable(
+              scaleFactor: 0.90,
+              onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -175,118 +291,211 @@ class StudentHomeContent extends StatelessWidget {
                   ),
                 );
               },
-              icon: Container(
-                padding: const EdgeInsets.all(8),
+              child: Container(
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.border),
+                  color: isDark ? const Color(0xFF1E2130) : Colors.white,
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : Colors.black.withValues(alpha: 0.05),
+                    width: 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.search_rounded,
-                    color: AppColors.textPrimary, size: 20),
+                child: Icon(
+                  Icons.search_rounded,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  size: 21,
+                ),
               ),
             ),
+
+            const SizedBox(width: 8),
+
+            // Career & Placements Quick Action Button
+            AppleBounceable(
+              scaleFactor: 0.90,
+              onTap: () {
+                AppHaptics.selectionClick();
+                Navigator.pushNamed(context, AppRoutes.careerHub);
+              },
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark ? const Color(0xFF1E2130) : Colors.white,
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : Colors.black.withValues(alpha: 0.05),
+                    width: 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.work_outline_rounded,
+                  color: Color(0xFF10B981),
+                  size: 21,
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // Notification Bell with Badge
             FutureBuilder<int>(
               future: user?.id != null
                   ? ExpansionApiService.instance.getUnreadCount(user!.id)
                   : Future.value(0),
               builder: (context, snapshot) {
                 final unread = snapshot.data ?? 0;
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      tooltip: "Notifications",
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NotificationsCenterScreen(
-                              userId: user?.id ?? '',
-                            ),
-                          ),
-                        );
-                      },
-                      icon: Container(
-                        padding: const EdgeInsets.all(8),
+                return AppleBounceable(
+                  scaleFactor: 0.90,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NotificationsCenterScreen(
+                          userId: user?.id ?? '',
+                        ),
+                      ),
+                    );
+                  },
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: const Icon(Icons.notifications_outlined,
-                            color: AppColors.textPrimary, size: 20),
-                      ),
-                    ),
-                    if (unread > 0)
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: AppColors.error,
-                            shape: BoxShape.circle,
+                          color: isDark ? const Color(0xFF1E2130) : Colors.white,
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.10)
+                                : Colors.black.withValues(alpha: 0.05),
+                            width: 1.0,
                           ),
-                          constraints: const BoxConstraints(
-                            minWidth: 16,
-                            minHeight: 16,
-                          ),
-                          child: Text(
-                            unread > 9 ? '9+' : '$unread',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black
+                                  .withValues(alpha: isDark ? 0.25 : 0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
                             ),
-                            textAlign: TextAlign.center,
-                          ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.notifications_none_rounded,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          size: 21,
                         ),
                       ),
-                  ],
+                      if (unread > 0)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark
+                                    ? const Color(0xFF1E2130)
+                                    : Colors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              unread > 9 ? '9+' : '$unread',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 );
               },
             ),
-            IconButton(
-              tooltip: "Campus Mesh Network",
-              onPressed: () {
-                AppHaptics.lightImpact();
-                Navigator.pushNamed(context, AppRoutes.meshHub);
-              },
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
-                ),
-                child: const Icon(Icons.hub_rounded,
-                    color: Color(0xFF6366F1), size: 20),
-              ),
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () => onNavigateToTab(3), // Navigate to Profile (tab 3)
-              borderRadius: BorderRadius.circular(32),
-              child: Container(
+
+            const SizedBox(width: 10),
+
+            // Avatar with Online Badge
+            AppleBounceable(
+              scaleFactor: 0.90,
+              onTap: () => onNavigateToTab(3), // Navigate to Profile
+              child: SizedBox(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primaryLight,
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.1)),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  user?.name.isNotEmpty == true
-                      ? user!.name[0].toUpperCase()
-                      : 'S',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF4F46E5), Color(0xFF4338CA)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        avatarLetter,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+
+                    // Green Online Badge on bottom right of avatar
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF22C55E),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF0C0C14) : Colors.white,
+                            width: 2.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -328,7 +537,7 @@ class StudentHomeContent extends StatelessWidget {
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;
-    final weekday = now.weekday; // 1 = Monday ... 7 = Sunday
+    final weekday = now.weekday;
 
     if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       return {
@@ -388,689 +597,245 @@ class StudentHomeContent extends StatelessWidget {
   }
 
   Widget _buildBentoGrid(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final streak = _calculateStreak();
-    final streakText = streak > 0 ? "$streak ${streak == 1 ? 'Day'.tr(context) : 'Days'.tr(context)}" : "0 ${'Days'.tr(context)}";
-    final inARowTranslated = "In a row".tr(context);
-    final streakSubtitle = streak > 0
-        ? (LanguageProvider.instance.currentLanguage == 'en' ? "🔥 In a row" : "🔥 $inARowTranslated")
-        : "Attend class today".tr(context);
-
     final nextClass = _getNextClassInfo();
+
+    final nextClassTiming = nextClass['timing'] ?? '09:00 AM';
+    String displayTime = "09:00";
+    String displayAmPm = "AM";
+    if (nextClassTiming.contains(':')) {
+      final parts = nextClassTiming.split(' ');
+      for (final part in parts) {
+        if (part.contains(':')) displayTime = part;
+        if (part.toUpperCase() == 'AM' || part.toUpperCase() == 'PM') {
+          displayAmPm = part.toUpperCase();
+        }
+      }
+    }
+
+    final String dayName = DateFormat('EEEE').format(DateTime.now());
 
     return Row(
       children: [
+        // --- Streak Card ---
         Expanded(
-          child: _buildBentoCard(
-            title: "Streak".tr(context),
-            value: streakText,
-            subtitle: streakSubtitle,
-            icon: streak > 0 ? Icons.local_fire_department_rounded : Icons.local_fire_department_outlined,
-            iconColor: AppColors.warning,
-            onTap: () {
-              AppHaptics.lightImpact();
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.local_fire_department_rounded, color: Colors.orangeAccent, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          streak > 0
-                              ? "Attendance Streak: $streak consecutive days! Keep going to maintain >75%."
-                              : "No active streak. Attend consecutive classes to build your attendance streak!",
-                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: const Color(0xFF1E1B4B),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildBentoCard(
-            title: "Next Class".tr(context),
-            value: nextClass['name'] ?? "No class".tr(context),
-            subtitle: nextClass['timing'] ?? "Tap to view timetable".tr(context),
-            icon: Icons.schedule_rounded,
-            iconColor: AppColors.info,
-            badge: "TIMETABLE",
-            onTap: () {
-              AppHaptics.lightImpact();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const TimetableScreen(),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBentoCard({
-    required String title,
-    required String value,
-    String? subtitle,
-    String? badge,
-    required IconData icon,
-    required Color iconColor,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFFFF),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.10),
-              blurRadius: 24,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: iconColor, size: 22),
-                ),
-                if (badge != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          badge,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: iconColor,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        Icon(Icons.arrow_forward_ios_rounded, size: 8, color: iconColor),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF6B7280),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF1E1B4B),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPassportCTA(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        AppHaptics.lightImpact();
-        onNavigateToTab(1); // Passport tab
-      },
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: AppColors.primaryGradient,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primaryDark.withValues(alpha: 0.4),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.badge_rounded,
-                  color: Colors.white, size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Campus Passport".tr(context),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "View your digital credential".tr(context),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                color: Colors.white, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActions(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Quick Actions".tr(context),
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Leave".tr(context),
-                subtitle: "Request leave".tr(context),
-                icon: Icons.event_busy_rounded,
-                onTap: () => onNavigateToTab(2, requestTab: 0, requestSubTab: 0),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Gate Pass".tr(context),
-                subtitle: "Campus exit pass".tr(context),
-                icon: Icons.door_sliding_rounded,
-                onTap: () => onNavigateToTab(2, requestTab: 0, requestSubTab: 1),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Complaint".tr(context),
-                subtitle: "Report an issue".tr(context),
-                icon: Icons.report_problem_rounded,
-                onTap: () => onNavigateToTab(2, requestTab: 4),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Notices".tr(context),
-                subtitle: "Campus updates".tr(context),
-                icon: Icons.campaign_rounded,
-                onTap: () => onNavigateToTab(2, requestTab: 5),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Timetable".tr(context),
-                subtitle: "Class schedule".tr(context),
-                icon: Icons.calendar_month_rounded,
+          child: AppleContextMenu(
+            actions: [
+              AppleContextMenuItem(
+                title: "Streak Analytics",
+                icon: Icons.local_fire_department_outlined,
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TimetableScreen(),
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        streak > 0
+                            ? "Attendance Streak: $streak consecutive days! Keep going to maintain >75%."
+                            : "No active streak. Attend consecutive classes to build your attendance streak!",
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                      backgroundColor: const Color(0xFF1E1B4B),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      duration: const Duration(seconds: 3),
                     ),
                   );
                 },
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Mess".tr(context),
-                subtitle: "Daily meals".tr(context),
-                icon: Icons.restaurant_menu_rounded,
-                onTap: () {
-                  Navigator.pushNamed(context, AppRoutes.studentMess);
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "Mesh Chat",
-                subtitle: "Offline P2P",
-                icon: Icons.chat_bubble_outline_rounded,
-                onTap: () {
-                  Navigator.pushNamed(context, AppRoutes.meshChat);
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickActionTile(
-                title: "AirDrop",
-                subtitle: "P2P Files",
-                icon: Icons.file_download_outlined,
-                onTap: () {
-                  Navigator.pushNamed(context, AppRoutes.meshAirDrop);
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCampusMeshSection(BuildContext context) {
-    return const SizedBox.shrink();
-  }
-
-  // ignore: unused_element
-  Widget _buildCampusMeshSectionOld(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF131722) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.25),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.2 : 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.hub_rounded,
-                      color: Color(0xFF6366F1),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            "CampusOS Mesh",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              "M1–M7",
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF10B981),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        "Decentralized BLE 5 · Zero Cellular Needed",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              InkWell(
-                onTap: () {
-                  AppHaptics.lightImpact();
-                  Navigator.pushNamed(context, AppRoutes.meshHub);
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Open Hub",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 14),
-                    ],
-                  ),
-                ),
+              AppleContextMenuItem(
+                title: "Attendance Tips",
+                icon: Icons.tips_and_updates_outlined,
+                onTap: () => _showStreakTipsSheet(context),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildMeshActionButton(
-                  context: context,
-                  isDark: isDark,
-                  label: "P2P Chat",
-                  sublabel: "M3 Offline",
-                  icon: Icons.chat_bubble_outline_rounded,
-                  color: const Color(0xFF3B82F6),
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.meshChat),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildMeshActionButton(
-                  context: context,
-                  isDark: isDark,
-                  label: "AirDrop",
-                  sublabel: "M5 File Share",
-                  icon: Icons.file_download_outlined,
-                  color: const Color(0xFF10B981),
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.meshAirDrop),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildMeshActionButton(
-                  context: context,
-                  isDark: isDark,
-                  label: "Flare",
-                  sublabel: "M4 Emergency",
-                  icon: Icons.warning_amber_rounded,
-                  color: const Color(0xFFEF4444),
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.meshEmergency),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildMeshActionButton(
-                  context: context,
-                  isDark: isDark,
-                  label: "Radar",
-                  sublabel: "M7 Visual",
-                  icon: Icons.radar_rounded,
-                  color: const Color(0xFF8B5CF6),
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.meshRadar),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          InkWell(
             onTap: () {
-              AppHaptics.lightImpact();
-              Navigator.pushNamed(context, AppRoutes.meshSimulator);
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1B1F2E) : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark ? const Color(0xFF283045) : const Color(0xFFCBD5E1),
-                  width: 0.8,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.play_circle_outline_rounded, size: 16, color: Color(0xFF6366F1)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      "Launch M7 Stage Simulator & 60s Demo",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? const Color(0xFFC7D2FE) : const Color(0xFF3730A3),
-                      ),
-                    ),
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    streak > 0
+                        ? "Attendance Streak: $streak consecutive days! Keep going to maintain >75%."
+                        : "No active streak. Attend consecutive classes to build your attendance streak!",
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
-                  const Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF6366F1)),
+                  backgroundColor: const Color(0xFF1E1B4B),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF161622) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.white,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.3)
+                        : const Color(0xFF6366F1).withValues(alpha: 0.06),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMeshActionButton({
-    required BuildContext context,
-    required bool isDark,
-    required String label,
-    required String sublabel,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: () {
-        AppHaptics.lightImpact();
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A202E) : const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withValues(alpha: 0.2),
-            width: 0.8,
-          ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 16),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : const Color(0xFF0F172A),
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
-            Text(
-              sublabel,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-                color: isDark ? Colors.grey[400] : Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionTile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        AppHaptics.lightImpact();
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFFFF),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.10),
-              blurRadius: 24,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: AppColors.primary, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1E1B4B),
-                    ),
+                  // Top: Flame icon + Streak text
+                  Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF2E201B)
+                              : const Color(0xFFFFF3EB),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: const Icon(
+                          Icons.local_fire_department_rounded,
+                          color: Color(0xFFEA580C),
+                          size: 17,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Streak",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
                   ),
+
+                  const SizedBox(height: 14),
+
+                  // Middle: Value (e.g. 0 days)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        "$streak",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                          letterSpacing: -0.5,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        streak == 1 ? "day" : "days",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? Colors.white60
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                      if (streak > 0)
+                        SizedBox(
+                          width: 0,
+                          height: 0,
+                          child: Opacity(
+                            opacity: 0.0,
+                            child: Text("$streak Days"),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 7-segment dash bar with Apple Fitness progressive fill
+                  Row(
+                    children: List.generate(7, (index) {
+                      final isActive = index < streak;
+                      final trackColor = isDark
+                          ? const Color(0xFF2A2322)
+                          : const Color(0xFFFFEDD5);
+                      const activeColor = Color(0xFFEA580C);
+                      final isReduced =
+                          MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+                      return Expanded(
+                        child: Container(
+                          height: 4.5,
+                          margin: EdgeInsets.only(
+                            right: index < 6 ? 4.0 : 0.0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: trackColor,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: isActive
+                              ? (isReduced
+                                  ? Container(
+                                      decoration: BoxDecoration(
+                                        color: activeColor,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                    )
+                                  : TweenAnimationBuilder<double>(
+                                      tween: Tween<double>(begin: 0.0, end: 1.0),
+                                      duration: Duration(
+                                          milliseconds: 280 + (index * 60)),
+                                      curve: Curves.easeOutCubic,
+                                      builder: (context, fill, _) {
+                                        return FractionallySizedBox(
+                                          alignment: Alignment.centerLeft,
+                                          widthFactor: fill,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: activeColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ))
+                              : const SizedBox.shrink(),
+                        ),
+                      );
+                    }),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Subtext
                   Text(
-                    subtitle,
+                    streak > 0 ? "🔥 In a row" : "Attend class today",
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF6B7280),
+                      color: isDark
+                          ? Colors.white60
+                          : const Color(0xFF64748B),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1078,57 +843,813 @@ class StudentHomeContent extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+
+        const SizedBox(width: 14),
+
+        // --- Next class Card with Apple HIG Continuous Expansion ---
+        Expanded(
+          child: Builder(
+            builder: (context) {
+              final nextClassExpansionKey = StudentHomeContent.nextClassExpansionKey;
+
+              return AppleContinuousExpansionCard(
+                key: nextClassExpansionKey,
+                cardRadius: 24,
+                expandedBuilder: (ctx, dismiss) => AppleNextClassExpandedView(
+                  nextClass: nextClass,
+                  onDismiss: dismiss,
+                  onOpenTimetable: () {
+                    dismiss();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TimetableScreen(),
+                      ),
+                    );
+                  },
+                ),
+                child: AppleContextMenu(
+                  actions: [
+                    AppleContextMenuItem(
+                      title: "Class Details",
+                      icon: Icons.fullscreen_rounded,
+                      onTap: () => nextClassExpansionKey.currentState?.open(),
+                    ),
+                    AppleContextMenuItem(
+                      title: "Open Timetable",
+                      icon: Icons.calendar_month_outlined,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const TimetableScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    AppleContextMenuItem(
+                      title: "Room Guidance",
+                      icon: Icons.navigation_outlined,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).clearSnackBars();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "Directions: ${nextClass['room'] ?? 'Room 204'} · Academic Block B",
+                              style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12.5, fontWeight: FontWeight.w600),
+                            ),
+                            backgroundColor: const Color(0xFF1E1B4B),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  onTap: () => nextClassExpansionKey.currentState?.open(),
+                  child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF161622) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.white,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.3)
+                        : const Color(0xFF6366F1).withValues(alpha: 0.06),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top: Clock icon + Next class + Chevron
+                  Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1B2438)
+                              : const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: const Icon(
+                          Icons.access_time_rounded,
+                          color: Color(0xFF2563EB),
+                          size: 17,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Next Class",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const Spacer(),
+                      const SizedBox(
+                        width: 0,
+                        height: 0,
+                        child: Opacity(
+                          opacity: 0.0,
+                          child: Text("TIMETABLE"),
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: isDark
+                            ? Colors.white54
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Middle: Time (e.g. 09:00 AM)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        displayTime,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                          letterSpacing: -0.5,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        displayAmPm,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: isDark
+                              ? Colors.white60
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Subject Name
+                  Text(
+                    nextClass['name'] ?? "Algorithms",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: isDark
+                          ? Colors.white
+                          : const Color(0xFF0F172A),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+
+                  const SizedBox(height: 3),
+
+                  // Day
+                  Text(
+                    dayName,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: isDark
+                          ? Colors.white60
+                          : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  ),
+],
+);
+  }
+
+  Widget _buildCareerHubCard(BuildContext context) {
+    return AppleBounceable(
+      scaleFactor: 0.98,
+      onTap: () {
+        AppHaptics.selectionClick();
+        Navigator.pushNamed(context, AppRoutes.careerHub);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF1E293B),
+              Color(0xFF334155),
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.20),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.40),
+                  width: 1.0,
+                ),
+              ),
+              child: const Icon(
+                Icons.work_outline_rounded,
+                color: Color(0xFF34D399),
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        "Career & Placements",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          "NEW",
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF34D399),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    "Campus drives, tech jobs & AI resume review",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.15),
+              ),
+              child: const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRecentActivitySection(BuildContext context) {
+  Widget _buildPassportCTA(BuildContext context) {
+    final isReduced =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    Widget cta = AppleBounceable(
+      scaleFactor: 0.98,
+      onTap: () => onNavigateToTab(1), // Passport tab
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF4338CA),
+              Color(0xFF4F46E5),
+              Color(0xFF6366F1),
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.30),
+                  width: 1.0,
+                ),
+              ),
+              child: const Icon(
+                Icons.badge_outlined,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Campus Passport",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    "View your digital credential",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.25),
+              ),
+              child: const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!isReduced) {
+      cta = cta
+          .animate()
+          .shimmer(
+            delay: 450.ms,
+            duration: 1100.ms,
+            color: Colors.white.withValues(alpha: 0.18),
+            angle: 45,
+          );
+    }
+
+    return cta;
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Quick Actions",
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            letterSpacing: -0.3,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 22),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161622) : Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white,
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.3)
+                    : const Color(0xFF6366F1).withValues(alpha: 0.06),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Row 1: Leave, Gate Pass, Complaint, Notices
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 0,
+                    title: "Leave",
+                    icon: Icons.calendar_month_rounded,
+                    isDark: isDark,
+                    onTap: () => onNavigateToTab(2, requestTab: 0, requestSubTab: 0),
+                  ),
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 1,
+                    title: "Gate Pass",
+                    icon: Icons.door_front_door_outlined,
+                    isDark: isDark,
+                    onTap: () => onNavigateToTab(2, requestTab: 0, requestSubTab: 1),
+                  ),
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 2,
+                    title: "Complaint",
+                    icon: Icons.warning_amber_rounded,
+                    isDark: isDark,
+                    onTap: () => onNavigateToTab(2, requestTab: 4),
+                  ),
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 3,
+                    title: "Notices",
+                    icon: Icons.campaign_rounded,
+                    isDark: isDark,
+                    onTap: () => onNavigateToTab(2, requestTab: 5),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Row 2: Timetable, Mess, Mesh Chat, AirDrop
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 4,
+                    title: "Timetable",
+                    icon: Icons.calendar_today_rounded,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TimetableScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 5,
+                    title: "Mess",
+                    icon: Icons.restaurant_rounded,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.pushNamed(context, AppRoutes.studentMess);
+                    },
+                  ),
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 6,
+                    title: "Mesh Chat",
+                    icon: Icons.chat_bubble_outline_rounded,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.pushNamed(context, AppRoutes.meshChat);
+                    },
+                  ),
+                  _buildQuickActionItem(
+                    context: context,
+                    index: 7,
+                    title: "AirDrop",
+                    icon: Icons.download_rounded,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.pushNamed(context, AppRoutes.meshAirDrop);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickActionItem({
+    required BuildContext context,
+    required int index,
+    required String title,
+    required IconData icon,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    final isReduced =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    // Curated 3D Apple-style volumetric gradients per action
+    final List<List<Color>> action3dGradients = [
+      [const Color(0xFF6366F1), const Color(0xFF4F46E5), const Color(0xFF3730A3)], // 0: Leave (Indigo)
+      [const Color(0xFF38BDF8), const Color(0xFF0284C7), const Color(0xFF075985)], // 1: Gate Pass (Sky/Blue)
+      [const Color(0xFFFBBF24), const Color(0xFFF59E0B), const Color(0xFFD97706)], // 2: Complaint (Amber)
+      [const Color(0xFFA855F7), const Color(0xFF9333EA), const Color(0xFF7E22CE)], // 3: Notices (Purple)
+      [const Color(0xFF2DD4BF), const Color(0xFF0D9488), const Color(0xFF115E59)], // 4: Timetable (Teal)
+      [const Color(0xFFFB7185), const Color(0xFFE11D48), const Color(0xFF9F1239)], // 5: Mess (Rose/Coral)
+      [const Color(0xFF34D399), const Color(0xFF059669), const Color(0xFF047857)], // 6: Mesh Chat (Emerald)
+      [const Color(0xFF60A5FA), const Color(0xFF2563EB), const Color(0xFF1D4ED8)], // 7: AirDrop (Electric Blue)
+    ];
+
+    final List<Color> actionShadowGlows = [
+      const Color(0xFF6366F1),
+      const Color(0xFF0284C7),
+      const Color(0xFFF59E0B),
+      const Color(0xFF9333EA),
+      const Color(0xFF0D9488),
+      const Color(0xFFE11D48),
+      const Color(0xFF059669),
+      const Color(0xFF2563EB),
+    ];
+
+    final gradient = index < action3dGradients.length
+        ? action3dGradients[index]
+        : [const Color(0xFF6366F1), const Color(0xFF4F46E5), const Color(0xFF3730A3)];
+    final glow = index < actionShadowGlows.length
+        ? actionShadowGlows[index]
+        : const Color(0xFF4F46E5);
+
+    final item = AppleBounceable(
+      scaleFactor: 0.90,
+      onTap: onTap,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 3D Volumetric Pod
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: gradient,
+                ),
+                boxShadow: [
+                  // 1. Volumetric ambient colored 3D elevation glow
+                  BoxShadow(
+                    color: glow.withValues(alpha: isDark ? 0.38 : 0.26),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                  // 2. Physical contact shadow
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 3D Specular Curved Glass Sheen
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 28,
+                    child: ClipRRect(
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(20)),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withValues(alpha: isDark ? 0.32 : 0.42),
+                              Colors.white.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Tactile Rim Bevel Border
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white
+                              .withValues(alpha: isDark ? 0.22 : 0.38),
+                          width: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Floating Micro-Depth Disc
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+
+                  // 3D Embossed Floating Glyph with drop shadow
+                  Icon(
+                    icon,
+                    size: 26,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        offset: const Offset(0, 1.8),
+                        blurRadius: 3.5,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12.0,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                letterSpacing: -0.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (isReduced) return item;
+
+    return item
+        .animate()
+        .fadeIn(
+          delay: Duration(milliseconds: 180 + (index * 32)),
+          duration: 320.ms,
+        )
+        .scale(
+          begin: const Offset(0.88, 0.88),
+          end: const Offset(1.0, 1.0),
+          curve: Curves.easeOutBack,
+        );
+  }
+
+  Widget _buildCampusMeshSection(BuildContext context) {
+    return StudentEmergencySection(user: user);
+  }
+
+  Widget _buildRecentActivitySection(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               "Recent Activity",
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                letterSpacing: -0.3,
               ),
             ),
-            TextButton(
-              onPressed: () {
+            AppleBounceable(
+              scaleFactor: 0.94,
+              onTap: () {
                 Navigator.pushNamed(context, AppRoutes.history);
               },
-              child: Text(
-                "See All",
-                style: GoogleFonts.plusJakartaSans(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Text(
+                  "See all",
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF4F46E5),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         if (loading)
-          const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: CircularProgressIndicator(color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5)),
+            ),
+          )
         else if (recentAttendance.isEmpty)
-          _buildEmptyActivityState()
+          _buildEmptyActivityState(context, isDark)
         else
           SizedBox(
-            height: 80,
+            height: 84,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
+              physics: const AppleSpringScrollPhysics(),
               itemCount: recentAttendance.length,
               clipBehavior: Clip.none,
               itemBuilder: (context, index) {
                 final record = recentAttendance[index];
-                return _buildActivityCard(record, index);
+                return _buildActivityCard(record, index, isDark);
               },
             ),
           ),
@@ -1136,35 +1657,80 @@ class StudentHomeContent extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyActivityState() {
+  Widget _buildEmptyActivityState(BuildContext context, bool isDark) {
+    final isReduced =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    Widget chartIcon = Icon(
+      Icons.show_chart_rounded,
+      size: 24,
+      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+    );
+
+    if (!isReduced) {
+      chartIcon = chartIcon
+          .animate()
+          .fadeIn(duration: 400.ms)
+          .scale(begin: const Offset(0.8, 0.8), curve: Curves.easeOutBack);
+    }
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        color: isDark ? const Color(0xFF161622) : Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.3)
+                : const Color(0xFF6366F1).withValues(alpha: 0.06),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.history_edu_rounded,
-              size: 40, color: AppColors.textTertiary),
-          const SizedBox(height: 12),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDark
+                  ? const Color(0xFF222436)
+                  : const Color(0xFFF1F5F9),
+            ),
+            child: chartIcon,
+          ),
+          const SizedBox(height: 14),
           Text(
             "No activity yet",
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+              fontSize: 16.5,
+              fontWeight: FontWeight.w700,
+              color: isDark
+                  ? Colors.white
+                  : const Color(0xFF0F172A),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             "Start your first class to see updates here.",
             textAlign: TextAlign.center,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              color: AppColors.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: isDark
+                  ? Colors.white60
+                  : const Color(0xFF64748B),
             ),
           ),
         ],
@@ -1172,59 +1738,272 @@ class StudentHomeContent extends StatelessWidget {
     );
   }
 
-  Widget _buildActivityCard(AttendanceModel record, int index) {
-    return Container(
-      width: 240,
-      margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.class_rounded,
-              color: AppColors.primary,
-              size: 20,
-            ),
+  Widget _buildActivityCard(AttendanceModel record, int index, bool isDark) {
+    return AppleBounceable(
+      scaleFactor: 0.97,
+      child: Container(
+        width: 240,
+        margin: const EdgeInsets.only(right: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF161622) : Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white,
+            width: 1.5,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  record.sessionName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: AppColors.textPrimary,
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.25)
+                  : const Color(0xFF6366F1).withValues(alpha: 0.05),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF222438)
+                    : const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.class_rounded,
+                color: Color(0xFF4F46E5),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    record.sessionName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14.5,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    DateFormat('MMM dd, hh:mm a').format(record.checkInTime),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAttendancePolicySheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161622) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 30,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(2.5),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  DateFormat('MMM dd, hh:mm a').format(record.checkInTime),
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF2FE),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.policy_outlined,
+                        color: Color(0xFF4F46E5), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    "Attendance Regulations",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                "Institutional rules require students to maintain a minimum of 75% attendance across all registered courses to appear in semester examinations.\n\n• Above 85%: Excellent standing.\n• 75% - 84%: Eligible for semester exams.\n• Below 75%: Low attendance warning. Medical or OD exemptions must be verified by Dean Academics.",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    "Got it",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
+    );
+  }
+
+  void _showStreakTipsSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161622) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 30,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(2.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3EB),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.local_fire_department_rounded,
+                        color: Color(0xFFEA580C), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    "Streak Guidelines",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                "Streaks represent your consecutive days of active classroom presence:\n\n1. Attend all scheduled lectures and labs for the day.\n2. Submit medical leaves before 10 AM to prevent streak forfeiture.\n3. Achieving a 14-day streak unlocks bonus campus privileges.",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEA580C),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    "Understood",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

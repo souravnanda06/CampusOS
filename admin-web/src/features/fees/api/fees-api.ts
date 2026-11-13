@@ -2,16 +2,17 @@ import { apiClient } from "@/services/api/api-client"
 
 export interface FeeRecordItem {
   id: string
-  student_id: string
+  studentId: string
   title: string
-  category: "TUITION" | "HOSTEL" | "EXAM" | "LIBRARY" | "OTHER"
+  category: "TUITION" | "HOSTEL" | "EXAM" | "LIBRARY" | "OTHER" | string
   amount: number
-  amount_paid: number
-  due_date: string
-  paid_at?: string | null
-  status: "DUE" | "PARTIALLY_PAID" | "PAID" | "OVERDUE"
-  receipt_number?: string | null
-  academic_year: string
+  amountPaid: number
+  balanceDue: number
+  dueDate: string
+  paidAt?: string | null
+  status: "DUE" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "WAIVED" | string
+  receiptNumber?: string | null
+  academicYear: string
   semester: number
   studentName?: string
   registrationNumber?: string
@@ -38,6 +39,14 @@ export interface CreateFeePayload {
   semester?: number
 }
 
+export interface UpdateFeePayload {
+  title?: string
+  category?: string
+  amount?: number
+  dueDate?: string
+  status?: string
+}
+
 export const feesApi = {
   getKpis: () => apiClient.get<FeeKpisData>("/fees/kpis"),
 
@@ -46,6 +55,12 @@ export const feesApi = {
 
   createFee: (payload: CreateFeePayload) =>
     apiClient.post<{ message: string; fee: FeeRecordItem }>("/fees", payload),
+
+  updateFee: (id: string, payload: UpdateFeePayload) =>
+    apiClient.patch<{ message: string; fee: FeeRecordItem }>(`/fees/${id}`, payload),
+
+  deleteFee: (id: string) =>
+    apiClient.delete<{ message: string }>(`/fees/${id}`),
 
   recordPayment: (id: string, amount?: number) =>
     apiClient.post<{ message: string; fee: FeeRecordItem }>(`/fees/${id}/record-payment`, { amount }),

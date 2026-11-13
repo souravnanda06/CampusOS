@@ -21,6 +21,16 @@ from services.complaint_service import (
 )
 from services.audit_service import log_audit, log_complaint_history
 from services.passport_service import PassportService
+from services.whatsapp_service import (
+    send_whatsapp_message_sync,
+    send_whatsapp_async,
+    send_gate_exit_alert,
+    send_gate_entry_alert,
+    send_leave_approval_alert,
+    send_attendance_shortage_alert,
+    send_fee_due_alert,
+    send_visitor_pass_alert
+)
 
 __all__ = [
     'resolve_notice_recipients',

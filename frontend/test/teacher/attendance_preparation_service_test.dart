@@ -101,15 +101,13 @@ class MockSessionService extends SessionService {
     String? course,
     String? branch,
     String? year,
-    String? subject,
-    String? room,
-    String? classId,
-    int? expectedStrength,
-    int? durationMinutes,
-    DateTime? startTime,
-    DateTime? endTime,
-    String? location,
+    required DateTime startTime,
+    required DateTime endTime,
+    required String location,
     int? txPowerLevel,
+    double? latitude,
+    double? longitude,
+    double? radiusMeters,
   }) async {
     if (shouldFail) {
       throw Exception('Simulated cloud session creation failure');

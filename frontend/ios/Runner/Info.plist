@@ -51,5 +51,7 @@
 	<string>This app uses Bluetooth to broadcast attendance sessions</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs location permission for Bluetooth scanning</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CampusOS requires camera access for one-time face biometric enrollment and attendance verification.</string>
 </dict>
 </plist>

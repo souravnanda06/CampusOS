@@ -6,18 +6,13 @@ import { DataTable } from "@/components/data-table/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { StatusIndicator } from "@/components/ui/status-indicator"
 import { ActionDocDialog } from "./components/action-doc-dialog"
 import { documentsApi, DocumentRequestItem } from "./api/documents-api"
-import { formatDate, formatRelativeTime } from "@/lib/utils"
+import { formatRelativeTime } from "@/lib/utils"
 import {
-  FileText,
   Wallet,
-  CheckCircle2,
-  Clock,
   Send,
   RefreshCw,
-  FileCheck,
 } from "lucide-react"
 
 export function DocumentsPage() {
@@ -47,31 +42,31 @@ export function DocumentsPage() {
       header: "Student",
       cell: ({ row }) => (
         <div className="space-y-0.5">
-          <p className="font-semibold text-xs text-foreground">{row.original.studentName}</p>
+          <p className="font-semibold text-xs text-foreground">{row.original.studentName || "Student"}</p>
           <p className="text-[10px] text-muted-foreground font-mono">
-            {row.original.registrationNumber || "—"} ({row.original.branch} Yr {row.original.year})
+            {row.original.registrationNumber || "—"} ({row.original.branch || "—"} Yr {row.original.year || "—"})
           </p>
         </div>
       ),
     },
     {
-      accessorKey: "document_type",
+      accessorKey: "documentType",
       header: "Document Requested",
       cell: ({ row }) => (
         <div className="space-y-0.5">
           <Badge variant="outline" className="font-mono text-xs">
-            {row.original.document_type}
+            {row.original.documentTypeName || row.original.documentType}
           </Badge>
           <p className="text-[10px] text-muted-foreground max-w-xs truncate">{row.original.purpose}</p>
         </div>
       ),
     },
     {
-      accessorKey: "document_number",
+      accessorKey: "documentNumber",
       header: "Document Registry #",
       cell: ({ row }) => (
         <span className="font-mono text-xs text-foreground">
-          {row.original.document_number || "Awaiting Registry #"}
+          {row.original.documentNumber || "Awaiting Registry #"}
         </span>
       ),
     },
@@ -84,10 +79,10 @@ export function DocumentsPage() {
           status === "ISSUED"
             ? "success"
             : status === "APPROVED"
-            ? "info"
-            : status === "REJECTED"
-            ? "destructive"
-            : "secondary"
+              ? "info"
+              : status === "REJECTED"
+                ? "destructive"
+                : "secondary"
         return (
           <Badge variant={variant} className="text-[10px] font-mono">
             {status}
@@ -96,11 +91,10 @@ export function DocumentsPage() {
       },
     },
     {
-      accessorKey: "stored_in_wallet",
+      accessorKey: "storedInWallet",
       header: "Student Wallet",
       cell: ({ row }) => {
-        const inWallet = row.original.stored_in_wallet
-        if (inWallet) {
+        if (row.original.storedInWallet) {
           return (
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
               <Wallet className="h-3.5 w-3.5" /> Enrolled
@@ -111,11 +105,11 @@ export function DocumentsPage() {
       },
     },
     {
-      accessorKey: "created_at",
+      accessorKey: "createdAt",
       header: "Requested",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.original.created_at)}
+          {formatRelativeTime(row.original.createdAt)}
         </span>
       ),
     },
@@ -236,8 +230,7 @@ export function DocumentsPage() {
         isLoading={isLoading}
         error={error}
         onRetry={refetch}
-        searchPlaceholder="Search by student name or document type..."
-        searchColumnId="studentName"
+        searchPlaceholder="Search by student name, reg number, registry #, or document type..."
         emptyTitle="No Document Requests Found"
         emptyDescription="There are no document requests matching the selected status parameter."
         toolbarSlot={

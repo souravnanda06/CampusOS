@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, text
+from config import Config
 
-engine = create_engine('mysql+pymysql://root:nandasourav766@localhost/attentify')
+engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
 with engine.connect() as con:
     print("--- USERS ---")
     rs = con.execute(text('SELECT id, name, role FROM users LIMIT 5;'))

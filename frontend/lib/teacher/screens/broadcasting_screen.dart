@@ -1,49 +1,149 @@
 import 'dart:async';
-import 'package:attendance_app/core/haptics/app_haptics.dart';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'dart:ui' show FontFeature, ImageFilter;
 
-import 'dart:math';
-import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_ble_peripheral/flutter_ble_peripheral.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/user_provider.dart';
+import '../../core/haptics/app_haptics.dart';
+import '../../core/network/connectivity_service.dart';
+import '../../core/network/connectivity_state.dart';
+import '../../core/sync/sync_manager.dart';
+import '../../core/sync/sync_state.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/animation_constants.dart';
 import '../../router/app_routes.dart';
 import '../../shared/models/attendance_model.dart';
 import '../../shared/models/session_model.dart';
 import '../../shared/services/attendance_service.dart';
 import '../../shared/services/session_service.dart';
-import '../services/passport_teacher_attendance_service.dart';
 import '../../shared/widgets/campus_scanner_overlay.dart';
-import '../../core/network/connectivity_service.dart';
-import '../../core/network/connectivity_state.dart';
-import '../../core/sync/sync_manager.dart';
-import '../../core/sync/sync_state.dart';
+import '../../student/models/passport_attendance_model.dart';
+import '../services/passport_teacher_attendance_service.dart';
+
+part '../widgets/live_session_glass.dart';
+part '../widgets/live_session_orb.dart';
+part '../widgets/live_session_tiles.dart';
+part '../widgets/live_session_controls.dart';
+
+/// Local dark "live mode" design tokens for [BroadcastingScreen].
+///
+/// Kept scoped to this screen without altering the app-wide theme.
+class _LiveTheme {
+  const _LiveTheme._();
+
+  // Performance toggle for BackdropFilter on glass surfaces over moving/colored areas.
+  // Disabled by default to keep 60fps smooth on mid-range Android GPUs while ripples animate.
+  static const bool enableGlassBlur = false;
+
+  // Background & ambient glow
+  static const Color bgTop = Color(0xFF0B0B1E);
+  static const Color bgBottom = Color(0xFF06060F);
+  static const Color indigoGlow = Color(0xFF6366F1);
+  static const Color indigoDeep = Color(0xFF4F46E5);
+  static const Color indigoRipple = Color(0xFF6366F1);
+
+  // Text
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textMuted50 = Color(0x80FFFFFF);
+  static const Color textMuted60 = Color(0x99FFFFFF);
+  static const Color textMuted62 = Color(0x9EFFFFFF);
+  static const Color textMuted66 = Color(0xA8FFFFFF);
+  static const Color textMuted82 = Color(0xD1FFFFFF);
+  static const Color textMuted90 = Color(0xE6FFFFFF);
+
+  // Accents & semantic states
+  static const Color accent = Color(0xFFA5B4FC);
+  static const Color accentLight = Color(0xFFC7D2FE);
+  static const Color amber = Color(0xFFFFB340);
+  static const Color amberText = Color(0xFFFFD08A);
+  static const Color amberBody = Color(0xC7FFE2BE); // rgba(255,226,190,0.78)
+  static const Color amberFill = Color(0x1AFFB340); // rgba(255,179,64,0.10)
+  static const Color amberBorder = Color(0x42FFB340); // rgba(255,179,64,0.26)
+  static const Color amberTileFill = Color(0x33FFB340); // rgba(255,179,64,0.20)
+
+  static const Color liveRed = Color(0xFFFF453A);
+  static const Color liveRedFill = Color(0x29FF453A); // rgba(255,69,58,0.16)
+  static const Color liveRedBorder = Color(0x4DFF453A); // rgba(255,69,58,0.30)
+  static const Color liveRedText = Color(0xFFFFB0AA);
+  static const Color endRedTop = Color(0xFFFF5B50);
+  static const Color endRedBottom = Color(0xFFE5342A);
+
+  static const Color onlineGreen = Color(0xFF30D158);
+
+  // Glass surface tokens
+  static const Color glassFillTop = Color(0x1AFFFFFF); // white 10%
+  static const Color glassFillBottom = Color(0x0DFFFFFF); // white 5%
+  static const Color glassBorder = Color(0x1AFFFFFF); // white 10%
+  static const Color glassTopHighlight = Color(0x29FFFFFF); // white 16%
+
+  // Layout sizes & radii
+  static const double backButtonSize = 44.0;
+  static const double livePillHeight = 32.0;
+  static const double orbStageSize = 224.0;
+  static const double orbSphereSize = 184.0;
+  static const double orbOuterRingStroke = 5.0;
+  static const double staticRing1Diameter = 290.0;
+  static const double staticRing2Diameter = 370.0;
+  static const double rippleMinDiameter = 190.0;
+  static const double rippleMaxDiameter = 560.0;
+  static const double statusPillHeight = 30.0;
+  static const double bleNoticeRadius = 20.0;
+  static const double methodTileRadius = 22.0;
+  static const double methodTileHeight = 104.0;
+  static const double ringTimerSize = 20.0;
+  static const double ringTimerStroke = 2.8;
+  static const double attendeesRowHeight = 60.0;
+  static const double attendeesRowRadius = 22.0;
+  static const double controlButtonSize = 64.0;
+  static const double bottomScrimHeight = 230.0;
+
+  // Durations & curves
+  static const Duration entranceTotalDuration = Duration(milliseconds: 1000);
+  static const Curve entranceCurve = Cubic(0.2, 0.8, 0.2, 1.0);
+  static const Duration pressDuration = Duration(milliseconds: 200);
+  static const double pressScale = 0.95;
+  static const Duration rippleDuration = Duration(milliseconds: 5400);
+  static const Duration pulseDuration = Duration(milliseconds: 1800);
+}
 
 /// CampusOS Teacher Live Attendance Command Center.
 ///
 /// Features:
 /// - Real-time 1I batch BLE attendance monitoring.
-/// - Live elapsed session timer (e.g. ● LIVE 00:14:32).
+/// - Live elapsed session timer (e.g. ● 00:14:32).
 /// - Honest RSSI proximity reporting (NEAR / FAR / INCONCLUSIVE / UNKNOWN, -42 dBm).
 /// - Real-time connectivity state (ONLINE / OFFLINE · Verifying locally).
 /// - Exception Queue with direct 1I QR Fallback recovery challenge.
-/// - Restrained Apple-grade radar visualizer and attendee list.
+/// - Hero ambient orb & proximity ripple visualizer + glass attendee sheet.
 /// - Intentional confirmation on End Session -> direct transition to [PostSessionReportScreen].
 class BroadcastingScreen extends StatefulWidget {
   final UserModel user;
   final SessionModel session;
+  @visibleForTesting
+  final PassportTeacherAttendanceService? teacherServiceOverride;
+  @visibleForTesting
+  final SessionService? sessionServiceOverride;
+  @visibleForTesting
+  final bool autoStartServices;
 
   const BroadcastingScreen({
     Key? key,
     required this.user,
     required this.session,
+    @visibleForTesting this.teacherServiceOverride,
+    @visibleForTesting this.sessionServiceOverride,
+    @visibleForTesting this.autoStartServices = true,
   }) : super(key: key);
 
   @override
@@ -55,6 +155,7 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
   final FlutterBlePeripheral _blePeripheral = FlutterBlePeripheral();
   final AttendanceService _attendanceService = AttendanceService();
   late final PassportTeacherAttendanceService _passportTeacherService;
+  late final SessionService _sessionService;
 
   bool _isPaused = false;
   bool _isOnline = true;
@@ -72,15 +173,24 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
   final ValueNotifier<Duration> _elapsedDurationNotifier =
       ValueNotifier<Duration>(Duration.zero);
 
-  late AnimationController _radarController;
+  late final AnimationController _rippleController;
+  late final AnimationController _pulseController;
+  late final AnimationController _entranceController;
+
+  final GlobalKey _stackKey = GlobalKey();
+  final GlobalKey _orbStageKey = GlobalKey();
+  final ValueNotifier<Offset?> _orbCenterNotifier = ValueNotifier<Offset?>(null);
+  String? _lastOrbLayoutKey;
 
   @override
   void initState() {
     super.initState();
 
-    _passportTeacherService = PassportTeacherAttendanceService(
-      blePeripheral: _blePeripheral,
-    );
+    _sessionService = widget.sessionServiceOverride ?? SessionService();
+    _passportTeacherService = widget.teacherServiceOverride ??
+        PassportTeacherAttendanceService(
+          blePeripheral: _blePeripheral,
+        );
 
     _isOnline = ConnectivityService.instance.isDeviceOnline;
     _connectivitySubscription =
@@ -89,7 +199,7 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
         setState(() {
           _isOnline = status.hasNetworkInterface || status.isOnline;
         });
-        if (status.isOnline) {
+        if (status.isOnline && widget.autoStartServices) {
           _fetchLiveAttendance();
         }
       }
@@ -104,13 +214,20 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
       }
     });
 
-    _radarController = AnimationController(
+    _rippleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
+      duration: _LiveTheme.rippleDuration,
+    );
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: _LiveTheme.pulseDuration,
+    );
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: _LiveTheme.entranceTotalDuration,
+    );
 
     _startElapsedTimer();
-    _initPassportBatchAttendance();
 
     _metricsSubscription = _passportTeacherService.metricsStream.listen((m) {
       if (mounted) {
@@ -120,15 +237,77 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
       }
     });
 
-    // Initial fetch of live attendance
-    _fetchLiveAttendance();
+    if (widget.autoStartServices) {
+      _initPassportBatchAttendance();
+      _fetchLiveAttendance();
+      _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+        if (_isOnline) {
+          _passportTeacherService.syncAttendance().catchError((_) => null);
+          _fetchLiveAttendance();
+        }
+      });
+    }
+  }
 
-    // Poll backend every 3 seconds for central sync state when online
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (_isOnline) {
-        _fetchLiveAttendance();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bool reducedMotion = AnimationConstants.isReducedMotion(context);
+    if (reducedMotion) {
+      _entranceController.value = 1.0;
+      _rippleController.stop();
+      _pulseController.stop();
+    } else {
+      if (_entranceController.status == AnimationStatus.dismissed) {
+        _entranceController.forward();
       }
+      _syncLoopControllers();
+    }
+    _scheduleOrbCenterMeasure();
+  }
+
+  void _syncLoopControllers() {
+    final bool reducedMotion = AnimationConstants.isReducedMotion(context);
+    if (reducedMotion || _isPaused) {
+      _rippleController.stop();
+      _pulseController.stop();
+    } else {
+      if (!_rippleController.isAnimating) {
+        _rippleController.repeat();
+      }
+      if (!_pulseController.isAnimating) {
+        _pulseController.repeat();
+      }
+    }
+  }
+
+  void _scheduleOrbCenterMeasure() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measureOrbCenterNow();
     });
+  }
+
+  void _measureOrbCenterNow() {
+    if (!mounted) return;
+    final stackBox =
+        _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final orbBox =
+        _orbStageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stackBox == null ||
+        orbBox == null ||
+        !stackBox.hasSize ||
+        !orbBox.hasSize) {
+      return;
+    }
+    final Offset orbGlobalCenter =
+        orbBox.localToGlobal(orbBox.size.center(Offset.zero));
+    final Offset orbLocalCenter = stackBox.globalToLocal(orbGlobalCenter);
+    final current = _orbCenterNotifier.value;
+    if (current == null ||
+        (current.dx - orbLocalCenter.dx).abs() > 0.5 ||
+        (current.dy - orbLocalCenter.dy).abs() > 0.5) {
+      _orbCenterNotifier.value = orbLocalCenter;
+    }
   }
 
   void _startElapsedTimer() {
@@ -160,22 +339,27 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
       );
       if (mounted) setState(() {});
     } catch (e) {
-      debugPrint("Passport batch attendance startup error: $e");
+      debugPrint('Passport batch attendance startup error: $e');
     }
   }
 
   @override
   void dispose() {
-    _radarController.dispose();
+    _rippleController.dispose();
+    _pulseController.dispose();
+    _entranceController.dispose();
+    _orbCenterNotifier.dispose();
     _pollingTimer?.cancel();
     _elapsedTimer?.cancel();
     _metricsSubscription?.cancel();
     _connectivitySubscription?.cancel();
     _syncSubscription?.cancel();
-    _passportTeacherService.dispose();
+    if (widget.teacherServiceOverride == null) {
+      _passportTeacherService.dispose();
+    }
     _elapsedDurationNotifier.dispose();
-    if (!_isSessionStopped) {
-      SessionService().stopSession(widget.session.id).catchError((_) => false);
+    if (!_isSessionStopped && widget.autoStartServices) {
+      _sessionService.stopSession(widget.session.id).catchError((_) => false);
     }
     super.dispose();
   }
@@ -200,10 +384,14 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
     AppHaptics.lightImpact();
     if (_isPaused) {
       await _passportTeacherService.resumeBeaconAdvertising();
+      if (!mounted) return;
       setState(() => _isPaused = false);
+      _syncLoopControllers();
     } else {
       await _passportTeacherService.pauseBeaconAdvertising();
+      if (!mounted) return;
       setState(() => _isPaused = true);
+      _syncLoopControllers();
     }
   }
 
@@ -216,7 +404,9 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
       final sId = (v.studentId ?? '').trim();
       final sName = (v.studentName ?? '').toLowerCase().trim();
       if ((sId.isNotEmpty && verifiedIds.contains(sId)) ||
-          (sName.isNotEmpty && sName != 'student' && verifiedNames.contains(sName))) {
+          (sName.isNotEmpty &&
+              sName != 'student' &&
+              verifiedNames.contains(sName))) {
         continue;
       }
       if (sId.isNotEmpty) verifiedIds.add(sId);
@@ -241,7 +431,107 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
 
   int _getTotalExpected() {
     if (_metrics.totalRoster > 0) return _metrics.totalRoster;
-    return max(_getVerifiedTotal() + _metrics.inconclusiveCount, 45);
+    return math.max(_getVerifiedTotal() + _metrics.inconclusiveCount, 45);
+  }
+
+  String _getRangeLabel() {
+    final level = widget.session.txPowerLevel ?? 1;
+    if (level == 0) return 'Low · Small Room';
+    if (level == 2) return 'High · Lecture Hall';
+    return 'Medium · Classroom';
+  }
+
+  List<_AttendeeDisplayData> _buildAttendeeDisplayItems() {
+    final Set<String> renderedIds = {};
+    final Set<String> renderedNames = {};
+    final List<_AttendeeDisplayData> items = [];
+
+    for (final v in _metrics.verifiedStudents) {
+      final id = (v.studentId ?? '').trim();
+      final name = (v.studentName ?? 'Student').trim();
+      final normName = name.toLowerCase();
+
+      if (id.isNotEmpty && renderedIds.contains(id)) continue;
+      if (normName.isNotEmpty &&
+          normName != 'student' &&
+          renderedNames.contains(normName)) {
+        continue;
+      }
+
+      if (id.isNotEmpty) renderedIds.add(id);
+      if (normName.isNotEmpty && normName != 'student') {
+        renderedNames.add(normName);
+      }
+
+      final rssiStr = v.medianRssi != null ? '${v.medianRssi} dBm' : null;
+      final vMode = v.verificationMode;
+      String modeLabel = 'BLE · ${v.proximityTier.code}';
+      Color modeColor = _LiveTheme.accent;
+      IconData modeIcon = Icons.bluetooth_rounded;
+
+      if (vMode == PassportAttendanceModel.modeWifiLan) {
+        modeLabel = 'Wi-Fi LAN';
+        modeColor = _LiveTheme.onlineGreen;
+        modeIcon = Icons.wifi_rounded;
+      } else if (vMode == PassportAttendanceModel.modeWifiHotspot) {
+        modeLabel = 'Hotspot';
+        modeColor = const Color(0xFFA855F7);
+        modeIcon = Icons.wifi_tethering_rounded;
+      } else if (vMode == PassportAttendanceModel.modeQrOptical ||
+          vMode == 'QR_FALLBACK') {
+        modeLabel = 'Optical QR';
+        modeColor = _LiveTheme.amber;
+        modeIcon = Icons.qr_code_2_rounded;
+      } else if (vMode == PassportAttendanceModel.modePinManual) {
+        modeLabel = 'Room PIN';
+        modeColor = const Color(0xFFEC4899);
+        modeIcon = Icons.pin_rounded;
+      }
+
+      final gpsBadge =
+          (v.gpsStatus == 'VERIFIED' && v.gpsDistanceMeters != null)
+              ? '📍 ${v.gpsDistanceMeters!.round()}m'
+              : null;
+
+      items.add(
+        _AttendeeDisplayData(
+          name: name,
+          id: v.studentId ?? 'Verified',
+          mode: modeLabel,
+          rssi: rssiStr,
+          gpsBadge: gpsBadge,
+          timestamp: DateFormat('HH:mm:ss').format(v.verifiedAt),
+          badgeColor: modeColor,
+          badgeIcon: modeIcon,
+        ),
+      );
+    }
+
+    for (final p in _presentStudents) {
+      final pId = p.userId.trim();
+      final pName = p.studentName.trim();
+      final normName = pName.toLowerCase();
+
+      if (pId.isNotEmpty && renderedIds.contains(pId)) continue;
+      if (normName.isNotEmpty && renderedNames.contains(normName)) continue;
+
+      if (pId.isNotEmpty) renderedIds.add(pId);
+      if (normName.isNotEmpty) renderedNames.add(normName);
+
+      items.add(
+        _AttendeeDisplayData(
+          name: p.studentName,
+          id: p.userId,
+          mode: 'BLE · NEAR',
+          rssi: '-45 dBm',
+          timestamp: DateFormat('HH:mm:ss').format(p.checkInTime),
+          badgeColor: _LiveTheme.accent,
+          badgeIcon: Icons.bluetooth_rounded,
+        ),
+      );
+    }
+
+    return items;
   }
 
   Future<void> _stopSession() async {
@@ -252,14 +542,17 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF14142E),
+        shape: ContinuousRectangleBorder(
+          borderRadius: BorderRadius.circular(24.0),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+        ),
         title: Text(
-          "End Attendance Session?",
-          style: GoogleFonts.plusJakartaSans(
+          'End Attendance Session?',
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.w700,
             fontSize: 18,
-            color: AppColors.textPrimary,
+            color: _LiveTheme.textPrimary,
           ),
         ),
         content: Column(
@@ -267,19 +560,19 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Session attendance will be finalized and ledgered:",
-              style: GoogleFonts.plusJakartaSans(
+              'Session attendance will be finalized and ledgered:',
+              style: GoogleFonts.inter(
                 fontSize: 13,
-                color: AppColors.textSecondary,
+                color: _LiveTheme.textMuted66,
               ),
             ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.bg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -287,38 +580,46 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                   Column(
                     children: [
                       Text(
-                        "$verified",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
+                        '$verified',
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.success,
+                          color: _LiveTheme.onlineGreen,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       Text(
-                        "Verified",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
+                        'Verified',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: _LiveTheme.textMuted60,
                         ),
                       ),
                     ],
                   ),
-                  Container(width: 1, height: 28, color: AppColors.border),
+                  Container(
+                    width: 1,
+                    height: 28,
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
                   Column(
                     children: [
                       Text(
-                        "$unresolved",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
+                        '$unresolved',
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
-                          color: unresolved > 0 ? AppColors.warning : AppColors.textSecondary,
+                          color: unresolved > 0
+                              ? _LiveTheme.amberText
+                              : _LiveTheme.textMuted60,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       Text(
-                        "Unresolved",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
+                        'Unresolved',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: _LiveTheme.textMuted60,
                         ),
                       ),
                     ],
@@ -332,24 +633,26 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
-              "Continue Session",
-              style: GoogleFonts.plusJakartaSans(
+              'Continue Session',
+              style: GoogleFonts.inter(
                 fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+                color: _LiveTheme.textMuted66,
               ),
             ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.danger,
+              backgroundColor: _LiveTheme.liveRed,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: Text(
-              "End Session",
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+              'End Session',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -361,94 +664,340 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
     _isSessionStopped = true;
 
     try {
-      final success = await SessionService().stopSession(widget.session.id);
+      final success = await _sessionService.stopSession(widget.session.id);
       if (!success) {
-        debugPrint("Offline or server unreachable when stopping session. Concluding session locally.");
+        debugPrint(
+            'Offline or server unreachable when stopping session. Concluding session locally.');
       }
     } catch (e) {
-      debugPrint("Offline network error on stopSession: $e");
+      debugPrint('Offline network error on stopSession: $e');
+    }
+
+    try {
+      await _passportTeacherService.stopSession();
+    } catch (e) {
+      debugPrint('Error stopping passport teacher service: $e');
     }
 
     try {
       await _blePeripheral.stop();
+    } catch (e) {
+      debugPrint('Error stopping BLE peripheral: $e');
+    }
+
+    try {
       if (mounted) {
         await context.read<UserProvider>().clearSessionId();
       }
+    } catch (e) {
+      debugPrint('Error clearing session ID: $e');
+    }
 
+    try {
       if (mounted) {
-        // Navigate to PostSessionReportScreen
         Navigator.pushReplacementNamed(
           context,
           AppRoutes.teacherPostSessionReport,
           arguments: {
             'session': widget.session,
             'metrics': _metrics,
-            'verifiedRecords': _passportTeacherService.verifiedResults.values.toList(),
+            'verifiedRecords':
+                _passportTeacherService.verifiedResults.values.toList(),
             'legacyAttendees': _presentStudents,
           },
         );
       }
     } catch (e) {
+      debugPrint('Error completing session transition: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to stop session: $e", style: GoogleFonts.plusJakartaSans()),
-            backgroundColor: AppColors.danger,
+            content: Text('Failed to end session: $e',
+                style: GoogleFonts.inter()),
+            backgroundColor: _LiveTheme.liveRed,
           ),
         );
       }
     }
   }
 
-  String _getRangeLabel() {
-    final level = widget.session.txPowerLevel ?? 1;
-    if (level == 0) return "Low · Small Room";
-    if (level == 2) return "High · Lecture Hall";
-    return "Medium · Classroom";
+  Future<void> _retryBleBroadcast() async {
+    AppHaptics.lightImpact();
+    if (!_passportTeacherService.isAdvertisingSupported) {
+      _showExceptionResolutionSheet();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Freeing BLE radio and retrying beacon broadcast...',
+          style: GoogleFonts.inter(),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    await _passportTeacherService.retryBeaconAdvertising();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleHotspotBurst() async {
+    AppHaptics.mediumImpact();
+    if (_passportTeacherService.isHotspotActive) {
+      _passportTeacherService.stopHotspotBurst();
+      if (mounted) setState(() {});
+      return;
+    }
+    await _passportTeacherService.startHotspotBurst();
+    if (!mounted) return;
+    setState(() {});
+    if (_passportTeacherService.isHotspotActive &&
+        _passportTeacherService.hotspotSsid != null) {
+      _showHotspotGatewaySheet();
+    }
+  }
+
+  void _showHotspotGatewaySheet() {
+    AppHaptics.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _HotspotGatewaySheet(
+        teacherService: _passportTeacherService,
+        session: widget.session,
+        onEditCredentials: () {
+          Navigator.pop(ctx);
+          _showConfigureHotspotSheet();
+        },
+        onEnlargeQr: () {
+          AppHaptics.selectionClick();
+          final ssid = _passportTeacherService.hotspotSsid ?? '';
+          final pass = _passportTeacherService.hotspotPassword ?? '';
+          final rem = _passportTeacherService.hotspotRemainingSeconds;
+          final payload = _passportTeacherService.buildWifiHotspotQrPayload(
+            sessionId: widget.session.id,
+            fallbackTeacherId: widget.session.instructorName,
+          );
+          _showEnlargedHotspotDialog(
+            ssid,
+            pass,
+            rem,
+            qrDataOverride: payload,
+          );
+        },
+        onStopHotspot: () {
+          _passportTeacherService.stopHotspotBurst();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+  }
+
+  void _showAttendeesSheet() {
+    final bool hasNetwork =
+        _isOnline || ConnectivityService.instance.hasNetworkInterface;
+    final String radioLabel = !hasNetwork
+        ? 'Verifying Locally (Offline)'
+        : (_isPaused ? 'BLE Radio Paused' : 'BLE Radio Active');
+    final Color radioColor = !hasNetwork
+        ? _LiveTheme.amber
+        : (_isPaused ? _LiveTheme.amber : _LiveTheme.accent);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _LiveAttendeesSheet(
+          attendees: _buildAttendeeDisplayItems(),
+          inconclusiveStudents: _metrics.inconclusiveStudents,
+          radioStatusLabel: radioLabel,
+          radioDotColor: radioColor,
+          onResolveExceptions: () {
+            Navigator.pop(ctx);
+            _showExceptionResolutionSheet();
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final verified = _getVerifiedTotal();
+    final totalExpected = _getTotalExpected();
+    final bleError = _passportTeacherService.advertisingError;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _stopSession();
       },
-      child: Scaffold(
-        backgroundColor: AppColors.bg,
-        body: SafeArea(
-          child: Column(
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Scaffold(
+          backgroundColor: _LiveTheme.bgBottom,
+          body: Stack(
+            key: _stackKey,
             children: [
-              _buildCommandHeader(),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      _buildLiveStatusCard(),
-                      const SizedBox(height: 16),
-                      _buildRadarVisualizer(),
-                      const SizedBox(height: 16),
-                      _buildQuickActionCards(),
-                      if (_metrics.inconclusiveStudents.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _buildExceptionQueueCard(),
-                      ],
-                      const SizedBox(height: 20),
-                      _buildAttendeesHeader(),
-                      const SizedBox(height: 10),
-                      _buildLiveAttendeesList(),
-                      const SizedBox(height: 100), // Bottom padding for dock
-                    ],
+              // 1. Background vertical gradient + radial indigo orb glow (cached GPU layer)
+              const Positioned.fill(
+                child: RepaintBoundary(
+                  child: _LiveBackgroundLayer(),
+                ),
+              ),
+              // 2. Ambient static rings + 3 spreading ripples behind orb
+              Positioned.fill(
+                child: _ProximityRipples(
+                  animation: _rippleController,
+                  orbCenterListenable: _orbCenterNotifier,
+                  isLive: !_isPaused,
+                ),
+              ),
+              // 3. Soft dark scrim behind bottom controls & attendee row
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: _LiveTheme.bottomScrimHeight,
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.90),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-              _buildSessionControlsDock(),
+              // 4. Foreground SafeArea layout (single-pass SliverFillRemaining; no IntrinsicHeight double layout)
+              SafeArea(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double textScale =
+                        MediaQuery.textScalerOf(context).scale(14.0) / 14.0;
+                    final double scrollThreshold =
+                        bleError != null ? 780.0 : 700.0;
+                    final bool forceScroll =
+                        constraints.maxHeight <= scrollThreshold ||
+                            textScale > 1.15;
+                    final String layoutKey =
+                        '${constraints.maxWidth.toStringAsFixed(0)}x${constraints.maxHeight.toStringAsFixed(0)}_${bleError != null}_$forceScroll';
+                    if (_lastOrbLayoutKey != layoutKey) {
+                      _lastOrbLayoutKey = layoutKey;
+                      _scheduleOrbCenterMeasure();
+                    }
+
+                    final Widget columnContent = Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                      child: Column(
+                        mainAxisSize:
+                            forceScroll ? MainAxisSize.min : MainAxisSize.max,
+                        children: [
+                          _SectionEntrance(
+                            controller: _entranceController,
+                            index: 0,
+                            child: _buildTopBar(),
+                          ),
+                          if (forceScroll)
+                            const SizedBox(height: 10.0)
+                          else
+                            const Spacer(flex: 2),
+                          _SectionEntrance(
+                            controller: _entranceController,
+                            index: 1,
+                            child: _LiveOrb(
+                              key: _orbStageKey,
+                              verifiedCount: verified,
+                              totalExpected: totalExpected,
+                            ),
+                          ),
+                          const SizedBox(height: 8.0),
+                          _SectionEntrance(
+                            controller: _entranceController,
+                            index: 2,
+                            child: _buildStatusSection(),
+                          ),
+                          if (bleError != null) ...[
+                            const SizedBox(height: 14.0),
+                            _SectionEntrance(
+                              controller: _entranceController,
+                              index: 3,
+                              child: _BleNoticeStrip(
+                                errorText: bleError,
+                                onRetry: _retryBleBroadcast,
+                              ),
+                            ),
+                          ],
+                          if (forceScroll)
+                            const SizedBox(height: 16.0)
+                          else
+                            const Spacer(flex: 3),
+                          _SectionEntrance(
+                            controller: _entranceController,
+                            index: 4,
+                            child: ValueListenableBuilder<Duration>(
+                              valueListenable: _elapsedDurationNotifier,
+                              builder: (context, _, __) =>
+                                  _buildCheckInMethodsSection(),
+                            ),
+                          ),
+                          const SizedBox(height: 8.0),
+                          _SectionEntrance(
+                            controller: _entranceController,
+                            index: 5,
+                            child: _buildAttendeesRowSection(verified),
+                          ),
+                          const SizedBox(height: 10.0),
+                          _SectionEntrance(
+                            controller: _entranceController,
+                            index: 6,
+                            child: _SessionControls(
+                              isPaused: _isPaused,
+                              onScanQr: _openStudentQrScanner,
+                              onShowQrCode: _showExceptionResolutionSheet,
+                              onTogglePause: _togglePause,
+                              onEndSession: _stopSession,
+                            ),
+                          ),
+                          const SizedBox(height: 4.0),
+                        ],
+                      ),
+                    );
+
+                    if (forceScroll) {
+                      return NotificationListener<ScrollNotification>(
+                        onNotification: (_) {
+                          _measureOrbCenterNow();
+                          return false;
+                        },
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: columnContent,
+                          ),
+                        ),
+                      );
+                    }
+
+                    return SizedBox(
+                      height: constraints.maxHeight,
+                      child: columnContent,
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -456,809 +1005,860 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
     );
   }
 
-  Widget _buildCommandHeader() {
-    final room = widget.session.location.isNotEmpty
+  Widget _buildTopBar() {
+    final String room = widget.session.location.isNotEmpty
         ? widget.session.location.toUpperCase()
         : 'ROOM 204';
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 20, 12),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 6.0, bottom: 2.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: _stopSession,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                color: AppColors.textPrimary,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          // Left: 44px circular glass back button
+          _TactilePress(
+            onTap: _stopSession,
+            onHaptic: AppHaptics.selectionClick,
+            semanticsLabel: 'Back and end session',
+            child: const _LiveGlassSurface(
+              isCircle: true,
+              useBlur: true,
+              width: _LiveTheme.backButtonSize,
+              height: _LiveTheme.backButtonSize,
+              child: Center(
+                child: Icon(
+                  Icons.chevron_left_rounded,
+                  size: 24.0,
+                  color: _LiveTheme.textPrimary,
+                ),
               ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.session.name.toUpperCase(),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  Text(
-                    room,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          // Live Pill with Timer
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.danger.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
             ),
-            child: Row(
+          ),
+          const SizedBox(width: 10.0),
+          // Center: course name + room subtitle
+          Expanded(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: AppColors.danger,
-                    shape: BoxShape.circle,
+                Text(
+                  widget.session.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 17.0,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                    color: _LiveTheme.textPrimary,
                   ),
                 ),
-                const SizedBox(width: 6),
-                ValueListenableBuilder<Duration>(
-                  valueListenable: _elapsedDurationNotifier,
-                  builder: (context, elapsed, _) {
-                    return Text(
-                      "LIVE ${_formatElapsed(elapsed)}",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
-                      ),
-                    );
-                  },
+                const SizedBox(height: 2.0),
+                Text(
+                  room,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 10.5 * 0.09,
+                    color: _LiveTheme.textMuted60,
+                  ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 10.0),
+          // Right: LIVE pill with pulsing red dot + tabular elapsed timer
+          ValueListenableBuilder<Duration>(
+            valueListenable: _elapsedDurationNotifier,
+            builder: (context, elapsed, _) {
+              final String formatted = _formatElapsed(elapsed);
+              return Semantics(
+                label: 'Live session elapsed $formatted',
+                child: Container(
+                  height: _LiveTheme.livePillHeight,
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  decoration: BoxDecoration(
+                    color: _LiveTheme.liveRedFill,
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: Border.all(
+                      color: _LiveTheme.liveRedBorder,
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PulsingDot(
+                        color: _LiveTheme.liveRed,
+                        size: 8.0,
+                        animation: _pulseController,
+                        isPulsing: !_isPaused,
+                        showPingRing: true,
+                      ),
+                      const SizedBox(width: 7.0),
+                      Text(
+                        formatted,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.0,
+                          fontWeight: FontWeight.w600,
+                          color: _LiveTheme.liveRedText,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLiveStatusCard() {
-    final verified = _getVerifiedTotal();
-    final totalExpected = _getTotalExpected();
-    final double progress = totalExpected > 0 ? (verified / totalExpected).clamp(0.0, 1.0) : 0.0;
+  Widget _buildStatusSection() {
+    final bool hasNetwork =
+        _isOnline || ConnectivityService.instance.hasNetworkInterface;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "SCANNING FOR PASSPORTS",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 1.0,
-                ),
+    String syncLabel;
+    Color syncDotColor;
+    if (_syncStatus.isSyncing) {
+      syncLabel = 'Syncing · Uploading';
+      syncDotColor = _LiveTheme.accent;
+    } else if (!hasNetwork) {
+      syncLabel = 'Offline · Saved locally';
+      syncDotColor = _LiveTheme.amber;
+    } else if (_syncStatus.hasError) {
+      syncLabel = 'Online · Sync pending';
+      syncDotColor = _LiveTheme.amber;
+    } else if (_syncStatus.isWaiting) {
+      syncLabel = 'Online · Pending sync';
+      syncDotColor = _LiveTheme.accent;
+    } else {
+      syncLabel = 'Online · Synced';
+      syncDotColor = _LiveTheme.onlineGreen;
+    }
+
+    final String scanLabel =
+        _isPaused ? 'Paused' : 'Scanning for passports';
+    final Color scanDotColor =
+        _isPaused ? _LiveTheme.amber : _LiveTheme.accent;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8.0,
+          runSpacing: 8.0,
+          children: [
+            _LiveGlassSurface(
+              radius: 15.0,
+              useBlur: true,
+              height: _LiveTheme.statusPillHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _PulsingDot(
+                    color: scanDotColor,
+                    size: 7.0,
+                    animation: _pulseController,
+                    isPulsing: !_isPaused,
+                  ),
+                  const SizedBox(width: 7.0),
+                  Flexible(
+                    child: Text(
+                      scanLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: _LiveTheme.textMuted90,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              // Dynamic Sync & Connectivity Indicator (Phase 4P)
-              _buildSyncBadge(),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                "$verified",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -1.0,
-                ),
-              ),
-              Text(
-                " / $totalExpected",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "Students detected",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: AppColors.bg,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-              minHeight: 6,
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _getRangeLabel(),
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
+            _LiveGlassSurface(
+              radius: 15.0,
+              useBlur: true,
+              height: _LiveTheme.statusPillHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7.0,
+                    height: 7.0,
+                    decoration: BoxDecoration(
+                      color: syncDotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 7.0),
+                  Flexible(
+                    child: Text(
+                      syncLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: _LiveTheme.textMuted90,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              GestureDetector(
-                onTap: _showExceptionResolutionSheet,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4.0),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 14.0,
+          runSpacing: 2.0,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.shield_outlined,
+                    size: 14.0,
+                    color: _LiveTheme.textMuted62,
+                  ),
+                  const SizedBox(width: 5.0),
+                  Flexible(
+                    child: Text(
+                      _getRangeLabel(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13.0,
+                        fontWeight: FontWeight.w400,
+                        color: _LiveTheme.textMuted62,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _TactilePress(
+              onTap: _showExceptionResolutionSheet,
+              onHaptic: AppHaptics.lightImpact,
+              semanticsLabel: 'Open QR Challenge',
+              minHeight: 44.0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.qr_code_rounded, size: 14, color: AppColors.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      "QR Challenge",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                    const Icon(
+                      Icons.qr_code_rounded,
+                      size: 14.0,
+                      color: _LiveTheme.textMuted62,
+                    ),
+                    const SizedBox(width: 5.0),
+                    Flexible(
+                      child: Text(
+                        'QR Challenge',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.0,
+                          fontWeight: FontWeight.w400,
+                          color: _LiveTheme.textMuted62,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildBleBroadcastBadge(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBleBroadcastBadge() {
-    final isBroadcasting = _passportTeacherService.isBroadcasting;
-    final isSupported = _passportTeacherService.isAdvertisingSupported;
-    final error = _passportTeacherService.advertisingError;
-
-    Color badgeColor;
-    IconData badgeIcon;
-    String badgeText;
-
-    if (!isSupported) {
-      badgeColor = AppColors.danger;
-      badgeIcon = Icons.portable_wifi_off_rounded;
-      badgeText = "BLE Unsupported on this phone · Tap 'QR Challenge' below";
-    } else if (error != null) {
-      badgeColor = AppColors.warning;
-      badgeIcon = Icons.refresh_rounded;
-      if (error.contains('ADVERTISE_FAILED_TOO_MANY_ADVERTISERS') || error.contains('code 2') || error.contains('2,')) {
-        badgeText = "BLE Radio Slot Busy · Tap to retry broadcast";
-      } else {
-        badgeText = "BLE Notice: $error · Tap to retry";
-      }
-    } else if (isBroadcasting) {
-      final shortUuid = SessionService.formatSessionBleUuid(widget.session.id).substring(0, 8);
-      badgeColor = AppColors.success;
-      badgeIcon = Icons.sensors_rounded;
-      badgeText = "BLE Beacon Active · Broadcasting (UUID: $shortUuid...)";
-    } else {
-      badgeColor = AppColors.textSecondary;
-      badgeIcon = Icons.sensors_off_rounded;
-      badgeText = "BLE Beacon Starting...";
-    }
-
-    final badgeContent = Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(badgeIcon, size: 15, color: badgeColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              badgeText,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: badgeColor,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          if (error != null) ...[
-            const SizedBox(width: 4),
-            Icon(Icons.touch_app_outlined, size: 13, color: badgeColor),
-          ],
-        ],
-      ),
-    );
-
-    if (error != null && isSupported) {
-      return Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () async {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Freeing BLE radio and retrying beacon broadcast...'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-            await _passportTeacherService.retryBeaconAdvertising();
-            if (mounted) setState(() {});
-          },
-          child: badgeContent,
-        ),
-      );
-    }
-
-    return badgeContent;
-  }
-
-  Widget _buildSyncBadge() {
-    String label;
-    Color color;
-
-    final hasNetwork =
-        _isOnline || ConnectivityService.instance.hasNetworkInterface;
-
-    if (_syncStatus.isSyncing) {
-      label = "SYNCING · Uploading records";
-      color = AppColors.primary;
-    } else if (!hasNetwork) {
-      label = "OFFLINE · Saved locally";
-      color = AppColors.warning;
-    } else if (_syncStatus.hasError) {
-      label = "ONLINE · Saved locally (sync pending)";
-      color = AppColors.info;
-    } else if (_syncStatus.isWaiting) {
-      label = "ONLINE · Pending sync";
-      color = AppColors.info;
-    } else {
-      label = "ONLINE · Synced";
-      color = AppColors.success;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRadarVisualizer() {
-    return Container(
-      height: 110,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: const Size(200, 100),
-            painter: AppleRadarPainter(_radarController, _isPaused),
-          ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _isPaused ? Icons.pause_rounded : Icons.sensors_rounded,
-              size: 22,
-              color: _isPaused ? AppColors.warning : AppColors.primary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickActionCards() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _openStudentQrScanner,
-              icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: Colors.white),
-              label: Text(
-                "Scan Student QR",
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: Colors.white,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          OutlinedButton.icon(
-            onPressed: _showExceptionResolutionSheet,
-            icon: const Icon(Icons.qr_code_rounded, size: 18, color: AppColors.textPrimary),
-            label: Text(
-              "QR Code",
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExceptionQueueCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.warning),
-                  const SizedBox(width: 8),
-                  Text(
-                    "EXCEPTION QUEUE (${_metrics.inconclusiveStudents.length})",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.warning,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-              ElevatedButton(
-                onPressed: _showExceptionResolutionSheet,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.warning,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: Text(
-                  "Resolve",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ..._metrics.inconclusiveStudents.take(3).map((s) {
-            final name = s.studentName ?? s.studentId ?? 'Unknown Student';
-            final rssiText = s.medianRssi != null ? "${s.medianRssi} dBm" : "Signal Unstable";
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Container(
-                    width: 5,
-                    height: 5,
-                    decoration: const BoxDecoration(
-                      color: AppColors.warning,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      name,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+            Builder(
+              builder: (_) {
+                final beacon = _passportTeacherService.activeBeacon;
+                final teacherLoc = _passportTeacherService.teacherLocation;
+                final hasGps = beacon?.teacherLatitude != null ||
+                    teacherLoc != null;
+                final acc = (beacon?.teacherLocationAccuracy ??
+                        teacherLoc?.accuracyMeters)
+                    ?.round();
+                final gpsText = hasGps
+                    ? (acc != null ? 'GPS ±${acc}m' : 'GPS Locked')
+                    : 'GPS Standby';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasGps
+                            ? Icons.location_on_rounded
+                            : Icons.location_searching_rounded,
+                        size: 14.0,
+                        color: hasGps
+                            ? _LiveTheme.onlineGreen
+                            : _LiveTheme.textMuted62,
                       ),
-                    ),
+                      const SizedBox(width: 4.0),
+                      Flexible(
+                        child: Text(
+                          gpsText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.0,
+                            fontWeight: FontWeight.w400,
+                            color: hasGps
+                                ? _LiveTheme.onlineGreen
+                                : _LiveTheme.textMuted62,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    "RSSI: $rssiText (${s.proximityTier.code})",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAttendeesHeader() {
-    final count = _getVerifiedTotal();
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          "Verified Attendees ($count)",
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
+                );
+              },
+            ),
+          ],
         ),
-        if (!_isOnline && !ConnectivityService.instance.hasNetworkInterface)
-          Text(
-            "Verifying Locally (Offline)",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.warning,
-            ),
-          )
-        else
-          Text(
-            "BLE Radio Active",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.success,
-            ),
-          ),
       ],
     );
   }
 
-  Widget _buildLiveAttendeesList() {
-    final verifiedList = _metrics.verifiedStudents;
-    final legacyList = _presentStudents;
+  Widget _buildCheckInMethodsSection() {
+    final beacon = _passportTeacherService.activeBeacon;
+    final pin = _passportTeacherService.currentRollingPin;
+    final pinRem = _passportTeacherService.rollingPinRemainingSeconds;
+    final pinProg = _passportTeacherService.rollingPinProgress;
+    final isHotspot = _passportTeacherService.isHotspotActive;
+    final hotspotRem = _passportTeacherService.hotspotRemainingSeconds;
+    final qrRem = 10 - (DateTime.now().millisecondsSinceEpoch ~/ 1000 % 10);
+    final qrProg = qrRem / 10.0;
 
-    if (verifiedList.isEmpty && legacyList.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 36),
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+    final bool lanActive =
+        beacon?.localIp != null || _passportTeacherService.isLanWifiDetected;
+    final String networkStatusLabel = isHotspot
+        ? 'Hotspot burst'
+        : (lanActive ? 'LAN active' : 'LAN inactive');
+    final Color networkStatusColor = (isHotspot || lanActive)
+        ? _LiveTheme.accent
+        : _LiveTheme.textMuted60;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'ZERO-BLE & SUB-NET SYNC',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 10.5 * 0.08,
+                    color: _LiveTheme.textMuted60,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8.0),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: isHotspot ? _showHotspotGatewaySheet : null,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isHotspot
+                          ? Icons.wifi_tethering_rounded
+                          : Icons.wifi_rounded,
+                      size: 14.0,
+                      color: networkStatusColor,
+                    ),
+                    const SizedBox(width: 5.0),
+                    Text(
+                      networkStatusLabel,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: networkStatusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Column(
+        const SizedBox(height: 8.0),
+        Row(
           children: [
-            const Icon(Icons.bluetooth_searching_rounded, size: 36, color: AppColors.textSecondary),
-            const SizedBox(height: 8),
-            Text(
-              "Listening for student Passports...",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+            Expanded(
+              child: _MethodTile(
+                label: 'ROOM PIN',
+                trailing: _RingTimer(progress: pinProg),
+                value: pin,
+                caption: 'Rotates in ${pinRem}s',
+                captionColor: _LiveTheme.textMuted62,
+                semanticsLabel: 'Room PIN $pin, rotates in $pinRem seconds. Tap to enlarge.',
+                onTap: () => _showEnlargedPinDialog(pin, pinRem),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              "Students tap 'Start Attendance' to respond",
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: AppColors.textSecondary,
+            const SizedBox(width: 8.0),
+            Expanded(
+              child: _MethodTile(
+                label: 'OPTICAL QR',
+                trailing: _RingTimer(progress: qrProg),
+                value: '10s',
+                unit: 'Loop',
+                caption: 'Tap for screen',
+                captionColor: _LiveTheme.accent,
+                semanticsLabel: 'Optical QR 10 second loop. Tap to open QR screen.',
+                onTap: _showExceptionResolutionSheet,
+              ),
+            ),
+            const SizedBox(width: 8.0),
+            Expanded(
+              child: _MethodTile(
+                label: 'HOTSPOT',
+                trailing: Icon(
+                  Icons.bolt_rounded,
+                  size: 15.0,
+                  color: isHotspot ? _LiveTheme.accentLight : _LiveTheme.accent,
+                ),
+                value: isHotspot ? '${hotspotRem}s' : '60s',
+                unit: 'Burst',
+                caption: isHotspot ? 'Tap to Stop' : 'Tap to Start',
+                valueColor:
+                    isHotspot ? _LiveTheme.accentLight : _LiveTheme.textPrimary,
+                captionColor:
+                    isHotspot ? _LiveTheme.amberText : _LiveTheme.accent,
+                isHighlighted: isHotspot,
+                semanticsLabel: isHotspot
+                    ? 'Hotspot burst active, $hotspotRem seconds remaining. Tap to stop.'
+                    : 'Hotspot 60 second burst. Tap to start.',
+                onHaptic: AppHaptics.mediumImpact,
+                onTap: _toggleHotspotBurst,
               ),
             ),
           ],
         ),
-      );
-    }
-
-    // Combine verified results with strict ID & student name deduplication
-    final Set<String> renderedIds = {};
-    final Set<String> renderedNames = {};
-    final List<Widget> tiles = [];
-
-    for (final v in verifiedList) {
-      final id = (v.studentId ?? '').trim();
-      final name = (v.studentName ?? 'Student').trim();
-      final normName = name.toLowerCase();
-
-      if (id.isNotEmpty && renderedIds.contains(id)) continue;
-      if (normName.isNotEmpty && normName != 'student' && renderedNames.contains(normName)) continue;
-
-      if (id.isNotEmpty) renderedIds.add(id);
-      if (normName.isNotEmpty && normName != 'student') renderedNames.add(normName);
-
-      final rssiStr = v.medianRssi != null ? "${v.medianRssi} dBm" : null;
-      final mode = v.verificationMode == 'QR_FALLBACK' ? 'QR' : 'BLE · ${v.proximityTier.code}';
-      final timeStr = DateFormat('HH:mm:ss').format(v.verifiedAt);
-
-      tiles.add(_buildAttendeeTile(
-        name: name,
-        id: v.studentId ?? 'Verified',
-        mode: mode,
-        rssi: rssiStr,
-        timestamp: timeStr,
-        isQr: v.verificationMode == 'QR_FALLBACK',
-      ));
-    }
-
-    for (final p in legacyList) {
-      final pId = p.userId.trim();
-      final pName = p.studentName.trim();
-      final normName = pName.toLowerCase();
-
-      if (pId.isNotEmpty && renderedIds.contains(pId)) continue;
-      if (normName.isNotEmpty && renderedNames.contains(normName)) continue;
-
-      if (pId.isNotEmpty) renderedIds.add(pId);
-      if (normName.isNotEmpty) renderedNames.add(normName);
-
-      final timeStr = DateFormat('HH:mm:ss').format(p.checkInTime);
-      tiles.add(_buildAttendeeTile(
-        name: p.studentName,
-        id: p.userId,
-        mode: 'BLE · NEAR',
-        rssi: '-45 dBm',
-        timestamp: timeStr,
-        isQr: false,
-      ));
-    }
-
-    return Column(children: tiles);
+      ],
+    );
   }
 
-  Widget _buildAttendeeTile({
-    required String name,
-    required String id,
-    required String mode,
-    String? rssi,
-    required String timestamp,
-    required bool isQr,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 15,
-            backgroundColor: (isQr ? AppColors.primary : AppColors.success).withValues(alpha: 0.1),
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'S',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: isQr ? AppColors.primary : AppColors.success,
+  Widget _buildAttendeesRowSection(int verified) {
+    final bool hasNetwork =
+        _isOnline || ConnectivityService.instance.hasNetworkInterface;
+    final String radioLabel = !hasNetwork
+        ? 'Verifying Locally (Offline)'
+        : (_isPaused ? 'BLE Radio Paused' : 'BLE Radio Active');
+    final Color radioColor = !hasNetwork
+        ? _LiveTheme.amber
+        : (_isPaused ? _LiveTheme.amber : _LiveTheme.accent);
+
+    return _AttendeesRow(
+      verifiedCount: verified,
+      inconclusiveCount: _metrics.inconclusiveCount,
+      radioStatusLabel: radioLabel,
+      radioDotColor: radioColor,
+      isPulsing: !_isPaused && hasNetwork,
+      pulseAnimation: _pulseController,
+      onOpenSheet: _showAttendeesSheet,
+    );
+  }
+
+  void _showConfigureHotspotSheet() {
+    AppHaptics.selectionClick();
+    final ssidController = TextEditingController(
+      text: _passportTeacherService.savedHotspotSsid ??
+          _passportTeacherService.hotspotSsid ??
+          '',
+    );
+    final passController = TextEditingController(
+      text: _passportTeacherService.savedHotspotPassword ??
+          _passportTeacherService.hotspotPassword ??
+          '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF14142E), Color(0xFF0A0A1A)],
+              ),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.16),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: AppColors.textPrimary,
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: (isQr ? AppColors.primary : AppColors.success).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(4),
+                        color: _LiveTheme.indigoRipple.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(
-                        mode,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isQr ? AppColors.primary : AppColors.success,
+                      child: const Icon(Icons.wifi_tethering_rounded,
+                          size: 20, color: _LiveTheme.accentLight),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Configure Phone Hotspot',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: _LiveTheme.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          "Match your phone's real Hotspot settings",
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: _LiveTheme.textMuted62,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'HOTSPOT NETWORK NAME (SSID)',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _LiveTheme.textMuted60,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: ssidController,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: _LiveTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. OnePlus 11, Galaxy S22',
+                    hintStyle: GoogleFonts.inter(
+                      color: Colors.white.withValues(alpha: 0.35),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.06),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.14)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.14)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: _LiveTheme.accent, width: 1.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'HOTSPOT PASSWORD',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _LiveTheme.textMuted60,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: passController,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: _LiveTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'At least 8 characters (WPA2)',
+                    hintStyle: GoogleFonts.inter(
+                      color: Colors.white.withValues(alpha: 0.35),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.06),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.14)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.14)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: _LiveTheme.accent, width: 1.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.18)),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                            color: _LiveTheme.textMuted66,
+                          ),
                         ),
                       ),
                     ),
-                    if (rssi != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        rssi,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final newSsid = ssidController.text.trim();
+                          final newPass = passController.text.trim();
+                          if (newSsid.isEmpty) return;
+                          await _passportTeacherService.saveHotspotCredentials(
+                              newSsid, newPass);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) setState(() {});
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _LiveTheme.indigoDeep,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          'Save & Update QR',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ],
             ),
           ),
-          Text(
-            timestamp,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
+        );
+      },
+    );
+  }
+
+  void _showEnlargedPinDialog(String pin, int remaining) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF14142E),
+        shape: ContinuousRectangleBorder(
+          borderRadius: BorderRadius.circular(24.0),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'CLASSROOM ROLLING PIN',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _LiveTheme.textMuted60,
+                letterSpacing: 1.0,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              pin,
+              style: GoogleFonts.inter(
+                fontSize: 48,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 6,
+                color: _LiveTheme.textPrimary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Announce or project this 4-digit code in class.\nStudents without BLE enter it in Passport.\nRotates automatically every 15 seconds.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: _LiveTheme.textMuted62,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSessionControlsDock() {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: 0.82),
-            border: const Border(top: BorderSide(color: AppColors.border, width: 0.5)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: _togglePause,
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.border),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text(
-                _isPaused ? "Resume Session" : "Pause",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+  void _showEnlargedHotspotDialog(
+    String ssid,
+    String password,
+    int remaining, {
+    String? qrDataOverride,
+  }) {
+    final qrData = qrDataOverride ?? 'WIFI:S:$ssid;T:WPA;P:$password;;';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF14142E),
+        shape: ContinuousRectangleBorder(
+          borderRadius: BorderRadius.circular(24.0),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.wifi_tethering_rounded,
+                    size: 16, color: _LiveTheme.accentLight),
+                const SizedBox(width: 8),
+                Text(
+                  'TEACHER WI-FI HOTSPOT',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: _LiveTheme.accentLight,
+                    letterSpacing: 1.0,
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 200.0,
+                padding: EdgeInsets.zero,
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: _stopSession,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text(
-                "End Session",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: _LiveTheme.indigoRipple.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _LiveTheme.accent.withValues(alpha: 0.30),
                 ),
               ),
+              child: Column(
+                children: [
+                  Text(
+                    'Network: $ssid',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _LiveTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Password: $password',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _LiveTheme.accentLight,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              'Students scan this QR code with the CampusOS scanner.\nThey connect, submit, and drop automatically.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: _LiveTheme.textMuted62,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  ),
-);
-}
+    );
+  }
 
   void _showExceptionResolutionSheet() {
     AppHaptics.lightImpact();
@@ -1267,130 +1867,13 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final beacon = _passportTeacherService.activeBeacon;
-        final qrData = beacon?.toQrString() ?? '';
-
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.82,
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Resolve Exceptions",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        "1I QR Challenge · Session-Bound Fallback",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-              const Divider(color: AppColors.border, height: 20),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      Text(
-                        "Students who experienced Bluetooth interference can scan this active session challenge with their Passport to submit a biometrically signed response:",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (qrData.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: QrImageView(
-                            data: qrData,
-                            version: QrVersions.auto,
-                            size: 190.0,
-                          ),
-                        )
-                      else
-                        const Padding(
-                          padding: EdgeInsets.all(32),
-                          child: CircularProgressIndicator(color: AppColors.primary),
-                        ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "Bound to Ephemeral Session Nonce",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _openStudentQrScanner();
-                        },
-                        icon: const Icon(Icons.qr_code_scanner_rounded, size: 18, color: Colors.white),
-                        label: Text(
-                          "Scan Student Response QR",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                          elevation: 0,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+        return _DynamicTeacherQrModal(
+          teacherService: _passportTeacherService,
+          onScanStudentResponse: () {
+            Navigator.pop(ctx);
+            _openStudentQrScanner();
+          },
+          onClose: () => Navigator.pop(ctx),
         );
       },
     );
@@ -1414,17 +1897,19 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
               child: SizedBox(
                 height: MediaQuery.of(context).size.height * 0.88,
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final screenWidth = constraints.maxWidth;
                     final screenHeight = constraints.maxHeight;
-                    final cutOutSize = min(screenWidth * 0.72, 275.0);
+                    final cutOutSize = math.min(screenWidth * 0.72, 275.0);
                     final cutOutTop = (screenHeight * 0.38) - (cutOutSize / 2);
                     final cutOutLeft = (screenWidth - cutOutSize) / 2;
-                    final cutOutRect = Rect.fromLTWH(cutOutLeft, cutOutTop, cutOutSize, cutOutSize);
+                    final cutOutRect = Rect.fromLTWH(
+                        cutOutLeft, cutOutTop, cutOutSize, cutOutSize);
 
                     return Stack(
                       children: [
@@ -1432,7 +1917,8 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                         GestureDetector(
                           onScaleStart: (_) => baseZoom = currentZoom,
                           onScaleUpdate: (details) {
-                            final newZoom = (baseZoom * details.scale).clamp(0.0, 1.0);
+                            final newZoom =
+                                (baseZoom * details.scale).clamp(0.0, 1.0);
                             if (newZoom != currentZoom) {
                               setModalState(() {
                                 currentZoom = newZoom;
@@ -1445,7 +1931,10 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                             onDetect: (capture) async {
                               if (isProcessing) return;
                               final barcodes = capture.barcodes;
-                              if (barcodes.isEmpty || barcodes.first.rawValue == null) return;
+                              if (barcodes.isEmpty ||
+                                  barcodes.first.rawValue == null) {
+                                return;
+                              }
                               isProcessing = true;
 
                               final rawValue = barcodes.first.rawValue!;
@@ -1453,19 +1942,21 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                               controller.dispose();
                               if (ctx.mounted) Navigator.pop(ctx);
 
-                              final result =
-                                  await _passportTeacherService.verifyQrResponse(rawValue);
+                              final result = await _passportTeacherService
+                                  .verifyQrResponse(rawValue);
 
                               if (result.valid && result.studentId != null) {
                                 try {
                                   await _attendanceService.markAttendance(
                                     sessionId: widget.session.id,
                                     studentId: result.studentId!,
-                                    studentName: result.studentName ?? 'Student',
+                                    studentName:
+                                        result.studentName ?? 'Student',
                                   );
                                   _fetchLiveAttendance();
                                 } catch (e) {
-                                  debugPrint("Backend mark attendance sync notice: $e");
+                                  debugPrint(
+                                      'Backend mark attendance sync notice: $e');
                                 }
                               }
 
@@ -1476,12 +1967,17 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                                     content: Text(
                                       result.valid
                                           ? "✓ Verified Present: ${result.studentName ?? 'Student'}"
-                                          : "Verification failed: ${result.reason}",
-                                      style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                                          : 'Verification failed: ${result.reason}',
+                                      style: GoogleFonts.inter(
+                                          color: Colors.white),
                                     ),
-                                    backgroundColor: result.valid ? AppColors.success : AppColors.danger,
+                                    backgroundColor: result.valid
+                                        ? AppColors.success
+                                        : AppColors.danger,
                                     behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
                                   ),
                                 );
                               }
@@ -1524,15 +2020,19 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.12),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.12),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 20),
+                                    child: const Icon(
+                                        Icons.qr_code_scanner_rounded,
+                                        color: Colors.white,
+                                        size: 20),
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    "Scan Student QR",
-                                    style: GoogleFonts.plusJakartaSans(
+                                    'Scan Student QR',
+                                    style: GoogleFonts.inter(
                                       fontSize: 17,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white,
@@ -1547,7 +2047,8 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                                     color: Colors.white.withValues(alpha: 0.15),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                                  child: const Icon(Icons.close_rounded,
+                                      color: Colors.white, size: 20),
                                 ),
                                 onPressed: () {
                                   controller.stop();
@@ -1570,7 +2071,7 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                               Text(
                                 "Align student's Passport QR within frame",
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.plusJakartaSans(
+                                style: GoogleFonts.inter(
                                   color: Colors.white.withValues(alpha: 0.95),
                                   fontSize: 14.0,
                                   fontWeight: FontWeight.w600,
@@ -1579,9 +2080,9 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                "Pinch to zoom for better focus",
+                                'Pinch to zoom for better focus',
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.plusJakartaSans(
+                                style: GoogleFonts.inter(
                                   color: Colors.white.withValues(alpha: 0.55),
                                   fontSize: 12.0,
                                   fontWeight: FontWeight.w400,
@@ -1619,45 +2120,254 @@ class _BroadcastingScreenState extends State<BroadcastingScreen>
   }
 }
 
-/// Restrained Apple-grade Concentric Radar Painter.
-class AppleRadarPainter extends CustomPainter {
-  final Animation<double> animation;
-  final bool isPaused;
-
-  AppleRadarPainter(this.animation, this.isPaused) : super(repaint: animation);
+/// Deep indigo dark gradient background with 5-stop radial glow centered behind the orb.
+class _LiveBackgroundLayer extends StatelessWidget {
+  const _LiveBackgroundLayer();
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final Paint linePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = AppColors.border;
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                _LiveTheme.bgTop,
+                _LiveTheme.bgBottom,
+              ],
+            ),
+          ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: const Alignment(0.0, -0.48), // 50% across, 26% down
+              radius: 0.72,
+              colors: [
+                _LiveTheme.indigoGlow.withValues(alpha: 0.36),
+                _LiveTheme.indigoGlow.withValues(alpha: 0.22),
+                _LiveTheme.indigoGlow.withValues(alpha: 0.08),
+                _LiveTheme.indigoGlow.withValues(alpha: 0.02),
+                _LiveTheme.indigoGlow.withValues(alpha: 0.00),
+              ],
+              stops: const [0.0, 0.28, 0.56, 0.80, 1.0],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final double maxRadius = size.height / 2;
+/// Apple-grade Dynamic Rotating Optical QR Sheet with live countdown sweep.
+class _DynamicTeacherQrModal extends StatefulWidget {
+  final PassportTeacherAttendanceService teacherService;
+  final VoidCallback onScanStudentResponse;
+  final VoidCallback onClose;
 
-    // Concentric base rings
-    canvas.drawCircle(center, maxRadius * 0.35, linePaint);
-    canvas.drawCircle(center, maxRadius * 0.70, linePaint);
-    canvas.drawCircle(center, maxRadius * 0.95, linePaint);
+  const _DynamicTeacherQrModal({
+    required this.teacherService,
+    required this.onScanStudentResponse,
+    required this.onClose,
+  });
 
-    if (isPaused) return;
+  @override
+  State<_DynamicTeacherQrModal> createState() => _DynamicTeacherQrModalState();
+}
 
-    // Subtle animated expansion ripple
-    final double radius = animation.value * maxRadius;
-    final double opacity = (1.0 - animation.value).clamp(0.0, 1.0);
+class _DynamicTeacherQrModalState extends State<_DynamicTeacherQrModal> {
+  Timer? _ticker;
 
-    final Paint pulsePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = AppColors.primary.withValues(alpha: opacity * 0.3);
-
-    canvas.drawCircle(center, radius, pulsePaint);
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
-  bool shouldRepaint(AppleRadarPainter oldDelegate) {
-    return oldDelegate.isPaused != isPaused ||
-        oldDelegate.animation != animation;
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final remainingWindowSeconds = 10 - (now % 10);
+    final qrProg = (10 - remainingWindowSeconds) / 10.0;
+    final beacon = widget.teacherService.activeBeacon;
+    final qrData = beacon?.toQrString(dynamicWindowSeconds: 10) ?? '';
+    final currentPin = widget.teacherService.currentRollingPin;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF14142E), Color(0xFF0A0A1A)],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.16),
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.24),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dynamic Optical QR',
+                      style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _LiveTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      '10s Rotating Line-of-Sight · Anti-Relay Protected',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: _LiveTheme.textMuted62,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _TactilePress(
+                onTap: widget.onClose,
+                semanticsLabel: 'Close optical QR sheet',
+                child: const _LiveGlassSurface(
+                  isCircle: true,
+                  width: 36,
+                  height: 36,
+                  child: Center(
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: _LiveTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Divider(color: Colors.white.withValues(alpha: 0.08), height: 22),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Text(
+                    'Students with Bluetooth turned off scan this rotating QR code to prove physical line-of-sight attendance:',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: _LiveTheme.textMuted66,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (qrData.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _LiveTheme.indigoDeep.withValues(alpha: 0.35),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: QrImageView(
+                        data: qrData,
+                        version: QrVersions.auto,
+                        size: 200.0,
+                      ),
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.all(32),
+                      child:
+                          CircularProgressIndicator(color: _LiveTheme.accent),
+                    ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _RingTimer(progress: qrProg),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Rotates in ${remainingWindowSeconds}s  ·  Room PIN: $currentPin',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: _LiveTheme.textMuted66,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: widget.onScanStudentResponse,
+                    icon: const Icon(Icons.qr_code_scanner_rounded,
+                        size: 18, color: Colors.white),
+                    label: Text(
+                      'Scan Student Response QR',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _LiveTheme.indigoDeep,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14, horizontal: 20),
+                      elevation: 0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

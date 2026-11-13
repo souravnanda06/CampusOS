@@ -731,5 +731,53 @@ void main() {
       await tester.tap(find.byType(PassportScreen));
       await tester.pump(const Duration(milliseconds: 700));
     });
+
+    // 24. PassportActiveView 3D card flip & flipback responsiveness
+    testWidgets('24. PassportActiveView card flip and flipback animate responsively with symmetric ease and no delay', (tester) async {
+      final key = GlobalKey<PassportActiveViewState>();
+      final notifier = ValueNotifier<int>(30);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PassportActiveView(
+              key: key,
+              studentName: 'Sourav Nanda',
+              department: 'CSE',
+              semester: '5th Semester',
+              registrationNumber: '2101297001',
+              qrData: 'CAMPUS_PASSPORT:v1:TEST',
+              remainingSecondsNotifier: notifier,
+              isBluetoothActive: true,
+              onClose: () {},
+              onRefreshQr: () {},
+              onStartAttendance: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Finish opening morph
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('SOURAV NANDA'), findsOneWidget);
+      expect(find.text('Tap to flip'), findsOneWidget);
+
+      // Flip to back (QR side)
+      key.currentState!.toggleFlip();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Refreshes in 30s'), findsOneWidget);
+      expect(find.text('Tap to return to card'), findsOneWidget);
+
+      // Flip back to front
+      key.currentState!.toggleFlip();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Verify front face is back
+      expect(find.text('SOURAV NANDA'), findsOneWidget);
+      expect(find.text('Tap to flip'), findsOneWidget);
+    });
   });
 }

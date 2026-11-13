@@ -19,6 +19,8 @@ import 'fee_details_sheet.dart';
 import 'visitor_pass_sheet.dart';
 import 'passport_activation_view.dart';
 import 'passport_scanner_button.dart';
+import '../../../shared/widgets/motion/apple_bounceable.dart';
+import '../../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 /// Campus Wallet Card Presentation & Interaction System.
 ///
@@ -227,7 +229,7 @@ class _CampusWalletViewState extends State<CampusWalletView> {
                         controller: _pageController,
                         onPageChanged: _onPageChanged,
                         itemCount: _totalCards,
-                        physics: const BouncingScrollPhysics(),
+                        physics: const AppleSpringScrollPhysics(),
                         itemBuilder: (context, index) {
                           return AnimatedBuilder(
                             animation: _pageController,
@@ -235,11 +237,10 @@ class _CampusWalletViewState extends State<CampusWalletView> {
                               child: _buildCardAtIndex(index),
                             ),
                             builder: (context, child) {
-                              double page = 0.0;
-                              if (_pageController.position.haveDimensions) {
+                              double page = _currentPage.toDouble();
+                              if (_pageController.hasClients &&
+                                  _pageController.position.haveDimensions) {
                                 page = _pageController.page ?? _currentPage.toDouble();
-                              } else {
-                                page = _currentPage.toDouble();
                               }
                               final diff = (page - index).abs();
                               final scale = isReducedMotion
@@ -275,7 +276,7 @@ class _CampusWalletViewState extends State<CampusWalletView> {
                       builder: (context, currentPage, _) {
                         return Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: List.generate(3, (index) {
+                          children: List.generate(_totalCards, (index) {
                             final isSelected = index == currentPage;
                             return AnimatedContainer(
                               duration: AnimationConstants.fast,
@@ -624,9 +625,9 @@ class _CampusWalletViewState extends State<CampusWalletView> {
     required VoidCallback onTap,
     bool isLoading = false,
   }) {
-    return GestureDetector(
+    return AppleBounceable(
       onTap: isLoading ? null : onTap,
-      behavior: HitTestBehavior.opaque,
+      scaleFactor: 0.96,
       child: Container(
         height: 52,
         decoration: BoxDecoration(

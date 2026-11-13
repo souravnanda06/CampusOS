@@ -1,15 +1,13 @@
 import * as React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  noticesApi,
-  type Notice,
-} from './api/notices-api';
+import { noticesApi, type Notice } from './api/notices-api';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/feedback/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -22,6 +20,8 @@ import {
   Archive,
   BarChart3,
   Calendar,
+  Pencil,
+  Send,
 } from 'lucide-react';
 
 export const NoticesPage: React.FC = () => {
@@ -31,7 +31,8 @@ export const NoticesPage: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = React.useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = React.useState<string>('ALL');
   const [statusFilter, setStatusFilter] = React.useState<string>('ALL');
-  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [noticeToEdit, setNoticeToEdit] = React.useState<Notice | null>(null);
   const [selectedNoticeForDelivery, setSelectedNoticeForDelivery] = React.useState<Notice | null>(null);
   const [noticeToArchive, setNoticeToArchive] = React.useState<Notice | null>(null);
 
@@ -44,6 +45,25 @@ export const NoticesPage: React.FC = () => {
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
         includeExpired: true,
       }),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: (id: string) => noticesApi.updateNotice(id, { status: 'PUBLISHED' }),
+    onSuccess: () => {
+      addToast({
+        type: 'success',
+        title: 'Notice Published',
+        message: 'Draft broadcast is now live to target recipients.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['notices'] });
+    },
+    onError: (err: unknown) => {
+      addToast({
+        type: 'error',
+        title: 'Publish Failed',
+        message: err instanceof Error ? err.message : 'Could not publish notice',
+      });
+    },
   });
 
   const archiveMutation = useMutation({
@@ -72,7 +92,13 @@ export const NoticesPage: React.FC = () => {
         title="Notices & Broadcasts"
         subtitle="Institution-wide announcements, targeted cohort dispatches, and push delivery metrics."
         actions={
-          <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+          <Button
+            onClick={() => {
+              setNoticeToEdit(null);
+              setDialogOpen(true);
+            }}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             <span>Broadcast Notice</span>
           </Button>
@@ -85,53 +111,56 @@ export const NoticesPage: React.FC = () => {
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Category:
           </span>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-md border border-input bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="ALL">All Categories</option>
-            <option value="GENERAL">General</option>
-            <option value="ACADEMIC">Academic</option>
-            <option value="EXAM">Exam</option>
-            <option value="HOSTEL">Hostel</option>
-            <option value="MESS">Mess</option>
-            <option value="SECURITY">Security</option>
-            <option value="EVENT">Event</option>
-            <option value="FEE">Fee</option>
-          </select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Categories</SelectItem>
+              <SelectItem value="GENERAL">General</SelectItem>
+              <SelectItem value="ACADEMIC">Academic</SelectItem>
+              <SelectItem value="EXAM">Exam</SelectItem>
+              <SelectItem value="HOSTEL">Hostel</SelectItem>
+              <SelectItem value="MESS">Mess</SelectItem>
+              <SelectItem value="SECURITY">Security</SelectItem>
+              <SelectItem value="EVENT">Event</SelectItem>
+              <SelectItem value="FEE">Fee</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Priority:
           </span>
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className="rounded-md border border-input bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="ALL">All Priorities</option>
-            <option value="NORMAL">Normal</option>
-            <option value="HIGH">High</option>
-            <option value="URGENT">Urgent</option>
-          </select>
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="w-[130px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Priorities</SelectItem>
+              <SelectItem value="NORMAL">Normal</SelectItem>
+              <SelectItem value="HIGH">High</SelectItem>
+              <SelectItem value="URGENT">Urgent</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Status:
           </span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border border-input bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="PUBLISHED">Published</option>
-            <option value="DRAFT">Draft</option>
-            <option value="ARCHIVED">Archived</option>
-          </select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[130px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Statuses</SelectItem>
+              <SelectItem value="PUBLISHED">Published</SelectItem>
+              <SelectItem value="DRAFT">Draft</SelectItem>
+              <SelectItem value="ARCHIVED">Archived</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="ml-auto text-xs text-muted-foreground font-mono">
@@ -159,7 +188,10 @@ export const NoticesPage: React.FC = () => {
           description="Create your first institutional broadcast or adjust your category and status filters."
           action={{
             label: 'Create Notice',
-            onClick: () => setCreateDialogOpen(true),
+            onClick: () => {
+              setNoticeToEdit(null);
+              setDialogOpen(true);
+            },
           }}
         />
       ) : (
@@ -171,16 +203,14 @@ export const NoticesPage: React.FC = () => {
             >
               <div className="space-y-1.5 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-sm text-foreground">
-                    {n.title}
-                  </h3>
+                  <h3 className="font-semibold text-sm text-foreground">{n.title}</h3>
                   <Badge
                     variant={
                       n.priority === 'URGENT'
                         ? 'destructive'
                         : n.priority === 'HIGH'
-                        ? 'warning'
-                        : 'outline'
+                          ? 'warning'
+                          : 'outline'
                     }
                     className="text-[10px] uppercase font-mono px-1.5 py-0"
                   >
@@ -194,8 +224,8 @@ export const NoticesPage: React.FC = () => {
                       n.status === 'PUBLISHED'
                         ? 'default'
                         : n.status === 'ARCHIVED'
-                        ? 'outline'
-                        : 'secondary'
+                          ? 'outline'
+                          : 'secondary'
                     }
                     className="text-[10px] uppercase px-1.5 py-0"
                   >
@@ -217,7 +247,9 @@ export const NoticesPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    <span>Dispatched {formatDate(n.createdAt)} ({formatRelativeTime(n.createdAt)})</span>
+                    <span>
+                      Dispatched {formatDate(n.createdAt)} ({formatRelativeTime(n.createdAt)})
+                    </span>
                   </div>
                   {n.expiresAt && (
                     <span className="text-amber-600 dark:text-amber-400 font-mono text-[10px]">
@@ -228,7 +260,34 @@ export const NoticesPage: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-border">
+              <div className="flex items-center gap-2 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-border flex-wrap">
+                {n.status === 'DRAFT' && (
+                  <Button
+                    size="sm"
+                    onClick={() => publishMutation.mutate(n.id)}
+                    loading={publishMutation.isPending && publishMutation.variables === n.id}
+                    className="gap-1.5 text-xs h-8"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Publish</span>
+                  </Button>
+                )}
+
+                {n.status !== 'ARCHIVED' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setNoticeToEdit(n);
+                      setDialogOpen(true);
+                    }}
+                    className="gap-1.5 text-xs h-8"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Edit</span>
+                  </Button>
+                )}
+
                 <Button
                   size="sm"
                   variant="outline"
@@ -258,8 +317,12 @@ export const NoticesPage: React.FC = () => {
 
       {/* Dialogs & Drawers */}
       <CreateNoticeDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setNoticeToEdit(null);
+        }}
+        noticeToEdit={noticeToEdit}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['notices'] })}
       />
 

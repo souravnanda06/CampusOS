@@ -71,7 +71,7 @@ class _SpyStudentAttendanceService extends PassportStudentAttendanceService {
         );
 
   @override
-  Future<bool> checkAndRequestPermissions() async => true;
+  Future<bool> checkAndRequestPermissions({bool allowZeroBle = true}) async => true;
 
   @override
   Future<PassportAttendanceResponseModel?> startAttendance({
@@ -909,6 +909,75 @@ void main() {
       );
 
       expect(find.text('Bluetooth unavailable · QR fallback active'), findsOneWidget);
+    });
+    // 18. Proximity wave renders ShaderMask with BlendMode.dstIn for bottom fade
+    testWidgets('18. Proximity wave renders ShaderMask with BlendMode.dstIn for bottom fade', (tester) async {
+      final notifier = ValueNotifier<int>(30);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PassportActiveView(
+              studentName: 'Sourav Nanda',
+              department: 'CSE',
+              semester: '5th Semester',
+              registrationNumber: '2101297001',
+              qrData: 'CAMPUS_PASSPORT:v1:TEST',
+              remainingSecondsNotifier: notifier,
+              isBluetoothActive: true,
+              attendanceState: StudentAttendanceFlowState.scanningForTeacherBeacon,
+              onClose: () {},
+              onRefreshQr: () {},
+            ),
+          ),
+        ),
+      );
+
+      final shaderMaskFinder = find.descendant(
+        of: find.byType(PassportActiveView),
+        matching: find.byType(ShaderMask),
+      );
+      expect(shaderMaskFinder, findsOneWidget);
+
+      final shaderMask = tester.widget<ShaderMask>(shaderMaskFinder);
+      expect(shaderMask.blendMode, equals(BlendMode.dstIn));
+    });
+
+    // 19. Proximity wave renders still rings even when bluetooth is disabled or in error state
+    testWidgets('19. Proximity wave renders still rings even when bluetooth is disabled', (tester) async {
+      final notifier = ValueNotifier<int>(30);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PassportActiveView(
+              studentName: 'Sourav Nanda',
+              department: 'CSE',
+              semester: '5th Semester',
+              registrationNumber: '2101297001',
+              qrData: 'CAMPUS_PASSPORT:v1:TEST',
+              remainingSecondsNotifier: notifier,
+              isBluetoothActive: false,
+              attendanceState: StudentAttendanceFlowState.error,
+              onClose: () {},
+              onRefreshQr: () {},
+            ),
+          ),
+        ),
+      );
+
+      // The proximity wave painter remains mounted to render the 3 still rings
+      final shaderMaskFinder = find.descendant(
+        of: find.byType(PassportActiveView),
+        matching: find.byType(ShaderMask),
+      );
+      expect(shaderMaskFinder, findsOneWidget);
+
+      final customPaintFinder = find.descendant(
+        of: shaderMaskFinder,
+        matching: find.byType(CustomPaint),
+      );
+      expect(customPaintFinder, findsOneWidget);
     });
   });
 }

@@ -12,6 +12,8 @@ import '../services/mess_service.dart';
 import '../widgets/mess/meal_card.dart';
 import '../widgets/mess/meal_detail_sheet.dart';
 import '../widgets/mess/meal_feedback_sheet.dart';
+import '../../shared/widgets/motion/apple_bounceable.dart';
+import '../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 class MessScreen extends StatefulWidget {
   const MessScreen({Key? key}) : super(key: key);
@@ -85,6 +87,17 @@ class _MessScreenState extends State<MessScreen> {
       if (_isToday) {
         // Fast path for today
         loadedMenu = await _messService.getTodayMenu(requesterId: requesterId);
+        // If server today's date does not match the local client date (e.g. UTC vs IST timezone)
+        // or if today endpoint returned null, query by exact local date as fallback
+        if (loadedMenu == null || loadedMenu.menuDate != _formattedIsoDate) {
+          final menus = await _messService.getMenus(
+            date: _formattedIsoDate,
+            requesterId: requesterId,
+          );
+          if (menus.isNotEmpty) {
+            loadedMenu = menus.first;
+          }
+        }
       } else {
         // Query by date
         final dateIso = _formattedIsoDate;
@@ -272,8 +285,9 @@ class _MessScreenState extends State<MessScreen> {
             onPressed: _goToPreviousDay,
           ),
           Expanded(
-            child: GestureDetector(
+            child: AppleBounceable(
               onTap: _selectDateFromPicker,
+              scaleFactor: 0.98,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -290,8 +304,9 @@ class _MessScreenState extends State<MessScreen> {
                       ),
                       if (!_isToday) ...[
                         const SizedBox(width: 8),
-                        GestureDetector(
+                        AppleBounceable(
                           onTap: _goToToday,
+                          scaleFactor: 0.92,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
@@ -357,9 +372,7 @@ class _MessScreenState extends State<MessScreen> {
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
+      physics: AppleSpringScrollPhysics.always,
       children: [
         // Menu summary header card
         Container(
@@ -458,9 +471,7 @@ class _MessScreenState extends State<MessScreen> {
 
   Widget _buildEmptyState() {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
+      physics: AppleSpringScrollPhysics.always,
       children: [
         SizedBox(height: MediaQuery.of(context).size.height * 0.12),
         Center(
@@ -579,9 +590,7 @@ class _MessScreenState extends State<MessScreen> {
 
   Widget _buildErrorState() {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
+      physics: AppleSpringScrollPhysics.always,
       children: [
         SizedBox(height: MediaQuery.of(context).size.height * 0.12),
         Center(

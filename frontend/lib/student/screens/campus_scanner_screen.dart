@@ -22,11 +22,17 @@ import '../../auth/models/user_model.dart';
 class CampusScannerScreen extends StatefulWidget {
   final UserModel? user;
   final MobileScannerController? controller;
+  final Future<void> Function(String qrCode)? onQrDetected;
+  final String? title;
+  final String? subtitle;
 
   const CampusScannerScreen({
     Key? key,
     this.user,
     this.controller,
+    this.onQrDetected,
+    this.title,
+    this.subtitle,
   }) : super(key: key);
 
   @override
@@ -78,6 +84,16 @@ class _CampusScannerScreenState extends State<CampusScannerScreen> {
     });
 
     AppHaptics.mediumImpact();
+
+    // If an explicit onQrDetected callback is provided (e.g. from Passport attendance screen),
+    // delegate directly to it!
+    if (widget.onQrDetected != null) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      await widget.onQrDetected!(raw);
+      return;
+    }
 
     // Check if scanned QR is another student's Passport credential
     bool isPeerPassport = false;
@@ -543,7 +559,7 @@ class _CampusScannerScreenState extends State<CampusScannerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Scan any QR',
+                      widget.title ?? 'Scan any QR',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -551,32 +567,34 @@ class _CampusScannerScreenState extends State<CampusScannerScreen> {
                         letterSpacing: -0.2,
                       ),
                     ),
-                    const SizedBox(width: 7),
-                    GestureDetector(
-                      onTap: _showScannerInfo,
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            width: 1.4,
+                    if (widget.onQrDetected == null) ...[
+                      const SizedBox(width: 7),
+                      GestureDetector(
+                        onTap: _showScannerInfo,
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              width: 1.4,
+                            ),
                           ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'i',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.1,
+                          child: Center(
+                            child: Text(
+                              'i',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                height: 1.1,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 // Keeps title centered while omitting 3-dot and QR logo
@@ -591,7 +609,8 @@ class _CampusScannerScreenState extends State<CampusScannerScreen> {
             left: 28,
             right: 28,
             child: Text(
-              'Align the QR code to fit inside the frame.\nPinch to zoom for better focus.',
+              widget.subtitle ??
+                  'Align the QR code to fit inside the frame.\nPinch to zoom for better focus.',
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13.5,
@@ -701,7 +720,9 @@ class _CampusScannerScreenState extends State<CampusScannerScreen> {
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      'CAMPUSOS · SMART QR',
+                      widget.onQrDetected != null
+                          ? 'CAMPUSOS · LIVE SESSION'
+                          : 'CAMPUSOS · SMART QR',
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,

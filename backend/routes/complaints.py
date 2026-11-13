@@ -6,9 +6,23 @@ from extensions import db
 from models.user import User
 from models.complaint import Complaint, generate_closure_pin
 from models.audit import ComplaintStatusHistory, RequestAudit
+from middleware.auth import get_authenticated_requester
 from services.complaint_service import COMPLAINT_TRANSITIONS
 
 complaints_bp = Blueprint('complaints_bp', __name__)
+
+def find_complaint_by_identifier(identifier):
+    if not identifier:
+        return None
+    raw_id = str(identifier).strip()
+    if raw_id.startswith('cached_'):
+        raw_id = raw_id[7:]
+    complaint = Complaint.query.get(raw_id)
+    if not complaint:
+        complaint = Complaint.query.filter_by(idempotency_key=raw_id).first()
+    if not complaint and raw_id.startswith('comp_'):
+        complaint = Complaint.query.filter_by(idempotency_key=raw_id[5:]).first()
+    return complaint
 
 @complaints_bp.route('/complaints', methods=['POST'])
 def create_complaint():
@@ -63,6 +77,12 @@ def create_complaint():
             }), 200
 
     try:
+        client_otp = data.get('closureOtp') or data.get('closure_otp')
+        if client_otp and str(client_otp).strip().isdigit() and len(str(client_otp).strip()) == 4:
+            closure_otp = str(client_otp).strip()
+        else:
+            closure_otp = generate_closure_pin()
+
         new_complaint = Complaint(
             student_id=student_id,
             category=category.strip(),
@@ -72,7 +92,7 @@ def create_complaint():
             priority=priority,
             status='PENDING',
             idempotency_key=idempotency_key,
-            closure_otp=generate_closure_pin()
+            closure_otp=closure_otp
         )
         db.session.add(new_complaint)
         db.session.flush()
@@ -132,7 +152,7 @@ def get_pending_complaints():
 
 @complaints_bp.route('/complaints/<id>/history', methods=['GET'])
 def get_complaint_history(id):
-    complaint = Complaint.query.get(id)
+    complaint = find_complaint_by_identifier(id)
     if not complaint:
         return jsonify({"message": "Complaint not found"}), 404
 
@@ -143,7 +163,7 @@ def get_complaint_history(id):
             return jsonify({"message": "Unauthorized: Cannot view another student's complaint history"}), 403
 
     history_records = ComplaintStatusHistory.query.filter_by(
-        complaint_id=id
+        complaint_id=complaint.id
     ).order_by(ComplaintStatusHistory.timestamp.asc()).all()
 
     result = []
@@ -155,6 +175,21 @@ def get_complaint_history(id):
             h_dict['actorRole'] = actor.role
         result.append(h_dict)
 
+    if not result:
+        student = User.query.get(complaint.student_id)
+        result.append({
+            "id": f"init_{complaint.id}",
+            "complaintId": complaint.id,
+            "changedBy": complaint.student_id,
+            "actorName": student.name if student else "Student",
+            "actorRole": "student",
+            "oldStatus": None,
+            "newStatus": complaint.status or "PENDING",
+            "comment": "Complaint submitted",
+            "remarks": "Complaint submitted",
+            "timestamp": complaint.created_at
+        })
+
     return jsonify(result), 200
 
 
@@ -162,6 +197,12 @@ def get_complaint_history(id):
 def assign_complaint(id):
     data = request.json or {}
     actor_id = data.get('actorId') or data.get('reviewerId')
+    if not actor_id:
+        requester, err_resp = get_authenticated_requester()
+        if err_resp:
+            return err_resp
+        if requester:
+            actor_id = requester.id
     assigned_to = data.get('assignedTo')
     remarks = data.get('remarks', '')
 
@@ -182,7 +223,7 @@ def assign_complaint(id):
     if staff.role == 'student':
         return jsonify({"message": "Cannot assign complaint to a student. Target must be staff/faculty/admin"}), 400
 
-    complaint = Complaint.query.get(id)
+    complaint = find_complaint_by_identifier(id)
     if not complaint:
         return jsonify({"message": "Complaint not found"}), 404
 
@@ -217,7 +258,7 @@ def assign_complaint(id):
 
         return jsonify({
             "message": "Complaint assigned successfully",
-            "complaint": complaint.to_dict()
+            "complaint": {**complaint.to_dict(), "assignedToName": staff.name}
         }), 200
 
     except Exception as e:
@@ -229,6 +270,12 @@ def assign_complaint(id):
 def action_complaint(id):
     data = request.json or {}
     actor_id = data.get('actorId')
+    if not actor_id:
+        requester, err_resp = get_authenticated_requester()
+        if err_resp:
+            return err_resp
+        if requester:
+            actor_id = requester.id
     action = (data.get('action') or '').upper()
     remarks = (data.get('remarks') or '').strip()
     assigned_to = data.get('assignedTo')
@@ -241,7 +288,7 @@ def action_complaint(id):
     if action not in COMPLAINT_TRANSITIONS:
         return jsonify({"message": f"Invalid action '{action}'. Supported actions: {list(COMPLAINT_TRANSITIONS.keys())}"}), 400
 
-    complaint = Complaint.query.get(id)
+    complaint = find_complaint_by_identifier(id)
     if not complaint:
         return jsonify({"message": "Complaint not found"}), 404
 
@@ -346,7 +393,7 @@ def get_student_complaints(student_id):
 @complaints_bp.route('/complaints/<identifier>', methods=['GET'])
 def get_complaint_or_student_complaints(identifier):
     # Check if identifier is a Complaint ID first
-    complaint = Complaint.query.get(identifier)
+    complaint = find_complaint_by_identifier(identifier)
     if complaint:
         requester_id = request.args.get('requesterId')
         requester = User.query.get(requester_id) if requester_id else None
@@ -408,7 +455,7 @@ def verify_resolve_complaint(id):
     if not remarks:
         return jsonify({"message": "Resolution remarks explaining the fix are required"}), 400
 
-    complaint = Complaint.query.get(id)
+    complaint = find_complaint_by_identifier(id)
     if not complaint:
         return jsonify({"message": "Complaint not found"}), 404
 
@@ -489,7 +536,7 @@ def submit_complaint_feedback(id):
     except (ValueError, TypeError):
         return jsonify({"message": "Valid star rating between 1 and 5 is required"}), 400
 
-    complaint = Complaint.query.get(id)
+    complaint = find_complaint_by_identifier(id)
     if not complaint:
         return jsonify({"message": "Complaint not found"}), 404
     if complaint.student_id != student_id:

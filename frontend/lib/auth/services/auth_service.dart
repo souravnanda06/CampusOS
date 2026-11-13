@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../../core/config/app_config.dart';
@@ -29,40 +30,84 @@ class AuthService {
     String? branch,
     String? year,
     String? deviceId,
+    String? phone,
+    String? parentPhone,
+    String? parentName,
+    Uint8List? photoBytes,
+    String? photoFilename,
   }) async {
     try {
-      final response = await _apiClient.post(
-        '/register',
-        body: {
+      final http.Response response;
+      if (photoBytes != null) {
+        final fields = <String, String>{
           'email': email,
           'password': password,
           'name': name,
           'role': role,
-          'registrationNumber': registrationNumber,
-          'course': course,
-          'branch': branch,
-          'year': year,
-          'deviceId': deviceId,
-        },
-      );
+          if (registrationNumber != null && registrationNumber.isNotEmpty)
+            'registrationNumber': registrationNumber,
+          if (course != null && course.isNotEmpty) 'course': course,
+          if (branch != null && branch.isNotEmpty) 'branch': branch,
+          if (year != null && year.isNotEmpty) 'year': year,
+          if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
+          if (parentPhone != null && parentPhone.isNotEmpty) 'parentPhone': parentPhone,
+          if (parentName != null && parentName.isNotEmpty) 'parentName': parentName,
+        };
+        response = await _apiClient.postMultipart(
+          '/register',
+          fields: fields,
+          fileField: 'photo',
+          fileBytes: photoBytes,
+          filename: photoFilename ?? 'student_photo.jpg',
+        );
+      } else {
+        response = await _apiClient.post(
+          '/register',
+          body: {
+            'email': email,
+            'password': password,
+            'name': name,
+            'role': role,
+            'registrationNumber': registrationNumber,
+            'course': course,
+            'branch': branch,
+            'year': year,
+            'deviceId': deviceId,
+            if (phone != null && phone.isNotEmpty) 'phone': phone,
+            if (parentPhone != null && parentPhone.isNotEmpty) 'parentPhone': parentPhone,
+            if (parentName != null && parentName.isNotEmpty) 'parentName': parentName,
+          },
+        );
+      }
+
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        _currentUser = UserModel.fromMap(data['user']);
-        await _saveUserToStorage(data['user'], data['token']);
-        ApiClient.instance.cacheToken(data['token']?.toString());
-        if (_currentUser?.role == 'student') {
-          await NotificationService.subscribeToTopic(
-            _currentUser?.course,
-            _currentUser?.branch,
-            _currentUser?.year,
-          );
+        final registeredUser = UserModel.fromMap(data['user']);
+        final token = data['token']?.toString();
+        final bool isPending = data['pendingApproval'] == true ||
+            registeredUser.isPendingApproval ||
+            token == null ||
+            token.isEmpty;
+
+        if (!isPending) {
+          _currentUser = registeredUser;
+          await _saveUserToStorage(data['user'], token);
+          ApiClient.instance.cacheToken(token);
+          if (_currentUser?.role == 'student') {
+            await NotificationService.subscribeToTopic(
+              _currentUser?.course,
+              _currentUser?.branch,
+              _currentUser?.year,
+            );
+          }
+          if (_currentUser != null) {
+            await NotificationService.syncDeviceTokenWithBackend(
+              userId: _currentUser!.id,
+            );
+          }
         }
-        if (_currentUser != null) {
-          await NotificationService.syncDeviceTokenWithBackend(
-            userId: _currentUser!.id,
-          );
-        }
-        return _currentUser;
+        return registeredUser;
       } else {
         String errorMsg = 'Registration failed';
         try {

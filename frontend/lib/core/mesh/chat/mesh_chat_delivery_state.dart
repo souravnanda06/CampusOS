@@ -9,6 +9,7 @@ enum MeshChatDeliveryState {
   broadcasting,
   relayed,
   received,
+  seen,
   failed,
   expired;
 
@@ -20,9 +21,11 @@ enum MeshChatDeliveryState {
       case MeshChatDeliveryState.broadcasting:
         return 'Broadcasting';
       case MeshChatDeliveryState.relayed:
-        return 'Broadcasted';
+        return 'Sent ✓';
       case MeshChatDeliveryState.received:
         return 'Delivered ✓✓';
+      case MeshChatDeliveryState.seen:
+        return 'Seen ✓✓';
       case MeshChatDeliveryState.failed:
         return 'Failed';
       case MeshChatDeliveryState.expired:
@@ -34,12 +37,24 @@ enum MeshChatDeliveryState {
   bool get isOutbound =>
       this == MeshChatDeliveryState.queued ||
       this == MeshChatDeliveryState.broadcasting ||
-      this == MeshChatDeliveryState.relayed;
+      this == MeshChatDeliveryState.relayed ||
+      this == MeshChatDeliveryState.received ||
+      this == MeshChatDeliveryState.seen;
 
   /// Resolves an enum value from its serialized string representation.
   static MeshChatDeliveryState fromString(String value) {
+    final clean = value.toLowerCase().trim();
+    if (clean == 'seen' || clean == 'read') {
+      return MeshChatDeliveryState.seen;
+    }
+    if (clean == 'received' || clean == 'delivered') {
+      return MeshChatDeliveryState.received;
+    }
+    if (clean == 'relayed' || clean == 'sent' || clean == 'broadcasted') {
+      return MeshChatDeliveryState.relayed;
+    }
     for (final state in MeshChatDeliveryState.values) {
-      if (state.name.toLowerCase() == value.toLowerCase().trim()) {
+      if (state.name.toLowerCase() == clean) {
         return state;
       }
     }

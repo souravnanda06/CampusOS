@@ -154,20 +154,38 @@ class SessionService {
     return '${hex32.substring(0, 8)}-${hex32.substring(8, 12)}-${hex32.substring(12, 16)}-${hex32.substring(16, 20)}-${hex32.substring(20, 32)}';
   }
 
-  /// Extracts the original 24-character hexadecimal session ID from a 128-bit BLE service UUID.
+  /// Extracts the session ID (either 24-char hex with 00000000 prefix, or matching knownSessionIds) from a 128-bit BLE service UUID.
   /// Returns null if the UUID does not follow the CampusOS session pattern.
-  static String? extractSessionIdFromBleUuid(String uuidString) {
+  static String? extractSessionIdFromBleUuid(String uuidString, [Iterable<String>? knownSessionIds]) {
     final clean = uuidString.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toLowerCase();
     if (clean.length != 32) return null;
     // Exclude Bluetooth SIG standard UUID base (...-0000-1000-8000-00805f9b34fb)
     if (clean.endsWith('00805f9b34fb')) return null;
     if (clean == '00000000000000000000000000000000') return null;
+    // Exclude BitChat GATT Mesh UUID: F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C
+    if (clean == 'f47b5e2d4a9e4c5a9b3f8e1d2c3a4b5c') return null;
+    // Exclude CampusOS Mesh service UUID: 0000CA05-0000-1000-8000-00805F9B34FB
+    if (clean == '0000ca0500001000800000805f9b34fb') return null;
+
+    // Pattern 1: 24-character hexadecimal session ID padded with 8 leading zeros
     if (clean.startsWith('00000000')) {
       final sub24 = clean.substring(8);
       if (sub24.replaceAll('0', '').isNotEmpty) {
         return sub24;
       }
     }
+
+    // Pattern 2: Known session IDs match (for standard 36-char backend UUIDs)
+    if (knownSessionIds != null && knownSessionIds.isNotEmpty) {
+      final formatted36 = '${clean.substring(0, 8)}-${clean.substring(8, 12)}-${clean.substring(12, 16)}-${clean.substring(16, 20)}-${clean.substring(20, 32)}';
+      for (final known in knownSessionIds) {
+        final cleanKnown = known.toLowerCase().replaceAll(RegExp(r'[^0-9a-f]'), '');
+        if (known.toLowerCase() == formatted36 || cleanKnown == clean) {
+          return known;
+        }
+      }
+    }
+
     return null;
   }
 
@@ -201,6 +219,9 @@ class SessionService {
     required DateTime endTime,
     required String location,
     int? txPowerLevel,
+    double? latitude,
+    double? longitude,
+    double? radiusMeters,
   }) async {
     try {
       final response = await _apiClient.post(
@@ -216,6 +237,9 @@ class SessionService {
           'endTime': endTime.toIso8601String(),
           'location': location,
           'txPowerLevel': txPowerLevel,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+          if (radiusMeters != null) 'radiusMeters': radiusMeters,
         },
       );
       if (response.statusCode == 201) {

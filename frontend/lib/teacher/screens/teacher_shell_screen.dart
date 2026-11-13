@@ -8,7 +8,8 @@ import '../widgets/teacher_home_content.dart';
 import 'teacher_classes_screen.dart';
 import 'teacher_analytics_screen.dart';
 import 'teacher_profile_screen.dart';
-import '../../shared/widgets/dock/apple_glass_dock.dart';
+import '../../shared/widgets/dock/app_dock.dart';
+import '../../shared/widgets/copilot/copilot_sheet.dart';
 import '../../core/localization/language_provider.dart';
 import '../../core/localization/app_strings.dart';
 
@@ -95,26 +96,36 @@ class _TeacherShellScreenState extends State<TeacherShellScreen> {
             ),
           ),
           bottomNavigationBar: RepaintBoundary(
-            child: AppleGlassDock(
+            child: AppDock(
               currentIndex: _currentIndex,
               onTap: (index) => _onNavigateToTab(index),
+              centerAction: AppDockCenterAction(
+                buttonKey: const Key('campus_ai_dock_teacher'),
+                label: 'Campus AI',
+                onTap: () => CopilotSheet.show(
+                  context,
+                  user: widget.user,
+                  role: 'teacher',
+                  screenContext: 'teacher_tab_$_currentIndex',
+                ),
+              ),
               items: [
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.home_outlined,
                   activeIcon: Icons.home_rounded,
                   label: AppStrings.tr('home', lang: lang),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.calendar_today_outlined,
                   activeIcon: Icons.calendar_today_rounded,
                   label: AppStrings.tr('classes', lang: lang),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.bar_chart_outlined,
                   activeIcon: Icons.bar_chart_rounded,
                   label: AppStrings.tr('analytics', lang: lang),
                 ),
-                AppleDockItem(
+                AppDockItem(
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
                   label: AppStrings.tr('profile', lang: lang),

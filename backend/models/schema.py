@@ -1,6 +1,57 @@
 from sqlalchemy import text
 from extensions import db
 
+
+def _sqlite_default_clause(col, col_type_sql):
+    """Returns a SQLite-safe DEFAULT clause for ALTER TABLE ADD COLUMN."""
+    if col.default is not None and not callable(col.default.arg):
+        val = col.default.arg
+        if isinstance(val, bool):
+            return f" DEFAULT {1 if val else 0}"
+        if isinstance(val, (int, float)):
+            return f" DEFAULT {val}"
+        if isinstance(val, str):
+            escaped = val.replace("'", "''")
+            return f" DEFAULT '{escaped}'"
+    if not col.nullable:
+        upper_type = col_type_sql.upper()
+        if 'INT' in upper_type or 'BOOL' in upper_type:
+            return " DEFAULT 0"
+        if 'FLOAT' in upper_type or 'REAL' in upper_type:
+            return " DEFAULT 0.0"
+        return " DEFAULT ''"
+    return ""
+
+
+def _sync_sqlite_missing_columns(conn, dialect):
+    """Non-destructively adds any missing model columns to existing SQLite tables."""
+    for table_name, table in db.metadata.tables.items():
+        try:
+            pragma_rows = conn.execute(text(f'PRAGMA table_info("{table_name}")')).fetchall()
+            if not pragma_rows:
+                continue
+            existing_cols = {row[1] for row in pragma_rows}
+            for col in table.columns:
+                if col.name in existing_cols:
+                    continue
+                col_type_sql = col.type.compile(dialect=dialect)
+                default_sql = _sqlite_default_clause(col, col_type_sql)
+                null_sql = "NOT NULL" if (not col.nullable and default_sql) else "NULL"
+                conn.execute(text(
+                    f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type_sql} {null_sql}{default_sql}'
+                ))
+                if col.unique:
+                    conn.execute(text(
+                        f'CREATE UNIQUE INDEX IF NOT EXISTS "uq_{table_name}_{col.name}" ON "{table_name}" ("{col.name}")'
+                    ))
+                conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+
 def init_db(app):
     """
     Initializes database tables and performs non-destructive additive column/table checks.
@@ -211,7 +262,15 @@ def init_db(app):
                             ('face_enrolled', "TINYINT(1) DEFAULT 0"),
                             ('face_enrolled_at', "VARCHAR(50) NULL"),
                             ('face_embedding_hash', "VARCHAR(128) NULL"),
-                            ('face_embedding', "TEXT NULL")
+                            ('face_embedding', "TEXT NULL"),
+                            ('approval_status', "VARCHAR(20) NOT NULL DEFAULT 'APPROVED'"),
+                            ('approved_by', "VARCHAR(36) NULL"),
+                            ('approved_at', "VARCHAR(50) NULL"),
+                            ('rejection_reason', "VARCHAR(255) NULL"),
+                            ('photo_url', "TEXT NULL"),
+                            ('phone', "VARCHAR(20) NULL"),
+                            ('parent_phone', "VARCHAR(20) NULL"),
+                            ('parent_name', "VARCHAR(100) NULL")
                         ]
                         for col_name, col_def in _user_additions:
                             if col_name not in _user_cols:
@@ -220,30 +279,7 @@ def init_db(app):
 
                 # Phase 6: Additive check for SQLite databases
                 if 'sqlite' in _db_uri or not _db_uri:
-                    try:
-                        _res_pragma_u = _conn.execute(text("PRAGMA table_info(users)"))
-                        _sqlite_user_cols = {row[1] for row in _res_pragma_u.fetchall()}
-                        if _sqlite_user_cols:
-                            if 'face_enrolled' not in _sqlite_user_cols:
-                                _conn.execute(text("ALTER TABLE users ADD COLUMN face_enrolled BOOLEAN DEFAULT 0"))
-                            if 'face_enrolled_at' not in _sqlite_user_cols:
-                                _conn.execute(text("ALTER TABLE users ADD COLUMN face_enrolled_at VARCHAR(50) NULL"))
-                            if 'face_embedding_hash' not in _sqlite_user_cols:
-                                _conn.execute(text("ALTER TABLE users ADD COLUMN face_embedding_hash VARCHAR(128) NULL"))
-                            if 'face_embedding' not in _sqlite_user_cols:
-                                _conn.execute(text("ALTER TABLE users ADD COLUMN face_embedding TEXT NULL"))
-                            _conn.commit()
-                    except Exception:
-                        pass
-                    try:
-                        _res_pragma = _conn.execute(text("PRAGMA table_info(complaints)"))
-                        _sqlite_comp_cols = {row[1] for row in _res_pragma.fetchall()}
-                        if _sqlite_comp_cols and 'idempotency_key' not in _sqlite_comp_cols:
-                            _conn.execute(text("ALTER TABLE complaints ADD COLUMN idempotency_key VARCHAR(100) NULL"))
-                            _conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_complaints_idempotency_key ON complaints (idempotency_key)"))
-                            _conn.commit()
-                    except Exception:
-                        pass
+                    _sync_sqlite_missing_columns(_conn, db.engine.dialect)
 
                     # ================================================================
                     # Phase 2: Non-destructive additive index creation for performance
@@ -279,17 +315,11 @@ def init_db(app):
                     ]
                     for table_name, index_name, columns in _perf_indexes:
                         try:
-                            _idx_check = _conn.execute(text(
-                                f"SELECT COUNT(*) FROM information_schema.STATISTICS "
-                                f"WHERE TABLE_SCHEMA = '{_db_name}' AND TABLE_NAME = '{table_name}' "
-                                f"AND INDEX_NAME = '{index_name}'"
+                            cols_str = ', '.join(columns)
+                            _conn.execute(text(
+                                f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({cols_str})"
                             ))
-                            if _idx_check.scalar() == 0:
-                                cols_str = ', '.join(columns)
-                                _conn.execute(text(
-                                    f"CREATE INDEX {index_name} ON {table_name} ({cols_str})"
-                                ))
-                                _conn.commit()
+                            _conn.commit()
                         except Exception:
                             pass  # Table may not exist yet or index already exists under different name
 

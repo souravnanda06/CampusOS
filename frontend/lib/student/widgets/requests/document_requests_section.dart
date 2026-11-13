@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:attendance_app/core/haptics/app_haptics.dart';
-
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/haptics/app_haptics.dart';
 import '../../../auth/providers/user_provider.dart';
 import '../../../core/models/expansion_models.dart';
 import '../../../core/services/expansion_api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../passport/document_viewer_sheet.dart';
+import '../../../shared/widgets/motion/apple_bounceable.dart';
+import '../../../shared/widgets/motion/apple_spring_scroll_physics.dart';
 
 class DocumentRequestsSection extends StatefulWidget {
   const DocumentRequestsSection({Key? key}) : super(key: key);
@@ -79,69 +80,118 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
         builder: (context, setSheetState) {
           return Container(
             padding: EdgeInsets.only(
-              left: 24,
-              right: 24,
-              top: 24,
+              left: 20,
+              right: 20,
+              top: 12,
               bottom: MediaQuery.of(context).viewInsets.bottom + 24,
             ),
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceOf(context),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, -4),
+                ),
+              ],
             ),
             child: SingleChildScrollView(
+              physics: const AppleSpringScrollPhysics(),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
                     child: Container(
-                      width: 40,
-                      height: 4,
+                      width: 36,
+                      height: 5,
                       decoration: BoxDecoration(
-                        color: AppColors.border,
-                        borderRadius: BorderRadius.circular(2),
+                        color: AppColors.borderOf(context),
+                        borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    "Request Institutional Document",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Request Document",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimaryOf(context),
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "Digitally attested & cryptographically signed",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondaryOf(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                      AppleBounceable(
+                        scaleFactor: 0.90,
+                        onTap: () {
+                          AppHaptics.selectionClick();
+                          Navigator.pop(ctx);
+                        },
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAltOf(context),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: AppColors.textSecondaryOf(context),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 22),
                   Text(
-                    "Official certificates are digitally attested and can be stored in your Passport Wallet.",
+                    "DOCUMENT TYPE",
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    "Document Type",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondaryOf(context),
+                      letterSpacing: 0.8,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(14),
-                      color: AppColors.bg,
+                      border: Border.all(
+                        color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                        width: 0.5,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      color: AppColors.surfaceAltOf(context),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: selectedType,
                         isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        dropdownColor: AppColors.surfaceOf(context),
+                        icon: const Icon(Icons.expand_more_rounded, color: AppColors.primary, size: 20),
                         items: const [
                           DropdownMenuItem(
                             value: 'Bonafide Certificate',
@@ -161,7 +211,7 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                           ),
                           DropdownMenuItem(
                             value: 'Transcript',
-                            child: Text('Transcript'),
+                            child: Text('Official Transcript'),
                           ),
                           DropdownMenuItem(
                             value: 'Provisional Degree Certificate',
@@ -170,121 +220,171 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                         ],
                         onChanged: (val) {
                           if (val != null) {
+                            AppHaptics.selectionClick();
                             setSheetState(() => selectedType = val);
                           }
                         },
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   Text(
-                    "Purpose / Remarks",
+                    "PURPOSE / SPECIFICATION",
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondaryOf(context),
+                      letterSpacing: 0.8,
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: purposeController,
                     maxLines: 3,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textPrimaryOf(context),
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
                     decoration: InputDecoration(
                       hintText: "e.g. Bank education loan application, passport verification...",
                       hintStyle: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
-                        color: AppColors.textTertiary,
+                        color: AppColors.textTertiaryOf(context),
                       ),
                       filled: true,
-                      fillColor: AppColors.bg,
+                      fillColor: AppColors.surfaceAltOf(context),
+                      contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(
+                          color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                          width: 0.5,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(
+                          color: AppColors.borderOf(context).withValues(alpha: 0.6),
+                          width: 0.5,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: isSubmitting
-                          ? null
-                          : () async {
-                              final purpose = purposeController.text.trim();
-                              if (purpose.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Please state the purpose')),
-                                );
-                                return;
-                              }
+                  const SizedBox(height: 28),
+                  AppleBounceable(
+                    scaleFactor: 0.96,
+                    onTap: isSubmitting
+                        ? null
+                        : () async {
+                            final purpose = purposeController.text.trim();
+                            if (purpose.isEmpty) {
+                              AppHaptics.mediumImpact();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Please state the purpose of the document request.',
+                                    style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                                  ),
+                                  backgroundColor: AppColors.danger,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                              return;
+                            }
 
-                              final messenger = ScaffoldMessenger.of(context);
-                              final navigator = Navigator.of(ctx);
-                              setSheetState(() => isSubmitting = true);
-                              try {
-                                await _api.createDocumentRequest(
-                                  studentId: studentId,
-                                  documentType: selectedType,
-                                  purpose: purpose,
-                                );
-                                if (mounted) {
-                                  navigator.pop();
-                                  _loadDocuments();
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        "Document request submitted for institutional review",
-                                        style: GoogleFonts.plusJakartaSans(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      backgroundColor: AppColors.success,
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                setSheetState(() => isSubmitting = false);
+                            final messenger = ScaffoldMessenger.of(context);
+                            final navigator = Navigator.of(ctx);
+                            AppHaptics.lightImpact();
+                            setSheetState(() => isSubmitting = true);
+                            try {
+                              await _api.createDocumentRequest(
+                                studentId: studentId,
+                                documentType: selectedType,
+                                purpose: purpose,
+                              );
+                              if (mounted) {
+                                AppHaptics.lightImpact();
+                                navigator.pop();
+                                _loadDocuments();
                                 messenger.showSnackBar(
                                   SnackBar(
-                                    content: Text('Failed: $e'),
-                                    backgroundColor: AppColors.danger,
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            "Document request submitted for institutional review",
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: AppColors.emerald,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
                                 );
                               }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
+                            } catch (e) {
+                              AppHaptics.mediumImpact();
+                              setSheetState(() => isSubmitting = false);
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed: $e'),
+                                  backgroundColor: AppColors.danger,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          },
+                    child: Container(
+                      width: double.infinity,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.28),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      child: isSubmitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                      child: Center(
+                        child: isSubmitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                "Submit Document Request",
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: -0.2,
+                                ),
                               ),
-                            )
-                          : Text(
-                              "Submit Request",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -300,7 +400,7 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
     if (studentId == null) return;
 
     try {
-      AppHaptics.lightImpact();
+      AppHaptics.selectionClick();
       final updated = await _api.toggleWalletStorage(
         documentId: doc.id,
         studentId: studentId,
@@ -313,21 +413,44 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              updated.storedInWallet
-                  ? "Added to Campus Wallet"
-                  : "Removed from Campus Wallet",
-              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            content: Row(
+              children: [
+                Icon(
+                  updated.storedInWallet ? Icons.account_balance_wallet_rounded : Icons.remove_circle_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    updated.storedInWallet
+                        ? "Added to Campus Passport Wallet"
+                        : "Removed from Campus Passport Wallet",
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor: AppColors.primary,
+            backgroundColor: updated.storedInWallet ? AppColors.emerald : AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        AppHaptics.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.danger),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
       }
     }
@@ -346,8 +469,7 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
       color: AppColors.primary,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-        physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics()),
+        physics: AppleSpringScrollPhysics.always,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -359,38 +481,56 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                     "Attested Documents",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimaryOf(context),
+                      letterSpacing: -0.4,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
-                    "Institutionally sealed certificates",
+                    "Institutionally sealed credentials (${_documents.length})",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondaryOf(context),
                     ),
                   ),
                 ],
               ),
-              ElevatedButton.icon(
-                onPressed: _showNewRequestDialog,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(
-                  "Request",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
+              AppleBounceable(
+                scaleFactor: 0.94,
+                onTap: () {
+                  AppHaptics.lightImpact();
+                  _showNewRequestDialog();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  elevation: 0,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Request",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -403,6 +543,10 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
               decoration: BoxDecoration(
                 color: AppColors.danger.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.danger.withValues(alpha: 0.3),
+                  width: 0.5,
+                ),
               ),
               child: Text(
                 _error!,
@@ -425,30 +569,47 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: AppColors.borderOf(context).withValues(alpha: 0.7),
+          width: 0.5,
+        ),
       ),
       child: Column(
         children: [
-          Icon(Icons.description_outlined,
-              size: 48, color: AppColors.textTertiary.withValues(alpha: 0.5)),
-          const SizedBox(height: 12),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.description_outlined,
+                size: 36,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
             "No Document Requests",
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimaryOf(context),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
-            "You haven't requested any official institutional documents yet. Tap 'Request' above to get Bonafide certificates, NOCs, or transcripts.",
+            "You haven't requested any institutional documents yet. Tap 'Request' above to obtain Bonafide certificates, transcripts, or NOCs.",
             textAlign: TextAlign.center,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
-              color: AppColors.textSecondary,
+              color: AppColors.textSecondaryOf(context),
+              height: 1.45,
             ),
           ),
         ],
@@ -463,7 +624,7 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
     switch (doc.status.toUpperCase()) {
       case 'ISSUED':
       case 'APPROVED':
-        statusColor = AppColors.success;
+        statusColor = AppColors.emerald;
         statusText = 'ISSUED';
         break;
       case 'REJECTED':
@@ -481,21 +642,24 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
         doc.status.toUpperCase() == 'APPROVED';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.surfaceOf(context),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.borderOf(context).withValues(alpha: 0.7),
+          width: 0.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -506,15 +670,15 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isIssued
-                        ? const Color(0xFF4338CA).withValues(alpha: 0.1)
-                        : AppColors.bg,
-                    borderRadius: BorderRadius.circular(12),
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : AppColors.surfaceAltOf(context),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     isIssued
                         ? Icons.verified_user_rounded
                         : Icons.description_rounded,
-                    color: isIssued ? const Color(0xFF4338CA) : AppColors.textSecondary,
+                    color: isIssued ? AppColors.primary : AppColors.textSecondaryOf(context),
                     size: 22,
                   ),
                 ),
@@ -527,16 +691,17 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                         doc.documentType,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimaryOf(context),
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
                         "Purpose: ${doc.purpose}",
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          color: AppColors.textSecondary,
+                          color: AppColors.textSecondaryOf(context),
+                          height: 1.35,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -545,17 +710,16 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     statusText,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: statusColor,
                     ),
                   ),
@@ -563,25 +727,28 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
               ],
             ),
             if (doc.certificateNumber != null) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.bg,
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.surfaceAltOf(context),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.borderOf(context).withValues(alpha: 0.5),
+                    width: 0.5,
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.shield_outlined,
-                        size: 14, color: Color(0xFF4338CA)),
+                    const Icon(Icons.shield_outlined, size: 14, color: AppColors.primary),
                     const SizedBox(width: 6),
                     Text(
                       "Cert #${doc.certificateNumber}",
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF4338CA),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
                       ),
                     ),
                     const Spacer(),
@@ -592,7 +759,7 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                                 DateTime.now()),
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
-                          color: AppColors.textTertiary,
+                          color: AppColors.textSecondaryOf(context),
                         ),
                       ),
                   ],
@@ -600,12 +767,14 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
               ),
             ],
             if (isIssued) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
+                    child: AppleBounceable(
+                      scaleFactor: 0.95,
+                      onTap: () {
+                        AppHaptics.lightImpact();
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
@@ -614,51 +783,75 @@ class _DocumentRequestsSectionState extends State<DocumentRequestsSection> {
                               DocumentViewerSheet(document: doc),
                         );
                       },
-                      icon: const Icon(Icons.visibility_outlined, size: 16),
-                      label: Text(
-                        "View Attestation",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceAltOf(context),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.4),
+                            width: 1.0,
+                          ),
                         ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF4338CA),
-                        side: const BorderSide(color: Color(0xFF4338CA)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.visibility_outlined, size: 15, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              "View Attestation",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: () => _toggleWallet(doc),
-                    icon: Icon(
-                      doc.storedInWallet
-                          ? Icons.check_circle_rounded
-                          : Icons.account_balance_wallet_outlined,
-                      size: 16,
-                    ),
-                    label: Text(
-                      doc.storedInWallet ? "In Wallet" : "Add to Wallet",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                  AppleBounceable(
+                    scaleFactor: 0.95,
+                    onTap: () => _toggleWallet(doc),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: doc.storedInWallet
+                            ? AppColors.emerald
+                            : AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (doc.storedInWallet ? AppColors.emerald : AppColors.primary)
+                                .withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: doc.storedInWallet
-                          ? const Color(0xFF10B981)
-                          : AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            doc.storedInWallet
+                                ? Icons.check_circle_rounded
+                                : Icons.account_balance_wallet_outlined,
+                            size: 15,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            doc.storedInWallet ? "In Wallet" : "Add to Wallet",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
                     ),
                   ),
                 ],

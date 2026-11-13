@@ -7,23 +7,33 @@ export interface InstitutionPublicKey {
   algorithm: string;
 }
 
-export interface TrustBundleCertificate {
+export interface TrustBundleIdentity {
   certificateId: string;
-  userId: string;
+  issuerKeyId: string;
+  keyId: string;
   publicKey: string;
-  keyType: string;
+  status: string;
+  userId: string;
+  userName?: string;
   validFrom: string;
   validTo: string;
-  status: string;
+}
+
+export interface TrustBundlePayload {
+  version: number;
+  generatedAt: number;
+  expiresAt: number;
   issuerKeyId: string;
+  institution?: {
+    keyId: string;
+    publicKey: string;
+  };
+  identities: TrustBundleIdentity[];
+  revokedKeyIds: string[];
 }
 
 export interface TrustBundle {
-  issuer: string;
-  issuerKeyId: string;
-  generatedAt: string;
-  expiresAt: string;
-  certificates: TrustBundleCertificate[];
+  payload: TrustBundlePayload;
   signature: string;
 }
 
@@ -35,7 +45,7 @@ export interface StudentPassportKey {
   status: string;
   certificate?: {
     id: string;
-    serialNumber: string;
+    serialNumber?: string;
     status: string;
     validFrom: string;
     validTo: string;
@@ -52,6 +62,22 @@ export interface CertificateVerificationResult {
   reason?: string;
   details?: Record<string, unknown>;
   certificate?: Record<string, unknown>;
+}
+
+export interface PresentationVerificationResult {
+  valid: boolean;
+  reason?: string;
+  userId?: string;
+  keyId?: string;
+  certificateId?: string;
+  expiresAt?: number;
+  user?: {
+    name: string;
+    branch?: string;
+    year?: string | number;
+    course?: string;
+    registrationNumber?: string;
+  };
 }
 
 export const passportApi = {
@@ -73,5 +99,12 @@ export const passportApi = {
 
   verifyCertificate: async (payload: { certificateId?: string; certificate?: unknown }): Promise<CertificateVerificationResult> => {
     return apiClient.post<CertificateVerificationResult>('/passport/verify-certificate', payload);
+  },
+
+  verifyPresentation: async (payload: {
+    payload: Record<string, unknown>;
+    signature: string;
+  }): Promise<PresentationVerificationResult> => {
+    return apiClient.post<PresentationVerificationResult>('/passport/verify', payload);
   },
 };

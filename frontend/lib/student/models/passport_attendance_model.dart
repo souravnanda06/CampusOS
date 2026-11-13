@@ -14,6 +14,19 @@ class PassportAttendanceModel {
   static const String passportAttendanceServiceUuid =
       '0000FE20-0000-1000-8000-00805F9B34FB';
 
+  /// Verification mode constants
+  static const String modeBle = 'BLE_BATCH';
+  static const String modeWifiLan = 'WIFI_LAN';
+  static const String modeWifiHotspot = 'WIFI_HOTSPOT';
+  static const String modeQrOptical = 'QR_OPTICAL';
+  static const String modePinManual = 'PIN_MANUAL';
+
+  /// Default port for teacher offline local HTTP attendance receiver
+  static const int defaultLocalHttpPort = 53318;
+
+  /// Default port for teacher Wi-Fi UDP beacon multicast
+  static const int defaultUdpMulticastPort = 53317;
+
   /// Legacy attendance BLE service UUID (session ID).
   /// Preserved for backward compatibility.
   static const String legacyAttendancePrefix = 'attentify';
@@ -93,6 +106,80 @@ class TeacherBeaconVerificationResult {
   }
 }
 
+/// 15-second Rolling PIN Generator & Validator for Zero-BLE Attendance.
+class PassportRollingPinModel {
+  static const int defaultWindowSeconds = 15;
+
+  /// Generates a deterministic 4-digit PIN for the given session and window.
+  static String generatePin({
+    required String sessionId,
+    required String sessionNonce,
+    int? timestampSeconds,
+    int windowSeconds = defaultWindowSeconds,
+  }) {
+    final nowSec = timestampSeconds ??
+        (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
+    final window = nowSec ~/ windowSeconds;
+    return _computePin(sessionId, sessionNonce, window);
+  }
+
+  /// Verifies an entered 4-digit PIN against current and adjacent windows (anti-drift skew).
+  static bool verifyPin({
+    required String enteredPin,
+    required String sessionId,
+    required String sessionNonce,
+    int? timestampSeconds,
+    int windowSeconds = defaultWindowSeconds,
+    int allowedWindowSkew = 1,
+  }) {
+    final cleanPin = enteredPin.trim();
+    if (cleanPin.length != 4) return false;
+    final nowSec = timestampSeconds ??
+        (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
+    final currentWindow = nowSec ~/ windowSeconds;
+
+    for (int offset = -allowedWindowSkew; offset <= allowedWindowSkew; offset++) {
+      final pin = _computePin(sessionId, sessionNonce, currentWindow + offset);
+      if (pin == cleanPin) return true;
+    }
+    return false;
+  }
+
+  /// Seconds remaining before the current PIN expires and rotates.
+  static int getRemainingSeconds({
+    int? timestampSeconds,
+    int windowSeconds = defaultWindowSeconds,
+  }) {
+    final nowSec = timestampSeconds ??
+        (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
+    final remainder = nowSec % windowSeconds;
+    return windowSeconds - remainder;
+  }
+
+  /// Fraction of window elapsed (0.0 -> 1.0) for circular UI timer.
+  static double getProgress({
+    int? timestampSeconds,
+    int windowSeconds = defaultWindowSeconds,
+  }) {
+    final remaining = getRemainingSeconds(
+      timestampSeconds: timestampSeconds,
+      windowSeconds: windowSeconds,
+    );
+    return remaining / windowSeconds;
+  }
+
+  static String _computePin(String sessionId, String sessionNonce, int window) {
+    final input = '$sessionId:$sessionNonce:$window';
+    final bytes = utf8.encode(input);
+    int hash = 0x811C9DC5;
+    for (final b in bytes) {
+      hash = ((hash ^ b) * 0x01000193) & 0xFFFFFFFF;
+    }
+    final pinNum = hash.abs() % 10000;
+    return pinNum.toString().padLeft(4, '0');
+  }
+}
+
 /// CampusOS Passport Teacher Attendance Beacon Model (Phase 1I).
 ///
 /// Broadcast by the teacher over BLE or displayed as an active session QR code.
@@ -111,6 +198,14 @@ class PassportTeacherBeaconModel {
   final int issuedAt;
   final int expiresAt;
   final String signature; // Base64 Ed25519 signature
+  final String? routerBssid;
+  final String? localIp;
+  final int? localPort;
+  final String? hotspotSsid;
+  final String? hotspotPassword;
+  final double? teacherLatitude;
+  final double? teacherLongitude;
+  final double? teacherLocationAccuracy;
 
   const PassportTeacherBeaconModel({
     this.protocolVersion = PassportAttendanceModel.currentVersion,
@@ -126,6 +221,14 @@ class PassportTeacherBeaconModel {
     required this.issuedAt,
     required this.expiresAt,
     this.signature = '',
+    this.routerBssid,
+    this.localIp,
+    this.localPort,
+    this.hotspotSsid,
+    this.hotspotPassword,
+    this.teacherLatitude,
+    this.teacherLongitude,
+    this.teacherLocationAccuracy,
   });
 
   /// Generates a new teacher attendance beacon with a cryptographically secure 16-byte random nonce.
@@ -140,6 +243,14 @@ class PassportTeacherBeaconModel {
     Duration validity = const Duration(minutes: 10),
     int? currentTimestampSeconds,
     String? customSessionNonce,
+    String? routerBssid,
+    String? localIp,
+    int? localPort,
+    String? hotspotSsid,
+    String? hotspotPassword,
+    double? teacherLatitude,
+    double? teacherLongitude,
+    double? teacherLocationAccuracy,
   }) {
     final nowSec = currentTimestampSeconds ??
         (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
@@ -166,6 +277,14 @@ class PassportTeacherBeaconModel {
       sessionNonce: sessionNonce,
       issuedAt: nowSec,
       expiresAt: nowSec + validity.inSeconds,
+      routerBssid: routerBssid,
+      localIp: localIp,
+      localPort: localPort,
+      hotspotSsid: hotspotSsid,
+      hotspotPassword: hotspotPassword,
+      teacherLatitude: teacherLatitude,
+      teacherLongitude: teacherLongitude,
+      teacherLocationAccuracy: teacherLocationAccuracy,
     );
   }
 
@@ -182,13 +301,21 @@ class PassportTeacherBeaconModel {
       if (branch != null) 'branch': branch,
       if (course != null) 'course': course,
       'expiresAt': expiresAt,
+      if (hotspotPassword != null) 'hotspotPassword': hotspotPassword,
+      if (hotspotSsid != null) 'hotspotSsid': hotspotSsid,
       'issuedAt': issuedAt,
+      if (localIp != null) 'localIp': localIp,
+      if (localPort != null) 'localPort': localPort,
       'protocolVersion': protocolVersion,
+      if (routerBssid != null) 'routerBssid': routerBssid,
       'sessionId': sessionId,
       'sessionNonce': sessionNonce,
       if (subject != null) 'subject': subject,
       'teacherId': teacherId,
       'teacherKeyId': teacherKeyId,
+      if (teacherLatitude != null) 'teacherLatitude': teacherLatitude,
+      if (teacherLocationAccuracy != null) 'teacherLocationAccuracy': teacherLocationAccuracy,
+      if (teacherLongitude != null) 'teacherLongitude': teacherLongitude,
       'type': type,
       if (year != null) 'year': year,
     };
@@ -211,6 +338,63 @@ class PassportTeacherBeaconModel {
       issuedAt: issuedAt,
       expiresAt: expiresAt,
       signature: signature,
+      routerBssid: routerBssid,
+      localIp: localIp,
+      localPort: localPort,
+      hotspotSsid: hotspotSsid,
+      hotspotPassword: hotspotPassword,
+      teacherLatitude: teacherLatitude,
+      teacherLongitude: teacherLongitude,
+      teacherLocationAccuracy: teacherLocationAccuracy,
+    );
+  }
+
+  PassportTeacherBeaconModel copyWith({
+    int? protocolVersion,
+    String? type,
+    String? sessionId,
+    String? teacherId,
+    String? teacherKeyId,
+    String? course,
+    String? branch,
+    String? year,
+    String? subject,
+    String? sessionNonce,
+    int? issuedAt,
+    int? expiresAt,
+    String? signature,
+    String? routerBssid,
+    String? localIp,
+    int? localPort,
+    String? hotspotSsid,
+    String? hotspotPassword,
+    double? teacherLatitude,
+    double? teacherLongitude,
+    double? teacherLocationAccuracy,
+  }) {
+    return PassportTeacherBeaconModel(
+      protocolVersion: protocolVersion ?? this.protocolVersion,
+      type: type ?? this.type,
+      sessionId: sessionId ?? this.sessionId,
+      teacherId: teacherId ?? this.teacherId,
+      teacherKeyId: teacherKeyId ?? this.teacherKeyId,
+      course: course ?? this.course,
+      branch: branch ?? this.branch,
+      year: year ?? this.year,
+      subject: subject ?? this.subject,
+      sessionNonce: sessionNonce ?? this.sessionNonce,
+      issuedAt: issuedAt ?? this.issuedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      signature: signature ?? this.signature,
+      routerBssid: routerBssid ?? this.routerBssid,
+      localIp: localIp ?? this.localIp,
+      localPort: localPort ?? this.localPort,
+      hotspotSsid: hotspotSsid ?? this.hotspotSsid,
+      hotspotPassword: hotspotPassword ?? this.hotspotPassword,
+      teacherLatitude: teacherLatitude ?? this.teacherLatitude,
+      teacherLongitude: teacherLongitude ?? this.teacherLongitude,
+      teacherLocationAccuracy:
+          teacherLocationAccuracy ?? this.teacherLocationAccuracy,
     );
   }
 
@@ -229,6 +413,14 @@ class PassportTeacherBeaconModel {
       'issuedAt': issuedAt,
       'expiresAt': expiresAt,
       'signature': signature,
+      if (routerBssid != null) 'routerBssid': routerBssid,
+      if (localIp != null) 'localIp': localIp,
+      if (localPort != null) 'localPort': localPort,
+      if (hotspotSsid != null) 'hotspotSsid': hotspotSsid,
+      if (hotspotPassword != null) 'hotspotPassword': hotspotPassword,
+      if (teacherLatitude != null) 'teacherLatitude': teacherLatitude,
+      if (teacherLongitude != null) 'teacherLongitude': teacherLongitude,
+      if (teacherLocationAccuracy != null) 'teacherLocationAccuracy': teacherLocationAccuracy,
     };
   }
 
@@ -261,6 +453,22 @@ class PassportTeacherBeaconModel {
               ? map['exp'] as int
               : int.tryParse(map['expiresAt']?.toString() ?? map['exp']?.toString() ?? '0') ?? 0),
       signature: map['signature']?.toString() ?? map['s']?.toString() ?? '',
+      routerBssid: map['routerBssid']?.toString() ?? map['rb']?.toString(),
+      localIp: map['localIp']?.toString() ?? map['lip']?.toString(),
+      localPort: map['localPort'] is int
+          ? map['localPort'] as int
+          : int.tryParse(map['localPort']?.toString() ?? map['lp']?.toString() ?? ''),
+      hotspotSsid: map['hotspotSsid']?.toString() ?? map['hs']?.toString(),
+      hotspotPassword: map['hotspotPassword']?.toString() ?? map['hp']?.toString(),
+      teacherLatitude: (map['teacherLatitude'] as num?)?.toDouble() ??
+          (map['tlat'] as num?)?.toDouble() ??
+          double.tryParse(map['teacherLatitude']?.toString() ?? map['tlat']?.toString() ?? ''),
+      teacherLongitude: (map['teacherLongitude'] as num?)?.toDouble() ??
+          (map['tlng'] as num?)?.toDouble() ??
+          double.tryParse(map['teacherLongitude']?.toString() ?? map['tlng']?.toString() ?? ''),
+      teacherLocationAccuracy: (map['teacherLocationAccuracy'] as num?)?.toDouble() ??
+          (map['tacc'] as num?)?.toDouble() ??
+          double.tryParse(map['teacherLocationAccuracy']?.toString() ?? map['tacc']?.toString() ?? ''),
     );
   }
 
@@ -279,10 +487,24 @@ class PassportTeacherBeaconModel {
     'iat': issuedAt,
     'exp': expiresAt,
     's': signature,
+    if (routerBssid != null) 'rb': routerBssid,
+    if (localIp != null) 'lip': localIp,
+    if (localPort != null) 'lp': localPort,
+    if (hotspotSsid != null) 'hs': hotspotSsid,
+    if (hotspotPassword != null) 'hp': hotspotPassword,
+    if (teacherLatitude != null) 'tlat': teacherLatitude,
+    if (teacherLongitude != null) 'tlng': teacherLongitude,
+    if (teacherLocationAccuracy != null) 'tacc': teacherLocationAccuracy,
   };
 
-  /// Compact QR code representation for QR exception recovery.
-  String toQrString() {
+  /// Compact QR code representation for optical line-of-sight attendance presentation.
+  /// If dynamicWindowSeconds > 0, binds the optical token to a rotating window to prevent photographed QR relay.
+  /// If dynamicWindowSeconds <= 0 (default), preserves the canonical signed issuedAt and expiresAt timestamps.
+  String toQrString({int dynamicWindowSeconds = 0}) {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final bool useDynamic = dynamicWindowSeconds > 0;
+    final windowIndex = useDynamic ? (now ~/ dynamicWindowSeconds) : null;
+    final dynamicExp = useDynamic ? ((windowIndex! + 1) * dynamicWindowSeconds + 5) : null;
     return jsonEncode({
       'p': {
         'v': protocolVersion,
@@ -291,9 +513,18 @@ class PassportTeacherBeaconModel {
         'tid': teacherId,
         'tkid': teacherKeyId,
         'sn': sessionNonce,
-        'iat': issuedAt,
-        'exp': expiresAt,
+        'iat': useDynamic ? now : issuedAt,
+        'exp': useDynamic ? dynamicExp! : expiresAt,
+        if (windowIndex != null) 'w': windowIndex,
         if (subject != null) 'sub': subject,
+        if (routerBssid != null) 'rb': routerBssid,
+        if (localIp != null) 'lip': localIp,
+        if (localPort != null) 'lp': localPort,
+        if (hotspotSsid != null) 'hs': hotspotSsid,
+        if (hotspotPassword != null) 'hp': hotspotPassword,
+        if (teacherLatitude != null) 'tlat': teacherLatitude,
+        if (teacherLongitude != null) 'tlng': teacherLongitude,
+        if (teacherLocationAccuracy != null) 'tacc': teacherLocationAccuracy,
       },
       's': signature,
     });
@@ -326,6 +557,17 @@ class PassportTeacherBeaconModel {
           ? p['exp'] as int
           : int.tryParse(p['exp']?.toString() ?? '0') ?? 0,
       signature: s,
+      routerBssid: p['rb']?.toString(),
+      localIp: p['lip']?.toString(),
+      localPort: p['lp'] is int ? p['lp'] as int : int.tryParse(p['lp']?.toString() ?? ''),
+      hotspotSsid: p['hs']?.toString(),
+      hotspotPassword: p['hp']?.toString(),
+      teacherLatitude: (p['tlat'] as num?)?.toDouble() ??
+          double.tryParse(p['tlat']?.toString() ?? ''),
+      teacherLongitude: (p['tlng'] as num?)?.toDouble() ??
+          double.tryParse(p['tlng']?.toString() ?? ''),
+      teacherLocationAccuracy: (p['tacc'] as num?)?.toDouble() ??
+          double.tryParse(p['tacc']?.toString() ?? ''),
     );
   }
 
@@ -374,6 +616,12 @@ class PassportAttendanceResponseModel {
   final bool biometricGate;
   final String responseNonce; // Ephemeral 8-byte random nonce (16 hex chars)
   final String signature;
+  final String verificationMode; // 'BLE_BATCH', 'WIFI_LAN', 'WIFI_HOTSPOT', 'QR_OPTICAL', 'PIN_MANUAL'
+  final String? routerBssid;
+  final double? latitude;
+  final double? longitude;
+  final double? gpsAccuracy;
+  final bool isMockedGps;
 
   const PassportAttendanceResponseModel({
     this.version = PassportAttendanceModel.currentVersion,
@@ -387,6 +635,12 @@ class PassportAttendanceResponseModel {
     this.biometricGate = true,
     required this.responseNonce,
     this.signature = '',
+    this.verificationMode = PassportAttendanceModel.modeBle,
+    this.routerBssid,
+    this.latitude,
+    this.longitude,
+    this.gpsAccuracy,
+    this.isMockedGps = false,
   });
 
   /// Factory creating an unsigned response structure ready for canonical signing.
@@ -397,12 +651,19 @@ class PassportAttendanceResponseModel {
     required String challengeNonce,
     Duration validity = const Duration(seconds: 20),
     int? currentTimestampSeconds,
+    String verificationMode = PassportAttendanceModel.modeBle,
+    String? routerBssid,
+    String? customResponseNonce,
+    double? latitude,
+    double? longitude,
+    double? gpsAccuracy,
+    bool isMockedGps = false,
   }) {
     final nowSec = currentTimestampSeconds ??
         (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
     final random = Random.secure();
     final nonceBytes = List<int>.generate(8, (_) => random.nextInt(256));
-    final nonceHex =
+    final nonceHex = customResponseNonce ??
         nonceBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
     return PassportAttendanceResponseModel(
@@ -416,6 +677,12 @@ class PassportAttendanceResponseModel {
       expiresAt: nowSec + validity.inSeconds,
       biometricGate: true,
       responseNonce: nonceHex,
+      verificationMode: verificationMode,
+      routerBssid: routerBssid,
+      latitude: latitude,
+      longitude: longitude,
+      gpsAccuracy: gpsAccuracy,
+      isMockedGps: isMockedGps,
     );
   }
 
@@ -433,11 +700,17 @@ class PassportAttendanceResponseModel {
       'challengeNonce': challengeNonce,
       'deviceKeyId': deviceKeyId,
       'expiresAt': expiresAt,
+      if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
+      if (isMockedGps) 'isMockedGps': isMockedGps,
       'issuedAt': issuedAt,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
       'responseNonce': responseNonce,
+      if (routerBssid != null) 'routerBssid': routerBssid,
       'sessionId': sessionId,
       'studentId': studentId,
       'type': type,
+      'verificationMode': verificationMode,
       'version': version,
     };
     return canonicalizeJson(map);
@@ -464,6 +737,12 @@ class PassportAttendanceResponseModel {
       biometricGate: biometricGate,
       responseNonce: responseNonce,
       signature: signature,
+      verificationMode: verificationMode,
+      routerBssid: routerBssid,
+      latitude: latitude,
+      longitude: longitude,
+      gpsAccuracy: gpsAccuracy,
+      isMockedGps: isMockedGps,
     );
   }
 
@@ -479,6 +758,12 @@ class PassportAttendanceResponseModel {
     bool? biometricGate,
     String? responseNonce,
     String? signature,
+    String? verificationMode,
+    String? routerBssid,
+    double? latitude,
+    double? longitude,
+    double? gpsAccuracy,
+    bool? isMockedGps,
   }) {
     return PassportAttendanceResponseModel(
       version: version ?? this.version,
@@ -492,6 +777,12 @@ class PassportAttendanceResponseModel {
       biometricGate: biometricGate ?? this.biometricGate,
       responseNonce: responseNonce ?? this.responseNonce,
       signature: signature ?? this.signature,
+      verificationMode: verificationMode ?? this.verificationMode,
+      routerBssid: routerBssid ?? this.routerBssid,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      gpsAccuracy: gpsAccuracy ?? this.gpsAccuracy,
+      isMockedGps: isMockedGps ?? this.isMockedGps,
     );
   }
 
@@ -515,6 +806,12 @@ class PassportAttendanceResponseModel {
       'biometricGate': biometricGate,
       'responseNonce': responseNonce,
       'signature': signature,
+      'verificationMode': verificationMode,
+      if (routerBssid != null) 'routerBssid': routerBssid,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
+      if (isMockedGps) 'isMockedGps': isMockedGps,
     };
   }
 
@@ -524,7 +821,7 @@ class PassportAttendanceResponseModel {
           ? map['version'] as int
           : (map['v'] is int
               ? map['v'] as int
-              : int.tryParse(map['version']?.toString() ?? map['v']?.toString() ?? '1') ?? 1),
+              : int.tryParse(map['protocolVersion']?.toString() ?? map['v']?.toString() ?? '1') ?? 1),
       type: (map['type']?.toString() == 'ATTENDANCE_RESPONSE' || map['t']?.toString() == 'ATT_RESP')
           ? 'ATTENDANCE_RESPONSE'
           : (map['type']?.toString() ?? map['t']?.toString() ?? 'ATTENDANCE_RESPONSE'),
@@ -548,6 +845,21 @@ class PassportAttendanceResponseModel {
           map['bio']?.toString().toLowerCase() == 'true',
       responseNonce: map['responseNonce']?.toString() ?? map['rn']?.toString() ?? '',
       signature: map['signature']?.toString() ?? map['s']?.toString() ?? '',
+      verificationMode: map['verificationMode']?.toString() ?? map['vm']?.toString() ?? PassportAttendanceModel.modeBle,
+      routerBssid: map['routerBssid']?.toString() ?? map['rb']?.toString(),
+      latitude: (map['latitude'] as num?)?.toDouble() ??
+          (map['lat'] as num?)?.toDouble() ??
+          double.tryParse(map['latitude']?.toString() ?? map['lat']?.toString() ?? ''),
+      longitude: (map['longitude'] as num?)?.toDouble() ??
+          (map['lng'] as num?)?.toDouble() ??
+          double.tryParse(map['longitude']?.toString() ?? map['lng']?.toString() ?? ''),
+      gpsAccuracy: (map['gpsAccuracy'] as num?)?.toDouble() ??
+          (map['acc'] as num?)?.toDouble() ??
+          double.tryParse(map['gpsAccuracy']?.toString() ?? map['acc']?.toString() ?? ''),
+      isMockedGps: map['isMockedGps'] == true ||
+          map['mgps'] == true ||
+          map['isMockedGps']?.toString().toLowerCase() == 'true' ||
+          map['mgps']?.toString().toLowerCase() == 'true',
     );
   }
 
@@ -564,6 +876,12 @@ class PassportAttendanceResponseModel {
     'bio': biometricGate,
     'rn': responseNonce,
     's': signature,
+    'vm': verificationMode,
+    if (routerBssid != null) 'rb': routerBssid,
+    if (latitude != null) 'lat': latitude,
+    if (longitude != null) 'lng': longitude,
+    if (gpsAccuracy != null) 'acc': gpsAccuracy,
+    if (isMockedGps) 'mgps': isMockedGps,
   };
 
   /// Compact QR representation for QR fallback exception path.
@@ -580,6 +898,12 @@ class PassportAttendanceResponseModel {
         'iat': issuedAt,
         'exp': expiresAt,
         'bio': biometricGate,
+        'vm': verificationMode,
+        if (routerBssid != null) 'rb': routerBssid,
+        if (latitude != null) 'lat': latitude,
+        if (longitude != null) 'lng': longitude,
+        if (gpsAccuracy != null) 'acc': gpsAccuracy,
+        if (isMockedGps) 'mgps': isMockedGps,
       },
       's': signature,
     });
@@ -607,6 +931,15 @@ class PassportAttendanceResponseModel {
           : int.tryParse(p['exp']?.toString() ?? '0') ?? 0,
       biometricGate: p['bio'] == true || p['bio']?.toString() == 'true',
       signature: s,
+      verificationMode: p['vm']?.toString() ?? PassportAttendanceModel.modeQrOptical,
+      routerBssid: p['rb']?.toString(),
+      latitude: (p['lat'] as num?)?.toDouble() ??
+          double.tryParse(p['lat']?.toString() ?? ''),
+      longitude: (p['lng'] as num?)?.toDouble() ??
+          double.tryParse(p['lng']?.toString() ?? ''),
+      gpsAccuracy: (p['acc'] as num?)?.toDouble() ??
+          double.tryParse(p['acc']?.toString() ?? ''),
+      isMockedGps: p['mgps'] == true || p['mgps']?.toString() == 'true',
     );
   }
 
@@ -827,8 +1160,11 @@ class PassportAttendanceVerificationResult {
   final String? idempotencyKey;
   final PassportProximityTier proximityTier;
   final int? medianRssi;
-  final String verificationMode; // 'BLE_BATCH' or 'QR_FALLBACK'
+  final String verificationMode; // 'BLE_BATCH', 'WIFI_LAN', 'WIFI_HOTSPOT', 'QR_OPTICAL', 'PIN_MANUAL'
   final DateTime verifiedAt;
+  final String? routerBssid;
+  final double? gpsDistanceMeters;
+  final String? gpsStatus; // 'VERIFIED', 'MOCK_DETECTED', 'OUTSIDE_GEOFENCE', 'UNAVAILABLE', 'INDOOR_DRIFT'
 
   const PassportAttendanceVerificationResult({
     required this.valid,
@@ -842,8 +1178,11 @@ class PassportAttendanceVerificationResult {
     this.idempotencyKey,
     this.proximityTier = PassportProximityTier.unknown,
     this.medianRssi,
-    this.verificationMode = 'BLE_BATCH',
+    this.verificationMode = PassportAttendanceModel.modeBle,
     required this.verifiedAt,
+    this.routerBssid,
+    this.gpsDistanceMeters,
+    this.gpsStatus,
   });
 
   Map<String, dynamic> toMap() {
@@ -861,6 +1200,9 @@ class PassportAttendanceVerificationResult {
       'medianRssi': medianRssi,
       'verificationMode': verificationMode,
       'verifiedAt': verifiedAt.toIso8601String(),
+      if (routerBssid != null) 'routerBssid': routerBssid,
+      if (gpsDistanceMeters != null) 'gpsDistanceMeters': gpsDistanceMeters,
+      if (gpsStatus != null) 'gpsStatus': gpsStatus,
     };
   }
 
@@ -883,9 +1225,13 @@ class PassportAttendanceVerificationResult {
         orElse: () => PassportProximityTier.unknown,
       ),
       medianRssi: map['medianRssi'] is int ? map['medianRssi'] as int : null,
-      verificationMode: map['verificationMode']?.toString() ?? 'BLE_BATCH',
+      verificationMode: map['verificationMode']?.toString() ?? PassportAttendanceModel.modeBle,
       verifiedAt: DateTime.tryParse(map['verifiedAt']?.toString() ?? '') ??
           DateTime.now(),
+      routerBssid: map['routerBssid']?.toString(),
+      gpsDistanceMeters: (map['gpsDistanceMeters'] as num?)?.toDouble() ??
+          double.tryParse(map['gpsDistanceMeters']?.toString() ?? ''),
+      gpsStatus: map['gpsStatus']?.toString(),
     );
   }
 }
@@ -902,6 +1248,9 @@ class PassportOfflineAttendanceRecord {
   final String verificationMode;
   final String proximityTier;
   final String idempotencyKey;
+  final String? routerBssid;
+  final double? gpsDistanceMeters;
+  final String? gpsStatus;
 
   const PassportOfflineAttendanceRecord({
     required this.sessionId,
@@ -914,6 +1263,9 @@ class PassportOfflineAttendanceRecord {
     required this.verificationMode,
     required this.proximityTier,
     required this.idempotencyKey,
+    this.routerBssid,
+    this.gpsDistanceMeters,
+    this.gpsStatus,
   });
 
   Map<String, dynamic> toMap() => {
@@ -927,21 +1279,28 @@ class PassportOfflineAttendanceRecord {
     'verificationMode': verificationMode,
     'proximityTier': proximityTier,
     'idempotencyKey': idempotencyKey,
+    if (routerBssid != null) 'routerBssid': routerBssid,
+    if (gpsDistanceMeters != null) 'gpsDistanceMeters': gpsDistanceMeters,
+    if (gpsStatus != null) 'gpsStatus': gpsStatus,
   };
 
   factory PassportOfflineAttendanceRecord.fromMap(Map<String, dynamic> map) =>
-      PassportOfflineAttendanceRecord(
-        sessionId: map['sessionId']?.toString() ?? '',
-        studentId: map['studentId']?.toString() ?? '',
-        studentName: map['studentName']?.toString(),
-        deviceKeyId: map['deviceKeyId']?.toString() ?? '',
-        responseNonce: map['responseNonce']?.toString() ?? '',
-        verificationResult: map['verificationResult']?.toString() ?? '',
-        timestamp: (map['timestamp'] is int)
-            ? map['timestamp'] as int
-            : int.tryParse(map['timestamp']?.toString() ?? '0') ?? 0,
-        verificationMode: map['verificationMode']?.toString() ?? 'BLE_BATCH',
-        proximityTier: map['proximityTier']?.toString() ?? 'NEAR',
-        idempotencyKey: map['idempotencyKey']?.toString() ?? '',
-      );
+    PassportOfflineAttendanceRecord(
+      sessionId: map['sessionId']?.toString() ?? '',
+      studentId: map['studentId']?.toString() ?? '',
+      studentName: map['studentName']?.toString(),
+      deviceKeyId: map['deviceKeyId']?.toString() ?? '',
+      responseNonce: map['responseNonce']?.toString() ?? '',
+      verificationResult: map['verificationResult']?.toString() ?? '',
+      timestamp: (map['timestamp'] is int)
+          ? map['timestamp'] as int
+          : int.tryParse(map['timestamp']?.toString() ?? '0') ?? 0,
+      verificationMode: map['verificationMode']?.toString() ?? PassportAttendanceModel.modeBle,
+      proximityTier: map['proximityTier']?.toString() ?? 'NEAR',
+      idempotencyKey: map['idempotencyKey']?.toString() ?? '',
+      routerBssid: map['routerBssid']?.toString(),
+      gpsDistanceMeters: (map['gpsDistanceMeters'] as num?)?.toDouble() ??
+          double.tryParse(map['gpsDistanceMeters']?.toString() ?? ''),
+      gpsStatus: map['gpsStatus']?.toString(),
+    );
 }

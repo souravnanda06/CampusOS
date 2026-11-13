@@ -39,6 +39,8 @@ class _CampusMeshEmergencyDispatcherScreenState
   final _messageController = TextEditingController();
   EmergencyCategory _selectedCategory = EmergencyCategory.cyclone;
   EmergencySeverity _selectedSeverity = EmergencySeverity.critical;
+  EmergencySirenPattern _selectedSirenPattern = EmergencySirenPattern.wail;
+  bool _sendSiren = true;
   late String _selectedScope;
   Duration _selectedDuration = const Duration(minutes: 30);
   bool _isDispatching = false;
@@ -256,6 +258,31 @@ class _CampusMeshEmergencyDispatcherScreenState
                   incident.category.label.toUpperCase(),
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
                 ),
+                if (incident.hasSiren) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.volume_up_rounded, size: 11, color: AppColors.danger),
+                        const SizedBox(width: 3),
+                        Text(
+                          incident.sirenPattern.label.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -496,7 +523,17 @@ class _CampusMeshEmergencyDispatcherScreenState
                       selected: isSelected,
                       selectedColor: chipColor,
                       onSelected: (selected) {
-                        if (selected) setState(() => _selectedSeverity = sev);
+                        if (selected) {
+                          setState(() {
+                            _selectedSeverity = sev;
+                            _sendSiren = sev != EmergencySeverity.advisory;
+                            _selectedSirenPattern =
+                                EmergencySirenPattern.defaultFor(
+                              severity: sev,
+                              category: _selectedCategory,
+                            );
+                          });
+                        }
                       },
                     ),
                   ),
@@ -578,7 +615,89 @@ class _CampusMeshEmergencyDispatcherScreenState
                 _buildDurationChip(const Duration(hours: 4), '4 Hours'),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // Audible Siren Dispatch Configuration
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1F1212) : const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.danger.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Send Audible Emergency Siren',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    subtitle: const Text(
+                      'Broadcasts alarm tone & continuous vibration to all receiving nodes',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    activeThumbColor: AppColors.danger,
+                    value: _sendSiren,
+                    onChanged: (val) => setState(() {
+                      _sendSiren = val;
+                      if (val &&
+                          _selectedSirenPattern == EmergencySirenPattern.none) {
+                        _selectedSirenPattern = EmergencySirenPattern.wail;
+                      }
+                    }),
+                  ),
+                  if (_sendSiren) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: EmergencySirenPattern.values
+                          .where((p) => p != EmergencySirenPattern.none)
+                          .map((pat) {
+                        final isSelected = _selectedSirenPattern == pat;
+                        return ChoiceChip(
+                          label: Text(pat.label, style: const TextStyle(fontSize: 11)),
+                          selected: isSelected,
+                          selectedColor: AppColors.danger,
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.white : null,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _selectedSirenPattern = pat);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.volume_up_rounded, size: 16, color: AppColors.danger),
+                        label: const Text(
+                          'Preview Siren (4s)',
+                          style: TextStyle(fontSize: 12, color: AppColors.danger, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          widget.dispatcherService.emergencyService.notifier
+                              .triggerSirenTest(
+                            pattern: _selectedSirenPattern,
+                            duration: const Duration(seconds: 4),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
 
             // Dispatch Button
             SizedBox(
@@ -797,6 +916,8 @@ class _CampusMeshEmergencyDispatcherScreenState
         severity: _selectedSeverity,
         scope: _selectedScope,
         duration: _selectedDuration,
+        sendSiren: _sendSiren,
+        sirenPattern: _sendSiren ? _selectedSirenPattern : EmergencySirenPattern.none,
       );
 
       _titleController.clear();

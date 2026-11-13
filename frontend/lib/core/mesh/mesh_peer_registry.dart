@@ -34,6 +34,9 @@ class MeshPeerRegistry {
   final StreamController<MeshPeer> _peerUpdatedController =
       StreamController<MeshPeer>.broadcast();
 
+  final StreamController<MeshPeer> _registryUpdatedController =
+      StreamController<MeshPeer>.broadcast();
+
   MeshPeerRegistry({
     this.peerActiveTimeout = defaultActiveTimeout,
     this.maxPeers = defaultMaxPeers,
@@ -59,12 +62,16 @@ class MeshPeerRegistry {
   /// Broadcast stream fired when an existing peer's telemetry is updated.
   Stream<MeshPeer> get peerUpdated => _peerUpdatedController.stream;
 
+  /// Reactive broadcast stream fired whenever any peer is added, updated, or removed.
+  Stream<MeshPeer> get registryUpdated => _registryUpdatedController.stream;
+
   /// Registers a newly discovered peer or updates an existing peer's telemetry.
   ///
   /// Does not fabricate telemetry: RSSI and hop count are only updated if provided.
   MeshPeer registerOrUpdatePeer({
     required String deviceId,
     required String role,
+    String? displayName,
     Uint8List? packetId,
     int? rssi,
     int? hopCount,
@@ -85,6 +92,7 @@ class MeshPeerRegistry {
 
       final newPeer = MeshPeer(
         deviceId: deviceId,
+        displayName: displayName,
         role: role,
         firstSeen: timestamp,
         lastSeen: timestamp,
@@ -96,10 +104,15 @@ class MeshPeerRegistry {
 
       _peers[deviceId] = newPeer;
       _peerAddedController.add(newPeer);
+      _registryUpdatedController.add(newPeer);
       return newPeer;
     } else {
       final wasActive = existingPeer.isActive;
+      final effectiveName = (displayName != null && displayName.isNotEmpty)
+          ? displayName
+          : existingPeer.displayName;
       final updatedPeer = existingPeer.copyWith(
+        displayName: effectiveName,
         role: role.isNotEmpty ? role : existingPeer.role,
         lastSeen: timestamp,
         lastPacketId: packetId ?? existingPeer.lastPacketId,
@@ -116,6 +129,7 @@ class MeshPeerRegistry {
       } else {
         _peerUpdatedController.add(updatedPeer);
       }
+      _registryUpdatedController.add(updatedPeer);
 
       return updatedPeer;
     }
@@ -141,6 +155,7 @@ class MeshPeerRegistry {
           _peers[entry.key] = inactivePeer;
           newlyInactive.add(inactivePeer);
           _peerRemovedController.add(inactivePeer);
+          _registryUpdatedController.add(inactivePeer);
         }
       }
     }
@@ -176,7 +191,9 @@ class MeshPeerRegistry {
     if (candidateKey != null) {
       final removed = _peers.remove(candidateKey);
       if (removed != null && removed.isActive) {
-        _peerRemovedController.add(removed.copyWith(isActive: false));
+        final inactive = removed.copyWith(isActive: false);
+        _peerRemovedController.add(inactive);
+        _registryUpdatedController.add(inactive);
       }
     }
   }
@@ -191,5 +208,6 @@ class MeshPeerRegistry {
     await _peerAddedController.close();
     await _peerRemovedController.close();
     await _peerUpdatedController.close();
+    await _registryUpdatedController.close();
   }
 }

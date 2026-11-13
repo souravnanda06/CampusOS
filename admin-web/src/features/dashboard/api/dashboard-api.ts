@@ -11,6 +11,7 @@ export interface AdminDashboardSummary {
   rejectedComplaints: number
   ageingComplaints: number
   averageResolutionHours: number
+  pendingStudentApprovals?: number
 }
 
 export interface AgeingComplaint {
@@ -67,12 +68,11 @@ export interface VisitorKpis {
   completedVisitsToday: number
 }
 
-export interface GateSecuritySummary {
-  activePasses?: number
-  studentsOut?: number
-  overdueReturns?: number
-  todayExits?: number
-  [key: string]: any
+export interface WardenSummaryKpis {
+  pendingRequests: number
+  pendingVisitors: number
+  approvedToday: number
+  activeGatePasses: number
 }
 
 export const dashboardApi = {
@@ -83,5 +83,6 @@ export const dashboardApi = {
   getHostelKpis: () => apiClient.get<HostelKpis>("/hostel/admin/kpis"),
   getFeeKpis: () => apiClient.get<FeeKpis>("/fees/kpis"),
   getVisitorKpis: () => apiClient.get<VisitorKpis>("/visitors/admin/kpis"),
-  getSecuritySummary: () => apiClient.get<GateSecuritySummary>("/security/gate-pass/summary").catch(() => ({})),
+  getWardenSummary: () => apiClient.get<WardenSummaryKpis>("/warden/summary"),
+  getActiveSessions: () => apiClient.get<Array<{ id: string }>>("/sessions/active"),
 }

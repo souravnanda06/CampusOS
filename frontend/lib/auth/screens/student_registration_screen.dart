@@ -1,24 +1,33 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:attendance_app/core/haptics/app_haptics.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../router/app_routes.dart';
+import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
 /// Apple-grade dedicated Student Registration Screen for CampusOS.
 ///
 /// Security constraints:
 /// - Role is strictly pinned to 'student' (no public role selection or admin elevation).
+/// - Student photo upload is mandatory during registration for admin identity review.
+/// - Account starts in PENDING state until verified and activated by an administrator.
 /// - Device ID is bound to the student profile during registration.
-/// - Validates passwords, academic fields, and handles duplicate email errors truthfully.
 class StudentRegistrationScreen extends StatefulWidget {
   final AuthService? authService;
+  final Future<({Uint8List bytes, String filename})?> Function()? photoPickerOverride;
 
-  const StudentRegistrationScreen({Key? key, this.authService}) : super(key: key);
+  const StudentRegistrationScreen({
+    Key? key,
+    this.authService,
+    this.photoPickerOverride,
+  }) : super(key: key);
 
   @override
   State<StudentRegistrationScreen> createState() => _StudentRegistrationScreenState();
@@ -30,12 +39,20 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _regNoController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _parentPhoneController = TextEditingController();
+  final _parentNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
+
+  Uint8List? _photoBytes;
+  String? _photoFilename;
+  bool _photoError = false;
+  final ImagePicker _imagePicker = ImagePicker();
 
   String? _selectedCourse = 'B.Tech';
   String? _selectedBranch = 'CSE';
@@ -66,6 +83,9 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _regNoController.dispose();
+    _phoneController.dispose();
+    _parentPhoneController.dispose();
+    _parentNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -87,11 +107,227 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
     return null;
   }
 
+  Future<void> _pickPhoto(ImageSource source) async {
+    try {
+      final XFile? picked = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _photoBytes = bytes;
+        _photoFilename = picked.name.isNotEmpty ? picked.name : 'student_photo.jpg';
+        _photoError = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        _showErrorSnackBar("Unable to select photo. Please check camera or gallery permissions.");
+      }
+    }
+  }
+
+  Future<void> _showPhotoSourceSheet() async {
+    AppHaptics.selectionClick();
+    if (widget.photoPickerOverride != null) {
+      final result = await widget.photoPickerOverride!();
+      if (result != null && mounted) {
+        setState(() {
+          _photoBytes = result.bytes;
+          _photoFilename = result.filename;
+          _photoError = false;
+        });
+      }
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                "Upload Student Photo",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "A clear portrait photo is required for admin identity verification.",
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: AppColors.primaryLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  "Take Photo",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  "Use camera to capture a live portrait",
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickPhoto(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: AppColors.primaryLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  "Choose from Gallery",
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  "Select an existing JPG or PNG photo",
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickPhoto(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPendingApprovalDialog(UserModel user) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.hourglass_top_rounded, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Pending Admin Approval",
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "Thank you, ${user.name}. Your registration and photo have been submitted.\n\n"
+          "An administrator must review and approve your profile before your student account is activated. You will be able to sign in once approved.",
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            height: 1.5,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                "Back to Sign In",
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleRegister() async {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) {
+    final bool formValid = _formKey.currentState!.validate();
+    final bool hasPhoto = _photoBytes != null && _photoBytes!.isNotEmpty;
+
+    if (!hasPhoto) {
+      setState(() => _photoError = true);
+    }
+
+    if (!formValid || !hasPhoto) {
       AppHaptics.heavyImpact();
+      if (!hasPhoto && formValid) {
+        _showErrorSnackBar("Please upload your photo to complete registration.");
+      }
       return;
     }
 
@@ -121,14 +357,24 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
         branch: finalBranch,
         year: _selectedYear,
         deviceId: deviceId,
+        phone: _phoneController.text.trim(),
+        parentPhone: _parentPhoneController.text.trim(),
+        parentName: _parentNameController.text.trim(),
+        photoBytes: _photoBytes,
+        photoFilename: _photoFilename,
       );
 
       if (user != null && mounted) {
         AppHaptics.mediumImpact();
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-          (route) => false,
-        );
+        if (user.isPendingApproval) {
+          setState(() => _isLoading = false);
+          await _showPendingApprovalDialog(user);
+        } else {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            AppRoutes.home,
+            (route) => false,
+          );
+        }
       } else if (mounted) {
         _showErrorSnackBar("Registration could not be completed.");
       }
@@ -247,7 +493,7 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              "Profile is bound to this device for attendance & passport.",
+                              "Upload your photo. Account activates after admin approval.",
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
@@ -280,6 +526,97 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Student Photo Upload (Required)
+                      _buildFieldLabel("Student Photo (Required)"),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: _isLoading ? null : _showPhotoSourceSheet,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.bg,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _photoError
+                                  ? AppColors.danger
+                                  : (_photoBytes != null ? AppColors.primary : AppColors.border),
+                              width: _photoError || _photoBytes != null ? 1.4 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryLight,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: _photoBytes != null
+                                    ? Image.memory(_photoBytes!, fit: BoxFit.cover)
+                                    : const Icon(
+                                        Icons.add_a_photo_rounded,
+                                        color: AppColors.primary,
+                                        size: 26,
+                                      ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _photoBytes != null ? "Photo Selected" : "Upload Portrait Photo",
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      _photoBytes != null
+                                          ? (_photoFilename ?? "Tap to change photo")
+                                          : "Tap to take a photo or choose from gallery",
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        color: _photoError ? AppColors.danger : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                _photoBytes != null ? Icons.edit_rounded : Icons.chevron_right_rounded,
+                                color: AppColors.textSecondary,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_photoError) ...[
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Text(
+                            "Photo is required for admin verification",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: AppColors.danger,
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 18),
+
                       // Full Name
                       _buildFieldLabel("Full Name"),
                       const SizedBox(height: 6),
@@ -451,6 +788,67 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
                         validator: (v) {
                           if (v == null || v.isEmpty) return "Please confirm password";
                           if (v != _passwordController.text) return "Passwords do not match";
+                          return null;
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Student WhatsApp Number
+                      _buildFieldLabel("Student WhatsApp Number"),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _phoneController,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textPrimary),
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.next,
+                        decoration: _buildInputDecoration(
+                          hintText: "e.g. 9876543210 (10 digits)",
+                          icon: Icons.phone_android_rounded,
+                        ),
+                        validator: (v) {
+                          if (v != null && v.trim().isNotEmpty) {
+                            final digits = v.replaceAll(RegExp(r'\D'), '');
+                            if (digits.length < 10) return "Enter a valid 10-digit number";
+                          }
+                          return null;
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Parent / Guardian Name
+                      _buildFieldLabel("Parent / Guardian Name (Optional)"),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _parentNameController,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textPrimary),
+                        textInputAction: TextInputAction.next,
+                        decoration: _buildInputDecoration(
+                          hintText: "e.g. Ramesh Sharma",
+                          icon: Icons.family_restroom_rounded,
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Parent WhatsApp Number
+                      _buildFieldLabel("Parent WhatsApp (Optional - For Gate Pass & Attendance Alerts)"),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _parentPhoneController,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textPrimary),
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.done,
+                        decoration: _buildInputDecoration(
+                          hintText: "e.g. 9123456789",
+                          icon: Icons.notifications_active_outlined,
+                        ),
+                        validator: (v) {
+                          if (v != null && v.trim().isNotEmpty) {
+                            final digits = v.replaceAll(RegExp(r'\D'), '');
+                            if (digits.length < 10) return "Enter a valid 10-digit number";
+                          }
                           return null;
                         },
                       ),

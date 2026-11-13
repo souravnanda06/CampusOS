@@ -42,25 +42,25 @@ class _CampusMeshEmergencyScreenState extends State<CampusMeshEmergencyScreen> {
   }
 
   Future<void> _testSiren() async {
-    final dummy = EmergencyAlert(
-      alertId: 'siren_test',
-      issuerDeviceId: widget.emergencyService.meshService.localDeviceId,
-      issuerRole: widget.emergencyService.meshService.localRole,
-      scope: EmergencyScope.campus,
-      severity: EmergencySeverity.critical,
-      category: EmergencyCategory.cyclone,
-      title: 'Siren & Haptics Test',
-      message: 'Testing hardware vibration alarm and audible alerting.',
-      createdAt: DateTime.now(),
-      expiresAt: DateTime.now().add(const Duration(minutes: 5)),
-      firstSeenAt: DateTime.now(),
-      lastSeenAt: DateTime.now(),
-    );
-    await widget.emergencyService.notifier.notifyEmergency(dummy);
+    final notifier = widget.emergencyService.notifier;
+    if (notifier.activeSirenAlert.value != null) {
+      await notifier.stopSiren();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔇 Emergency siren silenced.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    await notifier.triggerSirenTest(pattern: EmergencySirenPattern.wail);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('🔊 Platform siren signal & heavy haptic pulse triggered!'),
+          content: Text('🔊 Emergency siren & heavy haptic pulse triggered (6s test)!'),
           duration: Duration(seconds: 2),
           backgroundColor: Color(0xFFEF4444),
         ),
@@ -85,6 +85,8 @@ class _CampusMeshEmergencyScreenState extends State<CampusMeshEmergencyScreen> {
         category: EmergencyCategory.weather,
         scope: EmergencyScope.hostel,
         duration: const Duration(hours: 2),
+        sendSiren: true,
+        sirenPattern: EmergencySirenPattern.alertChime,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -159,6 +161,9 @@ class _CampusMeshEmergencyScreenState extends State<CampusMeshEmergencyScreen> {
       ),
       body: Column(
         children: [
+          // Live Active Siren Banner
+          _buildLiveSirenBanner(),
+
           // Cyber Control Banner: Role Switcher & Drill Actions
           _buildRoleAndDrillBanner(isDark, userRole),
 
@@ -212,6 +217,77 @@ class _CampusMeshEmergencyScreenState extends State<CampusMeshEmergencyScreen> {
           }
         },
       ),
+    );
+  }
+
+  Widget _buildLiveSirenBanner() {
+    return ValueListenableBuilder<EmergencyAlert?>(
+      valueListenable: widget.emergencyService.notifier.activeSirenAlert,
+      builder: (context, activeSiren, _) {
+        if (activeSiren == null) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.campaign_rounded, color: Colors.white, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SIREN ACTIVE · ${activeSiren.sirenPattern.label.toUpperCase()}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    Text(
+                      activeSiren.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFFB91C1C),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () async {
+                  await widget.emergencyService.stopActiveSiren();
+                },
+                child: const Text(
+                  'SILENCE',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -574,6 +650,30 @@ class _CampusMeshEmergencyScreenState extends State<CampusMeshEmergencyScreen> {
                   ),
                 ),
 
+                if (alert.hasSiren)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.volume_up_rounded, size: 12, color: AppColors.danger),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Siren: ${alert.sirenPattern.label}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Trust Badge
                 if (alert.isTrusted)
                   const Row(
@@ -690,6 +790,8 @@ class _StudentSosSheet extends StatefulWidget {
 
 class _StudentSosSheetState extends State<_StudentSosSheet> {
   EmergencyCategory _selectedCategory = EmergencyCategory.fire;
+  EmergencySirenPattern _selectedSiren = EmergencySirenPattern.yelp;
+  bool _sendSiren = true;
   final _detailsController = TextEditingController();
   bool _isBroadcasting = false;
   String? _errorMessage;
@@ -706,26 +808,13 @@ class _StudentSosSheetState extends State<_StudentSosSheet> {
       _errorMessage = null;
     });
 
-    final currentRole = widget.emergencyService.meshService.localRole;
-    final isStudent = currentRole == 'student';
-
-    // Broadcast with warden authority delegation so all nodes accept and relay immediately
-    if (isStudent) {
-      widget.emergencyService.meshService.setLocalRole('warden');
-    }
-
     try {
-      final userText = _detailsController.text.trim();
-      final message = userText.isNotEmpty
-          ? userText
-          : 'SOS: Immediate emergency assistance needed at this location. Sender: ${widget.emergencyService.meshService.localDeviceId}';
-
-      await widget.emergencyService.issueEmergencyAlert(
-        title: '🚨 STUDENT SOS: ${_selectedCategory.label}',
-        message: message,
-        severity: EmergencySeverity.critical,
+      await widget.emergencyService.sendStudentSosBeacon(
         category: _selectedCategory,
+        details: _detailsController.text.trim(),
         scope: EmergencyScope.hostel,
+        sendSiren: _sendSiren,
+        sirenPattern: _sendSiren ? _selectedSiren : EmergencySirenPattern.none,
         duration: const Duration(hours: 4),
       );
 
@@ -733,9 +822,13 @@ class _StudentSosSheetState extends State<_StudentSosSheet> {
         Navigator.of(context).pop();
         widget.onDispatched();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🚨 SOS Distress Flare broadcasted to all nearby mesh nodes!'),
-            backgroundColor: Color(0xFFEF4444),
+          SnackBar(
+            content: Text(
+              _sendSiren
+                  ? '🚨 SOS Distress Flare + ${_selectedSiren.label} siren sent to nearby mesh nodes!'
+                  : '🚨 SOS Distress Flare broadcasted to all nearby mesh nodes!',
+            ),
+            backgroundColor: const Color(0xFFEF4444),
           ),
         );
       }
@@ -745,10 +838,6 @@ class _StudentSosSheetState extends State<_StudentSosSheet> {
           _isBroadcasting = false;
           _errorMessage = e.toString();
         });
-      }
-    } finally {
-      if (isStudent) {
-        widget.emergencyService.meshService.setLocalRole('student');
       }
     }
   }
@@ -841,7 +930,47 @@ class _StudentSosSheetState extends State<_StudentSosSheet> {
                 isDense: true,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Send Audible Siren to Nearby Phones',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text(
+                'Triggers loud alarm + vibration on nearby CampusOS nodes',
+                style: TextStyle(fontSize: 11),
+              ),
+              activeThumbColor: const Color(0xFFEF4444),
+              value: _sendSiren,
+              onChanged: (val) => setState(() => _sendSiren = val),
+            ),
+
+            if (_sendSiren) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  EmergencySirenPattern.yelp,
+                  EmergencySirenPattern.wail,
+                  EmergencySirenPattern.lockdown,
+                ].map((pat) {
+                  final selected = _selectedSiren == pat;
+                  return ChoiceChip(
+                    label: Text(pat.label, style: const TextStyle(fontSize: 11)),
+                    selected: selected,
+                    selectedColor: const Color(0xFFEF4444),
+                    labelStyle: TextStyle(color: selected ? Colors.white : null),
+                    onSelected: (val) {
+                      if (val) setState(() => _selectedSiren = pat);
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+            ],
+            const SizedBox(height: 6),
 
             SizedBox(
               width: double.infinity,
@@ -905,6 +1034,8 @@ class _EmergencyComposerSheetState extends State<_EmergencyComposerSheet> {
 
   EmergencySeverity _selectedSeverity = EmergencySeverity.critical;
   EmergencyCategory _selectedCategory = EmergencyCategory.cyclone;
+  EmergencySirenPattern _selectedSirenPattern = EmergencySirenPattern.wail;
+  bool _sendSiren = true;
   late String _selectedScope;
   bool _isBroadcasting = false;
   String? _errorMessage;
@@ -930,6 +1061,11 @@ class _EmergencyComposerSheetState extends State<_EmergencyComposerSheet> {
       _messageController.text = message;
       _selectedCategory = cat;
       _selectedSeverity = sev;
+      _sendSiren = sev != EmergencySeverity.advisory;
+      _selectedSirenPattern = EmergencySirenPattern.defaultFor(
+        severity: sev,
+        category: cat,
+      );
     });
   }
 
@@ -959,13 +1095,19 @@ class _EmergencyComposerSheetState extends State<_EmergencyComposerSheet> {
         category: _selectedCategory,
         scope: _selectedScope,
         duration: const Duration(hours: 4),
+        sendSiren: _sendSiren,
+        sirenPattern: _sendSiren ? _selectedSirenPattern : EmergencySirenPattern.none,
       );
       if (mounted) {
         Navigator.of(context).pop();
         widget.onDispatched();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🚨 Emergency Disaster Flare broadcasted to BLE mesh!'),
+          SnackBar(
+            content: Text(
+              _sendSiren
+                  ? '🚨 Emergency Flare + ${_selectedSirenPattern.label} siren broadcasted to BLE mesh!'
+                  : '🚨 Emergency Disaster Flare broadcasted to BLE mesh!',
+            ),
             backgroundColor: AppColors.danger,
           ),
         );
@@ -1182,7 +1324,51 @@ class _EmergencyComposerSheetState extends State<_EmergencyComposerSheet> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Send Audible Siren Alarm',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text(
+                'Sounds emergency siren on all receiving devices',
+                style: TextStyle(fontSize: 11),
+              ),
+              activeThumbColor: AppColors.danger,
+              value: _sendSiren,
+              onChanged: (val) => setState(() {
+                _sendSiren = val;
+                if (val && _selectedSirenPattern == EmergencySirenPattern.none) {
+                  _selectedSirenPattern = EmergencySirenPattern.wail;
+                }
+              }),
+            ),
+
+            if (_sendSiren) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: EmergencySirenPattern.values
+                    .where((p) => p != EmergencySirenPattern.none)
+                    .map((pat) {
+                  final selected = _selectedSirenPattern == pat;
+                  return ChoiceChip(
+                    label: Text(pat.label, style: const TextStyle(fontSize: 11)),
+                    selected: selected,
+                    selectedColor: AppColors.danger,
+                    labelStyle: TextStyle(color: selected ? Colors.white : null),
+                    onSelected: (val) {
+                      if (val) setState(() => _selectedSirenPattern = pat);
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            const SizedBox(height: 12),
 
             // Send Button
             SizedBox(

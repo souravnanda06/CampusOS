@@ -11,6 +11,7 @@ import 'core/haptics/haptics_provider.dart';
 import 'core/services/notification_service.dart';
 import 'auth/providers/user_provider.dart';
 import 'shared/providers/attendance_provider.dart';
+import 'shared/providers/copilot_provider.dart';
 
 import 'core/performance/performance.dart';
 import 'core/localization/language_provider.dart';
@@ -53,6 +54,7 @@ void main() async {
         ChangeNotifierProvider.value(value: PerformanceEngine.instance),
         ChangeNotifierProvider(create: (_) => UserProvider()..loadUser()),
         ChangeNotifierProvider(create: (_) => AttendanceProvider()),
+        ChangeNotifierProvider(create: (_) => CopilotProvider()),
         ChangeNotifierProvider.value(value: LanguageProvider.instance),
         ChangeNotifierProvider.value(value: ThemeProvider.instance),
         ChangeNotifierProvider.value(value: HapticsProvider.instance),
@@ -60,6 +62,16 @@ void main() async {
       child: const MyApp(),
     ),
   );
+}
+
+/// Global Apple-grade scroll behavior ensuring fluid iOS spring bounce across all scrollables.
+class AppleGlobalScrollBehavior extends MaterialScrollBehavior {
+  const AppleGlobalScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -77,6 +89,7 @@ class MyApp extends StatelessWidget {
           navigatorKey: navigatorKey,
           title: 'CampusOS',
           debugShowCheckedModeBanner: false,
+          scrollBehavior: const AppleGlobalScrollBehavior(),
           theme: CampusOSTheme.lightTheme,
           darkTheme: CampusOSTheme.darkTheme,
           themeMode: ThemeProvider.instance.themeMode,
@@ -89,4 +102,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
